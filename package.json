@@ -5,7 +5,7 @@
   "description": "WorkerOS — Quản lý công nhân nội bộ",
   "scripts": {
     "build": "npm ci --prefix frontend && npm run build --prefix frontend && npm ci --prefix backend",
-    "start": "npm start --prefix backend",
+    "start": "node backend/src/utils/migrate.js && npm start --prefix backend",
     "migrate": "npm run migrate --prefix backend",
     "dev:backend": "npm run dev --prefix backend",
     "dev:frontend": "npm run dev --prefix frontend"
