@@ -1,0 +1,711 @@
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useKtxList, useTaoKtx, useXoaKtx, usePhongList, useTaoPhong, useCapNhatPhong, useXoaPhong, useGiuongList, useXepGiuong, useTraPhong, useHoaDonList, useTaoHoaDon, useHoaDonThangTruoc } from '../../hooks/useKtx';
+import { usePhongTroList, useTaoPhongTro, useXoaPhongTro } from '../../hooks/usePhongTro';
+import { useCongNhanList } from '../../hooks/useCongNhan';
+import { useAuth } from '../../context/AuthContext';
+
+function fmt(n) { return Number(n || 0).toLocaleString('vi-VN') + 'đ'; }
+
+function occupancy(soGiuong, soDangO, sucChua) {
+  const used = Number(soGiuong ?? 0);
+  const cap  = Number(sucChua ?? 1);
+  const pct  = used > 0 ? (soDangO ?? 0) / cap : 0;
+  if (pct === 0) return { label: 'Trống',    cls: 'empty', color: 'var(--text3)',  bg: 'rgba(84,88,112,0.12)',   border: 'var(--border)' };
+  if (pct >= 1)  return { label: 'Đầy',      cls: 'full',  color: 'var(--red)',    bg: 'rgba(255,95,114,0.1)',   border: 'rgba(255,95,114,0.3)' };
+  if (pct >= 0.7) return { label: 'Gần đầy', cls: 'high',  color: 'var(--amber)', bg: 'rgba(255,179,68,0.1)',   border: 'rgba(255,179,68,0.3)' };
+  return                 { label: 'Còn chỗ', cls: 'ok',    color: 'var(--accent)', bg: 'rgba(79,124,255,0.1)', border: 'rgba(79,124,255,0.3)' };
+}
+
+// ─── Modal thêm KTX ───────────────────────────────────────
+function AddKtxModal({ onClose }) {
+  const tao = useTaoKtx();
+  const [form, setForm] = useState({ ten: '', dia_chi: '', ghi_chu: '' });
+  const [err, setErr] = useState('');
+
+  async function handle() {
+    setErr('');
+    if (!form.ten.trim()) { setErr('Vui lòng nhập tên khu'); return; }
+    try { await tao.mutateAsync(form); onClose(); }
+    catch (e) { setErr(e?.response?.data?.error?.message ?? 'Lỗi'); }
+  }
+
+  return (
+    <div style={M.overlay} onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div style={M.modal}>
+        <div style={M.title}>Thêm khu KTX</div>
+        {[['ten','Tên khu *'],['dia_chi','Địa chỉ'],['ghi_chu','Ghi chú']].map(([k, lb]) => (
+          <div key={k} style={{ marginBottom: 10 }}>
+            <label className="form-label">{lb}</label>
+            <input className="form-input" value={form[k]} onChange={(e) => setForm((f) => ({ ...f, [k]: e.target.value }))} />
+          </div>
+        ))}
+        {err && <div style={M.err}>{err}</div>}
+        <div style={M.actions}>
+          <button className="btn-ghost" onClick={onClose}>Hủy</button>
+          <button className="btn-primary" onClick={handle} disabled={tao.isPending}>{tao.isPending ? 'Đang lưu...' : 'Thêm khu'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Modal thêm phòng ─────────────────────────────────────
+function AddPhongModal({ ktxId, onClose }) {
+  const tao = useTaoPhong(ktxId);
+  const [form, setForm] = useState({ ten_phong: '', tang: '1', suc_chua: '6', tien_phong: '0', ghi_chu: '' });
+  const [err, setErr] = useState('');
+
+  async function handle() {
+    setErr('');
+    if (!form.ten_phong.trim()) { setErr('Vui lòng nhập tên phòng'); return; }
+    try {
+      await tao.mutateAsync({
+        ten_phong: form.ten_phong,
+        tang: parseInt(form.tang, 10),
+        suc_chua: parseInt(form.suc_chua, 10),
+        tien_phong: parseFloat(form.tien_phong),
+        ghi_chu: form.ghi_chu || undefined,
+      });
+      onClose();
+    } catch (e) { setErr(e?.response?.data?.error?.message ?? 'Lỗi'); }
+  }
+
+  return (
+    <div style={M.overlay} onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div style={M.modal}>
+        <div style={M.title}>Thêm phòng mới</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+          {[['ten_phong','Tên phòng *','text'],['tang','Tầng','number'],['suc_chua','Sức chứa (giường)','number'],['tien_phong','Tiền phòng (VNĐ/tháng)','number']].map(([k, lb, type]) => (
+            <div key={k} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <label className="form-label">{lb}</label>
+              <input className="form-input" type={type} value={form[k]} onChange={(e) => setForm((f) => ({ ...f, [k]: e.target.value }))} />
+            </div>
+          ))}
+          <div style={{ gridColumn: 'span 2', display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <label className="form-label">Ghi chú</label>
+            <input className="form-input" value={form.ghi_chu} onChange={(e) => setForm((f) => ({ ...f, ghi_chu: e.target.value }))} />
+          </div>
+        </div>
+        {err && <div style={M.err}>{err}</div>}
+        <div style={M.actions}>
+          <button className="btn-ghost" onClick={onClose}>Hủy</button>
+          <button className="btn-primary" onClick={handle} disabled={tao.isPending}>{tao.isPending ? 'Đang lưu...' : 'Thêm phòng'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Modal xếp giường ─────────────────────────────────────
+function XepGiuongModal({ giuong, phongId, onClose }) {
+  const xep = useXepGiuong(phongId);
+  const { data: cnRes } = useCongNhanList({ limit: 200, trang_thai: 'dang_lam' });
+  const cnList = cnRes?.data ?? [];
+  const [congNhanId, setCongNhanId] = useState('');
+  const [ngayVao, setNgayVao] = useState(new Date().toISOString().split('T')[0]);
+  const [err, setErr] = useState('');
+
+  async function handle() {
+    setErr('');
+    if (!congNhanId) { setErr('Vui lòng chọn công nhân'); return; }
+    try {
+      await xep.mutateAsync({ giuongId: giuong.id, cong_nhan_id: parseInt(congNhanId, 10), ngay_vao: ngayVao });
+      onClose();
+    } catch (e) { setErr(e?.response?.data?.error?.message ?? 'Lỗi'); }
+  }
+
+  return (
+    <div style={M.overlay} onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div style={M.modal}>
+        <div style={M.title}>Xếp giường {giuong.so_thu_tu}</div>
+        <div style={{ marginBottom: 10 }}>
+          <label className="form-label">Công nhân *</label>
+          <select className="form-input" value={congNhanId} onChange={(e) => setCongNhanId(e.target.value)}>
+            <option value="">— Chọn công nhân —</option>
+            {cnList.map((cn) => <option key={cn.id} value={cn.id}>{cn.ho_ten} {cn.cong_ty ? `(${cn.cong_ty})` : ''}</option>)}
+          </select>
+        </div>
+        <div style={{ marginBottom: 10 }}>
+          <label className="form-label">Ngày vào</label>
+          <input className="form-input" type="date" value={ngayVao} onChange={(e) => setNgayVao(e.target.value)} />
+        </div>
+        {err && <div style={M.err}>{err}</div>}
+        <div style={M.actions}>
+          <button className="btn-ghost" onClick={onClose}>Hủy</button>
+          <button className="btn-primary" onClick={handle} disabled={xep.isPending}>{xep.isPending ? 'Đang xếp...' : 'Xác nhận'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Modal hóa đơn điện nước ──────────────────────────────
+function HoaDonModal({ phong, onClose }) {
+  const tao = useTaoHoaDon(phong.id);
+  const { data: hdRes } = useHoaDonList(phong.id);
+  const hoaDonList = hdRes?.data ?? [];
+  const now = new Date();
+  const [form, setForm] = useState({
+    thang: now.getMonth() + 1, nam: now.getFullYear(),
+    dien_cu: 0, dien_moi: 0, don_gia_dien: 3000,
+    nuoc_cu: 0, nuoc_moi: 0, don_gia_nuoc: 15000,
+    tien_phong: phong.tien_phong ?? 0, ghi_chu: '',
+  });
+  const [tab, setTab] = useState('nhap');
+  const [err, setErr] = useState('');
+
+  // Tự động pre-fill dien_cu/nuoc_cu từ tháng trước
+  const { data: prevRes } = useHoaDonThangTruoc(
+    phong.id,
+    parseInt(form.thang, 10),
+    parseInt(form.nam, 10),
+  );
+  useEffect(() => {
+    const prev = prevRes?.data;
+    if (prev) {
+      setForm((f) => ({
+        ...f,
+        dien_cu: Number(prev.dien_moi ?? 0),
+        nuoc_cu: Number(prev.nuoc_moi ?? 0),
+      }));
+    }
+  }, [prevRes]);
+
+  function handleChange(e) {
+    const { name, value } = e.target;
+    setForm((f) => ({ ...f, [name]: value }));
+  }
+
+  async function handle() {
+    setErr('');
+    try {
+      await tao.mutateAsync({
+        thang: parseInt(form.thang, 10), nam: parseInt(form.nam, 10),
+        dien_cu: parseFloat(form.dien_cu), dien_moi: parseFloat(form.dien_moi),
+        don_gia_dien: parseFloat(form.don_gia_dien),
+        nuoc_cu: parseFloat(form.nuoc_cu), nuoc_moi: parseFloat(form.nuoc_moi),
+        don_gia_nuoc: parseFloat(form.don_gia_nuoc),
+        tien_phong: parseFloat(form.tien_phong),
+        ghi_chu: form.ghi_chu || undefined,
+      });
+      setTab('lich-su');
+    } catch (e) { setErr(e?.response?.data?.error?.message ?? 'Lỗi'); }
+  }
+
+  const tienDien = (form.dien_moi - form.dien_cu) * form.don_gia_dien;
+  const tienNuoc = (form.nuoc_moi - form.nuoc_cu) * form.don_gia_nuoc;
+  const tongCong  = tienDien + tienNuoc + Number(form.tien_phong);
+
+  return (
+    <div style={M.overlay} onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div style={{ ...M.modal, maxWidth: 620 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+          <div style={M.title}>Hóa đơn — {phong.ten_phong}</div>
+          <div style={{ display: 'flex', gap: 4 }}>
+            {[['nhap','Nhập số'],['lich-su','Lịch sử']].map(([v, lb]) => (
+              <button key={v} style={{ ...s.tab, ...(tab === v ? s.tabActive : {}) }} onClick={() => setTab(v)}>{lb}</button>
+            ))}
+          </div>
+        </div>
+
+        {tab === 'nhap' && (
+          <>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
+              {[['thang','Tháng','number'],['nam','Năm','number']].map(([k, lb, type]) => (
+                <div key={k} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <label className="form-label">{lb}</label>
+                  <input className="form-input" type={type} name={k} value={form[k]} onChange={handleChange} />
+                </div>
+              ))}
+            </div>
+            {/* Điện */}
+            <div style={M.section}>⚡ Điện</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 14 }}>
+              {[['dien_cu','Số cũ (tự động)',true],['dien_moi','Số mới',false],['don_gia_dien','Đơn giá (đ/số)',false]].map(([k, lb, ro]) => (
+                <div key={k} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <label className="form-label">{lb}</label>
+                  <input className="form-input" type="number" name={k} value={form[k]} onChange={handleChange}
+                    readOnly={ro}
+                    style={ro ? { background: 'var(--bg2)', color: 'var(--text3)' } : undefined} />
+                </div>
+              ))}
+            </div>
+            <div style={{ ...M.section, marginTop: 0 }}>💧 Nước</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 14 }}>
+              {[['nuoc_cu','Số cũ (tự động)',true],['nuoc_moi','Số mới',false],['don_gia_nuoc','Đơn giá (đ/m³)',false]].map(([k, lb, ro]) => (
+                <div key={k} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <label className="form-label">{lb}</label>
+                  <input className="form-input" type="number" name={k} value={form[k]} onChange={handleChange}
+                    readOnly={ro}
+                    style={ro ? { background: 'var(--bg2)', color: 'var(--text3)' } : undefined} />
+                </div>
+              ))}
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <label className="form-label">Tiền phòng (đ/tháng)</label>
+                <input className="form-input" type="number" name="tien_phong" value={form.tien_phong} onChange={handleChange} />
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <label className="form-label">Ghi chú</label>
+                <input className="form-input" name="ghi_chu" value={form.ghi_chu} onChange={handleChange} />
+              </div>
+            </div>
+            {/* Preview tổng */}
+            <div style={M.preview}>
+              <div style={M.previewRow}><span>Tiền điện ({form.dien_moi - form.dien_cu} số × {Number(form.don_gia_dien).toLocaleString('vi-VN')}đ)</span><span>{fmt(tienDien)}</span></div>
+              <div style={M.previewRow}><span>Tiền nước ({form.nuoc_moi - form.nuoc_cu} m³ × {Number(form.don_gia_nuoc).toLocaleString('vi-VN')}đ)</span><span>{fmt(tienNuoc)}</span></div>
+              <div style={M.previewRow}><span>Tiền phòng</span><span>{fmt(form.tien_phong)}</span></div>
+              <div style={{ ...M.previewRow, fontWeight: 700, color: 'var(--accent)', borderTop: '1px solid var(--border)', paddingTop: 8, marginTop: 4 }}><span>Tổng cộng</span><span>{fmt(tongCong)}</span></div>
+            </div>
+            {err && <div style={M.err}>{err}</div>}
+            <div style={M.actions}>
+              <button className="btn-ghost" onClick={onClose}>Hủy</button>
+              <button className="btn-primary" onClick={handle} disabled={tao.isPending}>{tao.isPending ? 'Đang lưu...' : 'Lưu hóa đơn'}</button>
+            </div>
+          </>
+        )}
+
+        {tab === 'lich-su' && (
+          <>
+            {hoaDonList.length === 0 ? (
+              <div style={{ padding: '24px 0', textAlign: 'center', color: 'var(--text3)' }}>Chưa có hóa đơn nào</div>
+            ) : (
+              <div className="table-scroll">
+                <table style={s.table}>
+                  <thead><tr>
+                    {['Tháng','Điện','Nước','Tiền phòng','Tổng'].map((h) => <th key={h} style={s.th}>{h}</th>)}
+                  </tr></thead>
+                  <tbody>
+                    {hoaDonList.map((hd) => (
+                      <tr key={hd.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                        <td style={s.td}>{hd.thang}/{hd.nam}</td>
+                        <td style={s.td}>{fmt(hd.tien_dien)} <span style={{ color: 'var(--text3)', fontSize: 10 }}>({hd.dien_moi - hd.dien_cu} số)</span></td>
+                        <td style={s.td}>{fmt(hd.tien_nuoc)} <span style={{ color: 'var(--text3)', fontSize: 10 }}>({hd.nuoc_moi - hd.nuoc_cu} m³)</span></td>
+                        <td style={s.td}>{fmt(hd.tien_phong)}</td>
+                        <td style={{ ...s.td, fontWeight: 700, color: 'var(--accent)', fontFamily: "'JetBrains Mono', monospace" }}>
+                          {fmt(Number(hd.tien_dien) + Number(hd.tien_nuoc) + Number(hd.tien_phong))}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
+              <button className="btn-ghost" onClick={onClose}>Đóng</button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Chi tiết phòng ───────────────────────────────────────
+function PhongDetail({ phong, ktxId }) {
+  const navigate = useNavigate();
+  const { data: giuongRes } = useGiuongList(phong.id);
+  const giuongList = giuongRes?.data ?? [];
+  const traPhong = useTraPhong(phong.id);
+  const [xepModal, setXepModal] = useState(null);   // giuong object
+  const [hoaDonModal, setHoaDonModal] = useState(false);
+
+  async function handleTra(tp) {
+    if (!confirm(`Xác nhận trả phòng cho ${tp.cong_nhan_ten}?`)) return;
+    await traPhong.mutateAsync({ thuephongId: tp.thue_phong_id, ngay_ra: new Date().toISOString().split('T')[0] });
+  }
+
+  return (
+    <div style={s.card}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+        <div>
+          <div style={s.cardTitle}>Phòng {phong.ten_phong}</div>
+          <div style={{ fontSize: 11, color: 'var(--text2)', marginTop: 2 }}>
+            {phong.so_dang_o ?? 0}/{phong.suc_chua} giường · Tiền phòng: {fmt(phong.tien_phong)}/tháng
+          </div>
+        </div>
+        <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => setHoaDonModal(true)}>💡 Hóa đơn</button>
+      </div>
+      <div style={s.bedsGrid}>
+        {giuongList.map((g) => (
+          <div key={g.id} style={{
+            ...s.bed,
+            background: g.cong_nhan_id ? 'rgba(79,124,255,0.1)' : 'var(--bg3)',
+            border: `1px solid ${g.cong_nhan_id ? 'rgba(79,124,255,0.3)' : 'var(--border)'}`,
+          }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: g.cong_nhan_id ? 'var(--accent)' : 'var(--text3)', marginBottom: 4 }}>Giường {g.so_thu_tu}</div>
+            {g.cong_nhan_id ? (
+              <>
+                <button
+                  style={{ fontSize: 12, fontWeight: 600, color: 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textAlign: 'left', fontFamily: "'Be Vietnam Pro', sans-serif", textDecoration: 'underline dotted' }}
+                  onClick={() => navigate(`/cong-nhan/${g.cong_nhan_id}`)}
+                >
+                  {g.cong_nhan_ten}
+                </button>
+                <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 2 }}>Vào: {g.ngay_vao ? new Date(g.ngay_vao).toLocaleDateString('vi-VN') : '—'}</div>
+                <button style={{ ...s.assignBtn, color: 'var(--red)', borderColor: 'rgba(255,95,114,0.3)' }} onClick={() => handleTra(g)}>↩ Trả</button>
+              </>
+            ) : (
+              <>
+                <div style={{ fontSize: 11, color: 'var(--text3)', fontStyle: 'italic' }}>Trống</div>
+                <button style={s.assignBtn} onClick={() => setXepModal(g)}>+ Xếp</button>
+              </>
+            )}
+          </div>
+        ))}
+      </div>
+      {xepModal && <XepGiuongModal giuong={xepModal} phongId={phong.id} onClose={() => setXepModal(null)} />}
+      {hoaDonModal && <HoaDonModal phong={phong} onClose={() => setHoaDonModal(false)} />}
+    </div>
+  );
+}
+
+// ─── Main KTX page ────────────────────────────────────────
+export default function KTX() {
+  const { isAdmin, isQuanLy, user } = useAuth();
+  const coQuyenXem = isAdmin || isQuanLy || user?.co_xem_ktx === true;
+
+  const { data: ktxRes, isLoading } = useKtxList();
+  const ktxList = ktxRes?.data ?? [];
+  const xoaKtx = useXoaKtx();
+  const xoaPhong = useXoaPhong(null);
+
+  const [moduleTab,    setModuleTab]    = useState('ktx');  // 'ktx' | 'phong_tro'
+  const [selectedKtxId, setSelectedKtxId] = useState(null);
+  const [selectedPhongId, setSelectedPhongId] = useState(null);
+  const [addKtxModal, setAddKtxModal] = useState(false);
+  const [addPhongModal, setAddPhongModal] = useState(false);
+
+  const selectedKtx  = ktxList.find((k) => k.id === selectedKtxId) ?? ktxList[0] ?? null;
+  const activeKtxId  = selectedKtx?.id ?? null;
+
+  const { data: phongRes } = usePhongList(activeKtxId);
+  const phongList = phongRes?.data ?? [];
+
+  const selectedPhong = phongList.find((p) => p.id === selectedPhongId) ?? null;
+
+  // Group by floor
+  const floors = [...new Set(phongList.map((p) => p.tang))].sort((a, b) => b - a);
+
+  if (!coQuyenXem) {
+    return (
+      <div style={{ ...s.card, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, minHeight: 280, justifyContent: 'center' }}>
+        <div style={{ fontSize: 36 }}>🔒</div>
+        <div style={{ fontSize: 14, color: 'var(--text1)', fontWeight: 600 }}>Bạn chưa được cấp quyền xem ký túc xá</div>
+        <div style={{ fontSize: 12, color: 'var(--text3)' }}>Vui lòng liên hệ quản trị viên để được cấp quyền.</div>
+      </div>
+    );
+  }
+
+  if (isLoading) return <div style={{ padding: 40, color: 'var(--text2)' }}>Đang tải...</div>;
+
+  return (
+    <div style={s.root}>
+      {/* Module tabs: KTX vs Phòng trọ */}
+      <div style={{ display: 'flex', gap: 6, borderBottom: '1px solid var(--border)' }}>
+        {[['ktx','🏠 Ký túc xá'],['phong_tro','🏘️ Phòng trọ']].map(([v, lb]) => (
+          <button key={v}
+            onClick={() => setModuleTab(v)}
+            style={{
+              background: 'none', border: 'none', cursor: 'pointer',
+              padding: '10px 16px', fontSize: 13, fontWeight: 600,
+              color: moduleTab === v ? 'var(--accent)' : 'var(--text3)',
+              borderBottom: moduleTab === v ? '2px solid var(--accent)' : '2px solid transparent',
+              fontFamily: "'Be Vietnam Pro', sans-serif",
+              marginBottom: -1,
+            }}
+          >{lb}</button>
+        ))}
+      </div>
+
+      {moduleTab === 'phong_tro' ? <PhongTroSection /> : (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      {/* KTX tabs */}
+      <div style={s.kanTabs}>
+        {ktxList.map((k) => (
+          <div key={k.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            <button
+              style={{ ...s.kanTab, ...(activeKtxId === k.id ? s.kanTabActive : {}) }}
+              onClick={() => { setSelectedKtxId(k.id); setSelectedPhongId(null); }}
+            >
+              🏠 {k.ten}
+            </button>
+            {isAdmin && activeKtxId === k.id && (
+              <button
+                title="Vô hiệu hoá khu này"
+                onClick={async () => {
+                  if (!window.confirm(`Vô hiệu hoá khu "${k.ten}"?`)) return;
+                  try { await xoaKtx.mutateAsync(k.id); setSelectedKtxId(null); }
+                  catch (e) { alert(e?.response?.data?.error?.message ?? 'Lỗi'); }
+                }}
+                style={{ background: 'transparent', border: 'none', color: 'var(--red)',
+                  cursor: 'pointer', fontSize: 14, padding: '4px 6px' }}
+              >🗑</button>
+            )}
+          </div>
+        ))}
+        {isAdmin && (
+          <button className="btn-primary" style={{ marginLeft: 'auto', padding: '7px 12px', fontSize: 12 }} onClick={() => setAddKtxModal(true)}>+ Thêm khu</button>
+        )}
+      </div>
+
+      {ktxList.length === 0 ? (
+        <div style={{ ...s.card, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 200, gap: 10 }}>
+          <div style={{ fontSize: 32 }}>🏠</div>
+          <div style={{ color: 'var(--text2)' }}>Chưa có khu KTX nào. Nhấn "+ Thêm khu" để tạo.</div>
+        </div>
+      ) : (
+        <div className="ktx-main">
+          {/* Sơ đồ phòng */}
+          <div style={s.card}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <div style={s.cardTitle}>Sơ đồ phòng — {selectedKtx?.ten}</div>
+              <button className="btn-primary" style={{ padding: '6px 12px', fontSize: 12 }} onClick={() => setAddPhongModal(true)}>+ Thêm phòng</button>
+            </div>
+
+            {phongList.length === 0 ? (
+              <div style={{ padding: '24px 0', textAlign: 'center', color: 'var(--text3)' }}>Chưa có phòng nào trong khu này</div>
+            ) : (
+              floors.map((tang) => (
+                <div key={tang} style={s.floorSection}>
+                  <div style={s.floorLabel}>Tầng {tang}</div>
+                  <div style={s.roomRow}>
+                    {phongList.filter((p) => p.tang === tang).map((p) => {
+                      const occ = occupancy(p.so_giuong_thuc, p.so_dang_o, p.suc_chua);
+                      const isSelected = selectedPhongId === p.id;
+                      return (
+                        <div
+                          key={p.id}
+                          onClick={() => setSelectedPhongId(isSelected ? null : p.id)}
+                          style={{
+                            ...s.roomCard,
+                            background: occ.bg,
+                            border: `1px solid ${isSelected ? occ.color : occ.border}`,
+                            boxShadow: isSelected ? `0 0 0 2px ${occ.color}40` : 'none',
+                          }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                            <div style={{ ...s.roomId, color: occ.color }}>{p.ten_phong}</div>
+                            {isAdmin && (
+                              <button
+                                title="Xoá phòng"
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  if (!window.confirm(`Xoá phòng "${p.ten_phong}"?`)) return;
+                                  try { await xoaPhong.mutateAsync(p.id); }
+                                  catch (er) { alert(er?.response?.data?.error?.message ?? 'Lỗi'); }
+                                }}
+                                style={{ background: 'transparent', border: 'none',
+                                  color: 'var(--red)', cursor: 'pointer', fontSize: 12,
+                                  padding: 0, lineHeight: 1 }}
+                              >🗑</button>
+                            )}
+                          </div>
+                          <div style={{ fontSize: 18, fontWeight: 700, color: occ.color, fontFamily: "'JetBrains Mono', monospace" }}>
+                            {p.so_dang_o ?? 0}<span style={{ fontSize: 11, fontWeight: 400 }}>/{p.suc_chua}</span>
+                          </div>
+                          <div style={{ ...s.roomLabel, color: occ.color }}>{occ.label}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))
+            )}
+
+            {/* Legend */}
+            <div style={s.legend}>
+              {[['var(--red)','Đầy'],['var(--amber)','Gần đầy'],['var(--accent)','Còn chỗ'],['var(--text3)','Trống']].map(([c, l]) => (
+                <div key={l} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--text2)' }}>
+                  <span style={{ width: 10, height: 10, borderRadius: 3, background: c, display: 'inline-block' }} />{l}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Chi tiết phòng */}
+          {selectedPhong ? (
+            <PhongDetail phong={selectedPhong} ktxId={activeKtxId} />
+          ) : (
+            <div style={{ ...s.card, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 8, minHeight: 200 }}>
+              <div style={{ fontSize: 32 }}>🛏️</div>
+              <div style={{ fontSize: 13, color: 'var(--text2)' }}>Chọn một phòng để xem chi tiết</div>
+            </div>
+          )}
+        </div>
+      )}
+
+      </div>)}
+
+      {addKtxModal  && <AddKtxModal  onClose={() => setAddKtxModal(false)} />}
+      {addPhongModal && activeKtxId && (
+        <AddPhongModal ktxId={activeKtxId} onClose={() => setAddPhongModal(false)} />
+      )}
+    </div>
+  );
+}
+
+// ─── Phòng trọ — section dùng API thật ────────────────────
+function PhongTroSection() {
+  const { data: ptRes, isLoading } = usePhongTroList();
+  const list = ptRes?.data ?? [];
+  const tao = useTaoPhongTro();
+  const xoa = useXoaPhongTro();
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ ten: '', dia_chi: '', map_url: '', chu_tro: '', sdt_chu_tro: '', so_phong: 0, ghi_chu: '' });
+  const [err, setErr] = useState('');
+
+  async function handleAdd() {
+    setErr('');
+    if (!form.ten.trim()) { setErr('Vui lòng nhập tên phòng trọ'); return; }
+    try {
+      await tao.mutateAsync({
+        ten: form.ten.trim(),
+        dia_chi: form.dia_chi || undefined,
+        map_url: form.map_url || undefined,
+        chu_tro: form.chu_tro || undefined,
+        sdt_chu_tro: form.sdt_chu_tro || undefined,
+        so_phong: parseInt(form.so_phong, 10) || 0,
+        ghi_chu: form.ghi_chu || undefined,
+      });
+      setForm({ ten: '', dia_chi: '', map_url: '', chu_tro: '', sdt_chu_tro: '', so_phong: 0, ghi_chu: '' });
+      setShowForm(false);
+    } catch (e) { setErr(e?.response?.data?.error?.message ?? 'Lỗi'); }
+  }
+
+  async function handleXoa(id) {
+    if (!confirm('Xóa phòng trọ này?')) return;
+    try { await xoa.mutateAsync(id); }
+    catch (e) { alert(e?.response?.data?.error?.message ?? 'Lỗi'); }
+  }
+
+  return (
+    <div style={s.card}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+        <div>
+          <div style={s.cardTitle}>Phòng trọ</div>
+          <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>Quản lý các phòng trọ thuê ngoài để gán công nhân thay vì KTX</div>
+        </div>
+        <button className="btn-primary" style={{ padding: '6px 12px', fontSize: 12 }} onClick={() => setShowForm((s) => !s)}>
+          {showForm ? 'Đóng' : '+ Thêm phòng trọ'}
+        </button>
+      </div>
+
+      {showForm && (
+        <div style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 12, padding: 14, marginBottom: 14 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <label className="form-label">Tên phòng trọ *</label>
+              <input className="form-input" value={form.ten} onChange={(e) => setForm((f) => ({ ...f, ten: e.target.value }))} placeholder="Trọ Anh Tuấn..." />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <label className="form-label">Số phòng</label>
+              <input className="form-input" type="number" value={form.so_phong} onChange={(e) => setForm((f) => ({ ...f, so_phong: e.target.value }))} />
+            </div>
+            <div style={{ gridColumn: 'span 2', display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <label className="form-label">Địa chỉ</label>
+              <input className="form-input" value={form.dia_chi} onChange={(e) => setForm((f) => ({ ...f, dia_chi: e.target.value }))} />
+            </div>
+            <div style={{ gridColumn: 'span 2', display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <label className="form-label">Google Maps URL (embed/share link)</label>
+              <input className="form-input" value={form.map_url} onChange={(e) => setForm((f) => ({ ...f, map_url: e.target.value }))} placeholder="https://www.google.com/maps/embed?..." />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <label className="form-label">Tên chủ trọ</label>
+              <input className="form-input" value={form.chu_tro} onChange={(e) => setForm((f) => ({ ...f, chu_tro: e.target.value }))} />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <label className="form-label">SĐT chủ trọ</label>
+              <input className="form-input" value={form.sdt_chu_tro} onChange={(e) => setForm((f) => ({ ...f, sdt_chu_tro: e.target.value }))} />
+            </div>
+            <div style={{ gridColumn: 'span 2', display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <label className="form-label">Ghi chú</label>
+              <input className="form-input" value={form.ghi_chu} onChange={(e) => setForm((f) => ({ ...f, ghi_chu: e.target.value }))} />
+            </div>
+          </div>
+          {err && <div style={{ color: 'var(--red)', fontSize: 12, marginTop: 8 }}>{err}</div>}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10, gap: 8 }}>
+            <button className="btn-ghost" onClick={() => setShowForm(false)}>Hủy</button>
+            <button className="btn-primary" onClick={handleAdd} disabled={tao.isPending}>{tao.isPending ? 'Đang lưu...' : 'Lưu'}</button>
+          </div>
+        </div>
+      )}
+
+      {isLoading ? (
+        <div style={{ padding: '20px 0', textAlign: 'center', color: 'var(--text3)' }}>Đang tải...</div>
+      ) : list.length === 0 ? (
+        <div style={{ padding: '32px 0', textAlign: 'center', color: 'var(--text3)' }}>
+          Chưa có phòng trọ nào. Nhấn "+ Thêm phòng trọ" để tạo.
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 12 }}>
+          {list.map((p) => (
+            <div key={p.id} style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 12, padding: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text1)' }}>{p.ten}</div>
+                  <div style={{ fontSize: 11, color: 'var(--text3)' }}>{p.dia_chi || '—'}</div>
+                </div>
+                <button onClick={() => handleXoa(p.id)} style={{ background: 'none', border: 'none', color: 'var(--red)', cursor: 'pointer', fontSize: 12 }}>✕</button>
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text2)' }}>
+                <div>👤 Chủ trọ: <b style={{ color: 'var(--text1)' }}>{p.chu_tro || '—'}</b></div>
+                <div>📞 SĐT: <span style={{ fontFamily: "'JetBrains Mono', monospace" }}>{p.sdt_chu_tro || '—'}</span></div>
+                <div>🛏️ Số phòng: {p.so_phong || 0}</div>
+              </div>
+              {p.map_url && (
+                <div style={{ borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border)' }}>
+                  <iframe
+                    src={p.map_url}
+                    width="100%" height="160"
+                    style={{ border: 0 }}
+                    loading="lazy"
+                    title={`map-${p.id}`}
+                  />
+                </div>
+              )}
+              {p.ghi_chu && <div style={{ fontSize: 11, color: 'var(--text3)', fontStyle: 'italic' }}>{p.ghi_chu}</div>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const s = {
+  root:    { display: 'flex', flexDirection: 'column', gap: 14 },
+  kanTabs: { display: 'flex', gap: 8, alignItems: 'center' },
+  kanTab:  { background: 'var(--bg1)', border: '1px solid var(--border)', borderRadius: 10, padding: '8px 16px', fontSize: 13, fontWeight: 600, color: 'var(--text2)', cursor: 'pointer', fontFamily: "'Be Vietnam Pro', sans-serif" },
+  kanTabActive: { background: 'rgba(79,124,255,0.1)', borderColor: 'rgba(79,124,255,0.4)', color: 'var(--accent)' },
+  card:    { background: 'var(--bg1)', border: '1px solid var(--border)', borderRadius: 14, padding: '18px 20px' },
+  cardTitle:{ fontSize: 13, fontWeight: 700, color: 'var(--text1)' },
+  floorSection: { marginBottom: 16 },
+  floorLabel: { fontSize: 10, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 },
+  roomRow: { display: 'flex', gap: 10, flexWrap: 'wrap' },
+  roomCard: { borderRadius: 10, padding: '12px 14px', cursor: 'pointer', transition: 'all 0.15s', minWidth: 90, textAlign: 'center' },
+  roomId:  { fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', marginBottom: 4 },
+  roomLabel: { fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', marginTop: 2 },
+  legend:  { display: 'flex', gap: 14, marginTop: 12 },
+  bedsGrid:{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 },
+  bed:     { borderRadius: 10, padding: '12px 14px', position: 'relative', minHeight: 80 },
+  assignBtn: { position: 'absolute', bottom: 10, right: 10, background: 'var(--bg3)', border: '1px solid var(--border2)', borderRadius: 6, fontSize: 11, color: 'var(--accent)', cursor: 'pointer', padding: '3px 8px', fontFamily: "'Be Vietnam Pro', sans-serif" },
+  tab:     { background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, color: 'var(--text3)', padding: '5px 10px', borderRadius: 7, fontFamily: "'Be Vietnam Pro', sans-serif" },
+  tabActive:{ background: 'var(--bg3)', color: 'var(--text1)' },
+  table:   { width: '100%', borderCollapse: 'collapse' },
+  th:      { fontSize: 10, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', padding: '0 12px 10px 0', borderBottom: '1px solid var(--border)', textAlign: 'left' },
+  td:      { padding: '10px 12px 10px 0', verticalAlign: 'middle', fontSize: 12, color: 'var(--text1)' },
+};
+
+const M = {
+  overlay:  { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200 },
+  modal:    { background: 'var(--bg1)', border: '1px solid var(--border2)', borderRadius: 16, padding: '24px 28px', width: '100%', maxWidth: 480, maxHeight: '90vh', overflowY: 'auto' },
+  title:    { fontSize: 15, fontWeight: 700, color: 'var(--text1)', marginBottom: 16 },
+  section:  { fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 },
+  preview:  { background: 'var(--bg3)', borderRadius: 10, padding: '12px 14px', marginBottom: 14 },
+  previewRow: { display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text2)', padding: '4px 0' },
+  err:      { color: 'var(--red)', fontSize: 12, marginBottom: 8 },
+  actions:  { display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 },
+};

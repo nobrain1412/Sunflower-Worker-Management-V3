@@ -1,0 +1,420 @@
+import { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import api from '../../hooks/useApi';
+import { useAuth } from '../../context/AuthContext';
+
+function fmt(n) { return Number(n || 0).toLocaleString('vi-VN') + 'đ'; }
+
+function useCongTyData() {
+  return useQuery({
+    queryKey: ['cong-ty'],
+    queryFn:  () => api.get('/cong-ty', { params: { limit: 100 } }),
+    staleTime: 30_000,
+  });
+}
+
+function useCapNhat() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...data }) => api.put(`/cong-ty/${id}`, data),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: ['cong-ty'] }),
+  });
+}
+
+function useTaoMoi() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data) => api.post('/cong-ty', data),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: ['cong-ty'] }),
+  });
+}
+
+function useXoaCongTy() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id) => api.delete(`/cong-ty/${id}`),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: ['cong-ty'] }),
+  });
+}
+
+// ─── Cấu hình lương — view mode ───────────────────────────
+function LuongConfig({ ct }) {
+  const bangLuong = [
+    ['Lương cơ bản',          fmt(ct.luong_co_ban),    'var(--green)'],
+    ['Lương theo giờ',        fmt(ct.luong_theo_gio),   'var(--teal)'],
+    ['Ngày làm chuẩn',        `${ct.ngay_lam_chuan} ngày`, 'var(--text2)'],
+  ];
+  const bangTC = [
+    ['Tăng ca ngày',          fmt(ct.luong_tc_ngay),   'var(--amber)'],
+    ['Hành chính đêm',        fmt(ct.luong_hc_dem),    'var(--amber)'],
+    ['Tăng ca đêm',           fmt(ct.luong_tc_dem),    'var(--red)'],
+    ['Chủ nhật',              fmt(ct.luong_chu_nhat),  'var(--red)'],
+    ['Ngày lễ',               fmt(ct.luong_ngay_le),   'var(--red)'],
+  ];
+  const bangKhauTru = [
+    ['Tiền đồng phục',        fmt(ct.tien_dong_phuc ?? 0), 'var(--amber)'],
+    ['Tiền phạt nghỉ',        fmt(ct.tien_phat_nghi ?? 0), 'var(--red)'],
+  ];
+  const bangVender = [
+    ['Đơn giá / giờ (vender)', fmt(ct.don_gia_theo_gio_vender ?? 0), 'var(--accent)'],
+    ['Trợ cấp',                fmt(ct.tro_cap ?? 0),                 'var(--green)'],
+    ['Chuyên cần',             fmt(ct.chuyen_can ?? 0),              'var(--teal)'],
+    ['Ngày chốt công',         `Ngày ${ct.ngay_chot_cong ?? 25}`,    'var(--text2)'],
+  ];
+  return (
+    <>
+      <div style={f.sectionLabel}>Lương cơ bản</div>
+      <div style={f.grid}>
+        {bangLuong.map(([label, value, color]) => (
+          <div key={label} style={f.item}>
+            <div style={f.label}>{label}</div>
+            <div style={{ ...f.value, color }}>{value}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{ ...f.sectionLabel, marginTop: 14 }}>Tăng ca (VNĐ/giờ)</div>
+      <div style={f.grid}>
+        {bangTC.map(([label, value, color]) => (
+          <div key={label} style={f.item}>
+            <div style={f.label}>{label}</div>
+            <div style={{ ...f.value, color }}>{value}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{ ...f.sectionLabel, marginTop: 14 }}>Khấu trừ mặc định</div>
+      <div style={f.grid}>
+        {bangKhauTru.map(([label, value, color]) => (
+          <div key={label} style={f.item}>
+            <div style={f.label}>{label}</div>
+            <div style={{ ...f.value, color }}>{value}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{ ...f.sectionLabel, marginTop: 14 }}>Vender / Trợ cấp</div>
+      <div style={f.grid}>
+        {bangVender.map(([label, value, color]) => (
+          <div key={label} style={f.item}>
+            <div style={f.label}>{label}</div>
+            <div style={{ ...f.value, color }}>{value}</div>
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+
+// ─── Form chỉnh sửa ────────────────────────────────────────
+const numberFields = [
+  ['luong_co_ban',   'Lương cơ bản (VNĐ/tháng)'],
+  ['luong_theo_gio', 'Lương theo giờ (VNĐ/giờ)'],
+  ['ngay_lam_chuan', 'Ngày làm chuẩn'],
+  ['luong_tc_ngay',  'Tăng ca ngày (VNĐ/giờ)'],
+  ['luong_hc_dem',   'Hành chính đêm (VNĐ/giờ)'],
+  ['luong_tc_dem',   'Tăng ca đêm (VNĐ/giờ)'],
+  ['luong_chu_nhat', 'Chủ nhật (VNĐ/giờ)'],
+  ['luong_ngay_le',  'Ngày lễ (VNĐ/giờ)'],
+  ['tien_dong_phuc', 'Tiền khấu trừ đồng phục (VNĐ)'],
+  ['tien_phat_nghi', 'Tiền phạt nghỉ không đơn (VNĐ)'],
+  ['don_gia_theo_gio_vender', 'Đơn giá theo giờ trả vender (VNĐ/giờ)'],
+  ['tro_cap',                 'Trợ cấp (VNĐ/tháng)'],
+  ['chuyen_can',              'Chuyên cần (VNĐ/tháng)'],
+  ['ngay_chot_cong',          'Ngày chốt công (1-31)'],
+];
+
+const EMPTY_FORM = {
+  ten_cong_ty: '', dia_chi: '', mo_ta_cong_viec: '', media_urls: '',
+  luong_co_ban: '', luong_theo_gio: '', ngay_lam_chuan: '26',
+  luong_tc_ngay: '', luong_hc_dem: '', luong_tc_dem: '', luong_chu_nhat: '', luong_ngay_le: '',
+  tien_dong_phuc: '0', tien_phat_nghi: '0',
+  don_gia_theo_gio_vender: '0', tro_cap: '0', chuyen_can: '0', ngay_chot_cong: '25',
+};
+
+export default function CongTy() {
+  const { isAdmin } = useAuth();
+  const { data: res, isLoading } = useCongTyData();
+  const capNhat = useCapNhat();
+  const taoMoi  = useTaoMoi();
+  const xoa     = useXoaCongTy();
+
+  const list = res?.data ?? [];
+  const [selectedId, setSelectedId] = useState(null);
+  const [editing,    setEditing]    = useState(false);
+  const [addModal,   setAddModal]   = useState(false);
+  const [form,       setForm]       = useState(EMPTY_FORM);
+  const [errMsg,     setErrMsg]     = useState('');
+
+  const selected = list.find((c) => c.id === selectedId) ?? list[0] ?? null;
+
+  function openEdit() {
+    if (!selected) return;
+    setForm({
+      ten_cong_ty:   selected.ten_cong_ty,
+      dia_chi:       selected.dia_chi ?? '',
+      mo_ta_cong_viec: selected.mo_ta_cong_viec ?? '',
+      media_urls:    Array.isArray(selected.media_urls) ? selected.media_urls.join('\n') : (selected.media_urls ?? ''),
+      luong_co_ban:  selected.luong_co_ban,
+      luong_theo_gio: selected.luong_theo_gio,
+      ngay_lam_chuan: selected.ngay_lam_chuan,
+      luong_tc_ngay:  selected.luong_tc_ngay ?? 0,
+      luong_hc_dem:   selected.luong_hc_dem  ?? 0,
+      luong_tc_dem:   selected.luong_tc_dem  ?? 0,
+      luong_chu_nhat: selected.luong_chu_nhat ?? 0,
+      luong_ngay_le:  selected.luong_ngay_le  ?? 0,
+      tien_dong_phuc: selected.tien_dong_phuc ?? 0,
+      tien_phat_nghi: selected.tien_phat_nghi ?? 0,
+      don_gia_theo_gio_vender: selected.don_gia_theo_gio_vender ?? 0,
+      tro_cap:                 selected.tro_cap ?? 0,
+      chuyen_can:              selected.chuyen_can ?? 0,
+      ngay_chot_cong:          selected.ngay_chot_cong ?? 25,
+    });
+    setEditing(true);
+    setErrMsg('');
+  }
+
+  function handleChange(e) {
+    const { name, value } = e.target;
+    setForm((f) => ({ ...f, [name]: value }));
+  }
+
+  function buildPayload() {
+    const payload = { ...form };
+    numberFields.forEach(([k]) => {
+      if (payload[k] === '' || payload[k] == null) {
+        delete payload[k];
+      } else {
+        payload[k] = parseFloat(payload[k]);
+      }
+    });
+    if (typeof payload.media_urls === 'string') {
+      payload.media_urls = payload.media_urls.split('\n').map((u) => u.trim()).filter(Boolean);
+      if (payload.media_urls.length === 0) delete payload.media_urls;
+    }
+    return payload;
+  }
+
+  async function handleSave() {
+    setErrMsg('');
+    try {
+      await capNhat.mutateAsync({ id: selected.id, ...buildPayload() });
+      setEditing(false);
+    } catch (e) {
+      setErrMsg(e?.response?.data?.error?.message ?? 'Lỗi không xác định');
+    }
+  }
+
+  async function handleAdd() {
+    setErrMsg('');
+    try {
+      const res2 = await taoMoi.mutateAsync(buildPayload());
+      setAddModal(false);
+      setSelectedId(res2?.data?.data?.id ?? null);
+      setForm(EMPTY_FORM);
+    } catch (e) {
+      setErrMsg(e?.response?.data?.error?.message ?? 'Lỗi không xác định');
+    }
+  }
+
+  if (isLoading) return <div style={{ padding: 40, color: 'var(--text2)' }}>Đang tải...</div>;
+
+  return (
+    <div style={s.root}>
+      <div className="cong-ty-main">
+        {/* Danh sách công ty */}
+        <div style={s.card}>
+          <div style={s.cardHeader}>
+            <div style={s.cardTitle}>Công ty</div>
+            {isAdmin && (
+              <button className="btn-primary" style={{ padding: '6px 12px', fontSize: 12 }} onClick={() => { setForm(EMPTY_FORM); setAddModal(true); setErrMsg(''); }}>+ Thêm</button>
+            )}
+          </div>
+          {list.map((ct) => (
+            <div
+              key={ct.id}
+              style={{ ...s.ctItem, ...(selected?.id === ct.id ? s.ctItemActive : {}) }}
+              onClick={() => { setSelectedId(ct.id); setEditing(false); }}
+            >
+              <div style={s.ctAvatar}>{ct.ten_cong_ty[0]}</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={s.ctName}>{ct.ten_cong_ty}</div>
+                <div style={s.ctAddr}>{ct.dia_chi ?? '—'}</div>
+                <div style={s.progressLabel}>{ct.so_luong_hien_tai ?? 0} công nhân</div>
+              </div>
+            </div>
+          ))}
+          {list.length === 0 && (
+            <div style={{ padding: '24px 0', textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>Chưa có công ty nào</div>
+          )}
+        </div>
+
+        {/* Chi tiết */}
+        {selected ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {/* Profile card */}
+            <div style={s.card}>
+              <div style={s.cardHeader}>
+                <div>
+                  <div style={s.cardTitle}>{selected.ten_cong_ty}</div>
+                  <div style={{ fontSize: 12, color: 'var(--text2)', marginTop: 2 }}>{selected.dia_chi ?? '—'}</div>
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button className="btn-ghost" onClick={editing ? () => setEditing(false) : openEdit}>
+                    {editing ? 'Hủy' : '✏️ Chỉnh sửa'}
+                  </button>
+                  {isAdmin && !editing && (
+                    <button
+                      onClick={async () => {
+                        if (!window.confirm(`Vô hiệu hoá công ty "${selected.ten_cong_ty}"?`)) return;
+                        try { await xoa.mutateAsync(selected.id); setSelectedId(null); }
+                        catch (e) { alert(e?.response?.data?.error?.message ?? 'Lỗi'); }
+                      }}
+                      style={{ background: 'transparent', border: '1px solid rgba(255,95,114,0.4)',
+                        borderRadius: 8, padding: '7px 14px', fontSize: 12, color: 'var(--red)',
+                        cursor: 'pointer', fontFamily: "'Be Vietnam Pro', sans-serif" }}>
+                      🗑 Xoá
+                    </button>
+                  )}
+                </div>
+              </div>
+              <div style={s.occupancy}>
+                <div>
+                  <div style={s.occLabel}>Công nhân hiện tại</div>
+                  <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 22, fontWeight: 700, color: 'var(--accent)' }}>
+                    {selected.so_luong_hien_tai ?? 0} <span style={{ fontSize: 14, color: 'var(--text3)' }}>người</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Cấu hình lương */}
+            <div style={s.card}>
+              <div style={s.cardTitle}>Cấu hình bảng lương</div>
+              {editing ? (
+                <div>
+                  <div style={{ ...f.grid, marginBottom: 10 }}>
+                    <div style={{ gridColumn: 'span 2', display: 'flex', flexDirection: 'column', gap: 5 }}>
+                      <label className="form-label">Tên công ty</label>
+                      <input className="form-input" name="ten_cong_ty" value={form.ten_cong_ty} onChange={handleChange} />
+                    </div>
+                    <div style={{ gridColumn: 'span 2', display: 'flex', flexDirection: 'column', gap: 5 }}>
+                      <label className="form-label">Địa chỉ</label>
+                      <input className="form-input" name="dia_chi" value={form.dia_chi} onChange={handleChange} />
+                    </div>
+                    <div style={{ gridColumn: 'span 2', display: 'flex', flexDirection: 'column', gap: 5 }}>
+                      <label className="form-label">Mô tả công việc</label>
+                      <textarea className="form-input" name="mo_ta_cong_viec" rows={3} value={form.mo_ta_cong_viec ?? ''} onChange={handleChange} placeholder="Mô tả tính chất công việc, ca làm..." />
+                    </div>
+                    <div style={{ gridColumn: 'span 2', display: 'flex', flexDirection: 'column', gap: 5 }}>
+                      <label className="form-label">Ảnh / Video mô tả (URL, mỗi dòng 1 link)</label>
+                      <textarea className="form-input" name="media_urls" rows={2} value={form.media_urls ?? ''} onChange={handleChange} placeholder="https://..." />
+                    </div>
+                    {numberFields.map(([name, label]) => (
+                      <div key={name} style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                        <label className="form-label">{label}</label>
+                        <input className="form-input" name={name} type="number" value={form[name]} onChange={handleChange} />
+                      </div>
+                    ))}
+                  </div>
+                  {errMsg && <div style={{ color: 'var(--red)', fontSize: 12, marginBottom: 8 }}>{errMsg}</div>}
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                    <button className="btn-ghost" onClick={() => setEditing(false)}>Hủy</button>
+                    <button className="btn-primary" onClick={handleSave} disabled={capNhat.isPending}>
+                      {capNhat.isPending ? 'Đang lưu...' : 'Lưu thay đổi'}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <LuongConfig ct={selected} />
+                  {/* Công thức lương */}
+                  <div style={f.formula}>
+                    <div style={f.formulaTitle}>Công thức tính lương</div>
+                    <div style={f.formulaCode}>
+                      lương_thực_nhận = (lương_cơ_bản / {selected.ngay_lam_chuan} × ngày_công)<br />
+                      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; + lương_tăng_ca − tổng_khấu_trừ
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div style={{ ...s.card, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 200 }}>
+            <div style={{ color: 'var(--text3)', fontSize: 13 }}>Chọn một công ty để xem chi tiết</div>
+          </div>
+        )}
+      </div>
+
+      {/* Modal thêm mới */}
+      {addModal && (
+        <div style={m.overlay} onClick={(e) => e.target === e.currentTarget && setAddModal(false)}>
+          <div style={m.modal}>
+            <div style={m.title}>Thêm công ty mới</div>
+            <div style={{ ...f.grid, marginBottom: 12 }}>
+              <div style={{ gridColumn: 'span 2', display: 'flex', flexDirection: 'column', gap: 5 }}>
+                <label className="form-label">Tên công ty <span style={{ color: 'var(--red)' }}>*</span></label>
+                <input className="form-input" name="ten_cong_ty" value={form.ten_cong_ty} onChange={handleChange} placeholder="Công ty TNHH..." />
+              </div>
+              <div style={{ gridColumn: 'span 2', display: 'flex', flexDirection: 'column', gap: 5 }}>
+                <label className="form-label">Địa chỉ</label>
+                <input className="form-input" name="dia_chi" value={form.dia_chi} onChange={handleChange} placeholder="KCN Bình Dương..." />
+              </div>
+              <div style={{ gridColumn: 'span 2', display: 'flex', flexDirection: 'column', gap: 5 }}>
+                <label className="form-label">Mô tả công việc</label>
+                <textarea className="form-input" name="mo_ta_cong_viec" rows={3} value={form.mo_ta_cong_viec ?? ''} onChange={handleChange} placeholder="Mô tả tính chất công việc, ca làm..." />
+              </div>
+              <div style={{ gridColumn: 'span 2', display: 'flex', flexDirection: 'column', gap: 5 }}>
+                <label className="form-label">Ảnh / Video mô tả (URL, mỗi dòng 1 link)</label>
+                <textarea className="form-input" name="media_urls" rows={2} value={form.media_urls ?? ''} onChange={handleChange} placeholder="https://..." />
+              </div>
+              {numberFields.map(([name, label]) => (
+                <div key={name} style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                  <label className="form-label">{label}</label>
+                  <input className="form-input" name={name} type="number" value={form[name]} onChange={handleChange} />
+                </div>
+              ))}
+            </div>
+            {errMsg && <div style={{ color: 'var(--red)', fontSize: 12, marginBottom: 8 }}>{errMsg}</div>}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <button className="btn-ghost" onClick={() => setAddModal(false)}>Hủy</button>
+              <button className="btn-primary" onClick={handleAdd} disabled={taoMoi.isPending}>
+                {taoMoi.isPending ? 'Đang lưu...' : 'Thêm công ty'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const s = {
+  root:    { display: 'flex', flexDirection: 'column', gap: 14 },
+  card:    { background: 'var(--bg1)', border: '1px solid var(--border)', borderRadius: 14, padding: '18px 20px' },
+  cardHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 },
+  cardTitle:{ fontSize: 13, fontWeight: 700, color: 'var(--text1)' },
+  ctItem:  { display: 'flex', alignItems: 'flex-start', gap: 12, padding: '12px 0', borderBottom: '1px solid var(--border)', cursor: 'pointer', borderRadius: 8, marginBottom: 2 },
+  ctItemActive: { background: 'rgba(79,124,255,0.06)', padding: '12px 8px', marginLeft: -8, marginRight: -8 },
+  ctAvatar:{ width: 36, height: 36, borderRadius: 10, background: 'linear-gradient(135deg, var(--accent), var(--accent2))', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, color: '#fff', flexShrink: 0 },
+  ctName:  { fontSize: 13, fontWeight: 600, color: 'var(--text1)' },
+  ctAddr:  { fontSize: 11, color: 'var(--text3)', marginTop: 2 },
+  progressLabel: { fontSize: 10, color: 'var(--text3)', whiteSpace: 'nowrap', fontFamily: "'JetBrains Mono', monospace", marginTop: 4 },
+  occupancy:    { display: 'flex', gap: 20, alignItems: 'center', marginBottom: 4 },
+  occLabel:     { fontSize: 10, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 },
+};
+
+const f = {
+  sectionLabel: { fontSize: 10, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 },
+  grid:    { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 16px' },
+  item:    { display: 'flex', flexDirection: 'column', gap: 4 },
+  label:   { fontSize: 10, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em' },
+  value:   { fontSize: 14, fontWeight: 700, fontFamily: "'JetBrains Mono', monospace" },
+  formula: { marginTop: 16, padding: 14, background: 'var(--bg3)', borderRadius: 8 },
+  formulaTitle:{ fontSize: 10, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 },
+  formulaCode: { fontSize: 11, color: 'var(--accent)', fontFamily: "'JetBrains Mono', monospace", lineHeight: 1.8 },
+};
+
+const m = {
+  overlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200 },
+  modal:   { background: 'var(--bg1)', border: '1px solid var(--border2)', borderRadius: 16, padding: '24px 28px', width: '100%', maxWidth: 560, maxHeight: '90vh', overflowY: 'auto' },
+  title:   { fontSize: 15, fontWeight: 700, color: 'var(--text1)', marginBottom: 18 },
+};

@@ -1,0 +1,34 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install *)",
+      "PowerShell(Get-Command node -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source; Get-Command npm -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source; where.exe node 2>$null; where.exe npm 2>$null; [System.Environment]::GetEnvironmentVariable\\('PATH','Machine'\\) -split ';' | Select-String -Pattern 'node|npm' -SimpleMatch)",
+      "PowerShell(& \"C:\\\\Program Files\\\\nodejs\\\\node.exe\" --version)",
+      "PowerShell(& \"C:\\\\Program Files\\\\nodejs\\\\npm.cmd\" --version)",
+      "PowerShell($env:PATH = \"C:\\\\Program Files\\\\nodejs;\" + $env:PATH; Set-Location \"C:\\\\Users\\\\MKC\\\\Desktop\\\\SWM-V3\\\\frontend\"; Remove-Item -Recurse -Force node_modules -ErrorAction SilentlyContinue; npm install 2>&1)",
+      "PowerShell($env:PATH = \"C:\\\\Program Files\\\\nodejs;\" + $env:PATH; Set-Location \"C:\\\\Users\\\\MKC\\\\Desktop\\\\SWM-V3\\\\backend\"; if \\(-not \\(Test-Path .env\\)\\) { Copy-Item .env.example .env; Write-Host \"Created .env from .env.example\" } else { Write-Host \".env already exists\" }; & \"C:\\\\Program Files\\\\nodejs\\\\npm.cmd\" run dev 2>&1)",
+      "PowerShell($pw = \"WorkerOS@2026\"; & \"C:\\\\Program Files\\\\PostgreSQL\\\\18\\\\bin\\\\psql.exe\" -U postgres -h 127.0.0.1 -c \"ALTER USER postgres PASSWORD '$pw';\" 2>&1)",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(node src/utils/seed.js)",
+      "Bash(dir \"C:\\\\Users\\\\MKC\\\\Desktop\\\\SWM-V3\\\\frontend\\\\src\\\\hooks\")",
+      "Bash(node -e \"require\\('./src/app'\\)\")",
+      "Bash(npx vite *)",
+      "Bash(node src/utils/migrate.js)",
+      "Bash(curl -s http://localhost:3000/health)",
+      "PowerShell(Invoke-WebRequest -Uri \"http://localhost:3000/health\" -UseBasicParsing -TimeoutSec 3 2>&1)",
+      "Bash(npm run *)",
+      "Bash(node -e ' *)",
+      "Bash(curl -s http://localhost:5000/health)",
+      "Bash(curl -s http://localhost:3001/health)",
+      "Bash(curl -s http://localhost:5173)",
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(node -e \"const b=require\\('bcryptjs'\\); console.log\\(b.hashSync\\('Admin@123', 10\\)\\)\")",
+      "Bash(mkdir -p _archive)",
+      "Bash(mv 001_*.sql 002_*.sql 003_*.sql 004_*.sql 005_*.sql 006_*.sql 007_*.sql 008_*.sql 009_*.sql 010_*.sql _archive/)",
+      "Read(//c/c/Users/MKC/Desktop/SWM-V3/backend/**)",
+      "Bash(curl -s -X POST http://localhost:3000/api/auth/login -H \"Content-Type: application/json\" -d '{\"ten_dang_nhap\":\"admin\",\"mat_khau\":\"Admin@123\"}')",
+      "PowerShell(railway --version)",
+      "PowerShell(New-Item -ItemType Directory -Force -Path \"$env:APPDATA\\\\npm\" | Out-Null; Get-ExecutionPolicy -Scope CurrentUser)"
+    ]
+  }
+}
