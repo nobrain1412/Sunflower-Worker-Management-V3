@@ -1,5 +1,9 @@
-import { createContext, useContext, useState, useCallback } from 'react';
-import api from '../hooks/useApi';
+import { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import api, {
+  setAccessToken,
+  clearAccessToken,
+  setUnauthorizedHandler,
+} from '../hooks/useApi';
 
 const AuthContext = createContext(null);
 
@@ -18,29 +22,54 @@ export function AuthProvider({ children }) {
     const saved = localStorage.getItem('selected_cong_ty_id');
     return saved ? parseInt(saved, 10) : null;
   });
+  const [isAuthReady, setIsAuthReady] = useState(false);
 
-  const login = useCallback(async (ten_dang_nhap, mat_khau) => {
-    const res = await api.post('/auth/login', { ten_dang_nhap, mat_khau });
-    const userData = res.data.user;
-    localStorage.setItem('access_token', res.data.access_token);
-    localStorage.setItem('user', JSON.stringify(userData));
-    setUser(userData);
-
-    // Đặt công ty mặc định cho quan_ly là cty đầu tiên
-    if (userData.vai_tro === 'quan_ly' && userData.cong_ty_ids?.length > 0) {
-      const defaultId = userData.cong_ty_ids[0];
-      localStorage.setItem('selected_cong_ty_id', String(defaultId));
-      setSelectedCongTyId(defaultId);
-    }
-  }, []);
-
-  const logout = useCallback(() => {
-    localStorage.removeItem('access_token');
+  const clearAuthData = useCallback(() => {
+    clearAccessToken();
     localStorage.removeItem('user');
     localStorage.removeItem('selected_cong_ty_id');
     setUser(null);
     setSelectedCongTyId(null);
   }, []);
+
+  const applyCongTySelection = useCallback((userData) => {
+    if (userData?.vai_tro !== 'quan_ly' || !userData.cong_ty_ids?.length) {
+      localStorage.removeItem('selected_cong_ty_id');
+      setSelectedCongTyId(null);
+      return;
+    }
+
+    const saved = localStorage.getItem('selected_cong_ty_id');
+    const savedId = saved ? parseInt(saved, 10) : null;
+
+    if (savedId && userData.cong_ty_ids.includes(savedId)) {
+      setSelectedCongTyId(savedId);
+      return;
+    }
+
+    const defaultId = userData.cong_ty_ids[0];
+    localStorage.setItem('selected_cong_ty_id', String(defaultId));
+    setSelectedCongTyId(defaultId);
+  }, []);
+
+  const login = useCallback(async (ten_dang_nhap, mat_khau) => {
+    const res = await api.post('/auth/login', { ten_dang_nhap, mat_khau });
+    const userData = res.data.user;
+    setAccessToken(res.data.access_token);
+    localStorage.setItem('user', JSON.stringify(userData));
+    setUser(userData);
+    applyCongTySelection(userData);
+  }, [applyCongTySelection]);
+
+  const logout = useCallback(async () => {
+    try {
+      await api.post('/auth/logout', null, { skipAuthRefresh: true });
+    } catch {
+      // Không chặn luồng đăng xuất local nếu request thất bại.
+    } finally {
+      clearAuthData();
+    }
+  }, [clearAuthData]);
 
   const chonCongTy = useCallback((id) => {
     localStorage.setItem('selected_cong_ty_id', String(id));
@@ -53,9 +82,48 @@ export function AuthProvider({ children }) {
   const isVender  = user?.vai_tro === 'vender';
   const canEdit   = isAdmin || isQuanLy;  // có thể sửa CN
 
+  useEffect(() => {
+    setUnauthorizedHandler(clearAuthData);
+    return () => setUnauthorizedHandler(null);
+  }, [clearAuthData]);
+
+  useEffect(() => {
+    let active = true;
+
+    (async () => {
+      try {
+        const res = await api.post('/auth/refresh', null, { skipAuthRefresh: true });
+        const userData = res?.data?.user || (() => {
+          try {
+            const raw = localStorage.getItem('user');
+            return raw ? JSON.parse(raw) : null;
+          } catch {
+            return null;
+          }
+        })();
+        if (!active) return;
+
+        setAccessToken(res?.data?.access_token || null);
+        if (userData) {
+          localStorage.setItem('user', JSON.stringify(userData));
+          setUser(userData);
+          applyCongTySelection(userData);
+        } else {
+          clearAuthData();
+        }
+      } catch {
+        if (active) clearAuthData();
+      } finally {
+        if (active) setIsAuthReady(true);
+      }
+    })();
+
+    return () => { active = false; };
+  }, [applyCongTySelection, clearAuthData]);
+
   return (
     <AuthContext.Provider value={{
-      user, login, logout, isLoggedIn: !!user,
+      user, login, logout, isLoggedIn: !!user, isAuthReady,
       selectedCongTyId, chonCongTy,
       isAdmin, isQuanLy, isVender, canEdit,
     }}>

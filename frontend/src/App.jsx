@@ -23,7 +23,8 @@ const queryClient = new QueryClient({
 });
 
 function PrivateRoute({ children }) {
-  const { isLoggedIn } = useAuth();
+  const { isLoggedIn, isAuthReady } = useAuth();
+  if (!isAuthReady) return <div style={{ minHeight: '100vh', background: 'var(--bg0)' }} />;
   return isLoggedIn
     ? <Layout>{children}</Layout>
     : <Navigate to="/login" replace />;
@@ -31,10 +32,17 @@ function PrivateRoute({ children }) {
 
 // Chặn route theo role — redirect về / nếu không đủ quyền
 function RoleRoute({ children, allowedRoles }) {
-  const { isLoggedIn, user } = useAuth();
+  const { isLoggedIn, user, isAuthReady } = useAuth();
+  if (!isAuthReady) return <div style={{ minHeight: '100vh', background: 'var(--bg0)' }} />;
   if (!isLoggedIn) return <Navigate to="/login" replace />;
   if (!allowedRoles.includes(user?.vai_tro)) return <Navigate to="/" replace />;
   return <Layout>{children}</Layout>;
+}
+
+function LoginRoute() {
+  const { isLoggedIn, isAuthReady } = useAuth();
+  if (!isAuthReady) return <div style={{ minHeight: '100vh', background: 'var(--bg0)' }} />;
+  return isLoggedIn ? <Navigate to="/" replace /> : <Login />;
 }
 
 export default function App() {
@@ -43,7 +51,7 @@ export default function App() {
       <AuthProvider>
         <BrowserRouter>
           <Routes>
-            <Route path="/login" element={<Login />} />
+            <Route path="/login" element={<LoginRoute />} />
 
             {/* Tất cả role */}
             <Route path="/"              element={<PrivateRoute><Dashboard /></PrivateRoute>} />

@@ -23,6 +23,7 @@ async function seed() {
   console.log('⚠️  Seed sẽ XÓA toàn bộ data hiện tại...\n');
 
   // ── 0. Xóa data cũ theo thứ tự FK ────────────────────────────────────────
+  await db.query('DELETE FROM refresh_tokens');
   await db.query('DELETE FROM quan_ly_cong_ty');
   await db.query('DELETE FROM cong_nhan');
   await db.query('DELETE FROM cong_ty');

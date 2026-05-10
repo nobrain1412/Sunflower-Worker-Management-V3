@@ -3,24 +3,85 @@ import axios from 'axios';
 const api = axios.create({
   baseURL: '/api',
   headers: { 'Content-Type': 'application/json' },
+  withCredentials: true,
 });
+
+let accessToken = localStorage.getItem('access_token');
+let refreshPromise = null;
+let unauthorizedHandler = null;
+
+function normalizeError(err) {
+  if (err?.code && err?.message) return err;
+
+  return err?.response?.data?.error || {
+    code: 'NETWORK_ERROR',
+    message: 'Lỗi kết nối mạng',
+  };
+}
+
+export function setAccessToken(token) {
+  accessToken = token || null;
+  if (token) localStorage.setItem('access_token', token);
+  else localStorage.removeItem('access_token');
+}
+
+export function clearAccessToken() {
+  setAccessToken(null);
+}
+
+export function setUnauthorizedHandler(handler) {
+  unauthorizedHandler = typeof handler === 'function' ? handler : null;
+}
 
 // Gắn JWT vào mỗi request
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('access_token');
-  if (token) config.headers.Authorization = `Bearer ${token}`;
+  if (accessToken) config.headers.Authorization = `Bearer ${accessToken}`;
   return config;
 });
+
+async function refreshAccessToken() {
+  const res = await api.post('/auth/refresh', null, { skipAuthRefresh: true });
+  const token = res?.data?.access_token;
+  if (!token) {
+    throw {
+      code: 'INVALID_REFRESH_RESPONSE',
+      message: 'Không nhận được access token mới',
+    };
+  }
+
+  setAccessToken(token);
+  return { token, user: res?.data?.user || null };
+}
 
 // Chuẩn hoá lỗi về dạng { code, message, details }
 api.interceptors.response.use(
   (res) => res.data,
-  (err) => {
-    const error = err.response?.data?.error || {
-      code: 'NETWORK_ERROR',
-      message: 'Lỗi kết nối mạng',
-    };
-    return Promise.reject(error);
+  async (err) => {
+    const status = err?.response?.status;
+    const originalRequest = err?.config || {};
+
+    if (status === 401 && !originalRequest._retry && !originalRequest.skipAuthRefresh) {
+      originalRequest._retry = true;
+
+      try {
+        if (!refreshPromise) {
+          refreshPromise = refreshAccessToken().finally(() => {
+            refreshPromise = null;
+          });
+        }
+
+        const { token } = await refreshPromise;
+        originalRequest.headers = originalRequest.headers || {};
+        originalRequest.headers.Authorization = `Bearer ${token}`;
+        return api(originalRequest);
+      } catch (refreshErr) {
+        clearAccessToken();
+        if (unauthorizedHandler) unauthorizedHandler();
+        return Promise.reject(normalizeError(refreshErr));
+      }
+    }
+
+    return Promise.reject(normalizeError(err));
   },
 );
 

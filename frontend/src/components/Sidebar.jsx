@@ -107,8 +107,8 @@ export default function Sidebar() {
   const navigate = useNavigate();
   const vaiTro = user?.vai_tro ?? 'vender';
 
-  function handleLogout() {
-    logout();
+  async function handleLogout() {
+    await logout();
     navigate('/login');
   }
 
