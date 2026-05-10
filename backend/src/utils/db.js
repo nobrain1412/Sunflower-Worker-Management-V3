@@ -3,7 +3,7 @@ const logger = require('./logger');
 
 const isProduction = process.env.NODE_ENV === 'production';
 
-// Railway cung cấp DATABASE_URL, fallback về biến riêng lẻ cho local dev
+// Railway cung cấp DATABASE_URL hoặc PG* vars, fallback về DB_* vars cho local dev
 const poolConfig = process.env.DATABASE_URL
   ? {
       connectionString: process.env.DATABASE_URL,
@@ -13,11 +13,12 @@ const poolConfig = process.env.DATABASE_URL
       connectionTimeoutMillis: 30000,
     }
   : {
-      host:     process.env.DB_HOST,
-      port:     parseInt(process.env.DB_PORT || '5432'),
-      database: process.env.DB_NAME,
-      user:     process.env.DB_USER,
-      password: process.env.DB_PASSWORD,
+      host:     process.env.PGHOST     || process.env.DB_HOST,
+      port:     parseInt(process.env.PGPORT     || process.env.DB_PORT     || '5432'),
+      database: process.env.PGDATABASE || process.env.DB_NAME,
+      user:     process.env.PGUSER     || process.env.DB_USER,
+      password: process.env.PGPASSWORD || process.env.DB_PASSWORD,
+      ssl: isProduction ? { rejectUnauthorized: false } : false,
       max: 20,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 30000,
