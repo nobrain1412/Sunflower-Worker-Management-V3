@@ -42,7 +42,7 @@ function Field({ label, value, children }) {
 const fs = {
   field: { display: 'flex', flexDirection: 'column', gap: 4 },
   label: { fontSize: 10, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em' },
-  value: { fontSize: 13, color: 'var(--text1)', fontWeight: 500 },
+  value: { fontSize: 13, color: 'var(--text1)', fontWeight: 500, lineHeight: 1.45, overflowWrap: 'anywhere' },
 };
 
 // ─── Modal tạm ứng ────────────────────────────────────────
@@ -136,7 +136,7 @@ function UploadAnhModal({ cn, onClose }) {
     <div style={M.overlay} onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div style={{ ...M.modal, maxWidth: 540 }}>
         <div style={M.title}>Upload ảnh — {cn.ho_ten}</div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 14 }}>
+        <div className="cn-upload-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 14 }}>
           {Object.keys(labels).map((field) => (
             <label key={field} style={up.card}>
               {previews[field] ? (
@@ -224,7 +224,7 @@ function EditModal({ cn, onClose }) {
         <div style={M.title}>Chỉnh sửa — {cn.ho_ten}</div>
 
         <div style={m.section}>Thông tin cá nhân</div>
-        <div style={m.grid}>
+        <div className="cn-edit-grid" style={m.grid}>
           {[['ho_ten','Họ và tên *','text'],['cccd','CCCD','text'],['ngay_sinh','Ngày sinh','date'],['so_dien_thoai','Số điện thoại','text']].map(([name, label, type]) => (
             <div key={name} style={m.fieldWrap}>
               <label className="form-label">{label}</label>
@@ -268,7 +268,7 @@ function EditModal({ cn, onClose }) {
         </div>
 
         <div style={{ ...m.section, marginTop: 14 }}>Thông tin CCCD</div>
-        <div style={m.grid}>
+        <div className="cn-edit-grid" style={m.grid}>
           {[['ngay_cap_cccd','Ngày cấp','date'],['noi_cap_cccd','Nơi cấp','text']].map(([name, label, type]) => (
             <div key={name} style={m.fieldWrap}>
               <label className="form-label">{label}</label>
@@ -278,7 +278,7 @@ function EditModal({ cn, onClose }) {
         </div>
 
         <div style={{ ...m.section, marginTop: 14 }}>Thông tin công việc</div>
-        <div style={m.grid}>
+        <div className="cn-edit-grid" style={m.grid}>
           {[['ngay_vao_lam','Ngày vào làm','date'],['ngay_nghi_viec','Ngày nghỉ việc','date']].map(([name, label, type]) => (
             <div key={name} style={m.fieldWrap}>
               <label className="form-label">{label}</label>
@@ -352,7 +352,7 @@ export default function CongNhanDetail() {
   const tongKhauTru     = khauTruDongPhuc + khauTruPhat;
 
   return (
-    <div style={s.root}>
+    <div className="cn-detail-root" style={s.root}>
       {/* Breadcrumb */}
       <div style={s.breadcrumb}>
         <button style={s.back} onClick={() => navigate('/cong-nhan')}>
@@ -366,7 +366,7 @@ export default function CongNhanDetail() {
       </div>
 
       {/* Profile header */}
-      <div style={s.profileCard}>
+      <div className="cn-profile-card" style={s.profileCard}>
         {/* Avatar / ảnh chân dung */}
         <div style={s.profileAvatar}>
           {cn.anh_chan_dung ? (
@@ -375,9 +375,9 @@ export default function CongNhanDetail() {
             <span>{cn.ho_ten[0]}</span>
           )}
         </div>
-        <div style={s.profileInfo}>
-          <div style={s.profileName}>{cn.ho_ten}</div>
-          <div style={s.profileMeta}>
+        <div className="cn-profile-info" style={s.profileInfo}>
+          <div className="cn-profile-name" style={s.profileName}>{cn.ho_ten}</div>
+          <div className="cn-profile-meta" style={s.profileMeta}>
             <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12, color: 'var(--text2)' }}>ID #{cn.id}</span>
             <span className={`pill ${pill.cls}`} style={{ marginLeft: 10 }}>{pill.label}</span>
             {cn.ten_cong_ty && <span style={{ marginLeft: 10, fontSize: 12, color: 'var(--text2)' }}>🏭 {cn.ten_cong_ty}</span>}
@@ -395,7 +395,7 @@ export default function CongNhanDetail() {
             )}
           </div>
         </div>
-        <div style={s.profileActions}>
+        <div className="cn-profile-actions" style={s.profileActions}>
           {canEdit && (
             <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => setAnhModal(true)}>📷 Ảnh</button>
           )}
@@ -416,7 +416,7 @@ export default function CongNhanDetail() {
       {(cn.anh_cccd_truoc || cn.anh_cccd_sau || cn.anh_chan_dung) && (
         <div style={s.card}>
           <div style={s.cardTitle}>Ảnh đính kèm</div>
-          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+          <div className="cn-attachment-grid" style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
             {[['anh_cccd_truoc','CCCD mặt trước'],['anh_cccd_sau','CCCD mặt sau'],['anh_chan_dung','Ảnh chân dung']].map(([field, label]) =>
               cn[field] ? (
                 <div key={field} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -433,11 +433,11 @@ export default function CongNhanDetail() {
         </div>
       )}
 
-      <div style={s.grid}>
+      <div className="cn-detail-grid" style={s.grid}>
         {/* Thông tin cá nhân */}
-        <div style={s.card}>
+        <div className="cn-detail-card" style={s.card}>
           <div style={s.cardTitle}>Thông tin cá nhân</div>
-          <div style={s.fields}>
+          <div className="cn-detail-fields" style={s.fields}>
             <Field label="Họ và tên" value={cn.ho_ten} />
             <Field label="CCCD" value={cn.cccd} />
             <Field label="Ngày sinh" value={cn.ngay_sinh ? new Date(cn.ngay_sinh).toLocaleDateString('vi-VN') : null} />
@@ -449,9 +449,9 @@ export default function CongNhanDetail() {
         </div>
 
         {/* Thông tin CCCD */}
-        <div style={s.card}>
+        <div className="cn-detail-card" style={s.card}>
           <div style={s.cardTitle}>Thông tin CCCD</div>
-          <div style={s.fields}>
+          <div className="cn-detail-fields" style={s.fields}>
             <Field label="Số CCCD" value={cn.cccd} />
             <Field label="Ngày cấp" value={cn.ngay_cap_cccd ? new Date(cn.ngay_cap_cccd).toLocaleDateString('vi-VN') : null} />
             <Field label="Nơi cấp" value={cn.noi_cap_cccd} />
@@ -459,9 +459,9 @@ export default function CongNhanDetail() {
         </div>
 
         {/* Thông tin công việc */}
-        <div style={s.card}>
+        <div className="cn-detail-card" style={s.card}>
           <div style={s.cardTitle}>Thông tin công việc</div>
-          <div style={s.fields}>
+          <div className="cn-detail-fields" style={s.fields}>
             <Field label="Trạng thái" value={pill.label} />
             <Field label="Công ty" value={cn.ten_cong_ty} />
             <Field label="Ngày vào làm" value={cn.ngay_vao_lam ? new Date(cn.ngay_vao_lam).toLocaleDateString('vi-VN') : null} />
@@ -472,9 +472,9 @@ export default function CongNhanDetail() {
         </div>
 
         {/* Khấu trừ */}
-        <div style={s.card}>
+        <div className="cn-detail-card" style={s.card}>
           <div style={s.cardTitle}>Khấu trừ tự động</div>
-          <div style={s.fields}>
+          <div className="cn-detail-fields" style={s.fields}>
             <Field label="Đồng phục">
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ fontSize: 13, color: cn.da_tra_dong_phuc ? 'var(--green)' : 'var(--red)', fontWeight: 600 }}>
@@ -496,10 +496,10 @@ export default function CongNhanDetail() {
         </div>
 
         {/* Nơi ở: KTX hoặc Phòng trọ */}
-        <div style={s.card}>
+        <div className="cn-detail-card" style={s.card}>
           <div style={s.cardTitle}>Nơi ở hiện tại</div>
           {currentRoom ? (
-            <div style={s.fields}>
+            <div className="cn-detail-fields" style={s.fields}>
               <Field label="Loại" value="🏠 Ký túc xá" />
               <Field label="Khu" value={currentRoom.ktx_ten} />
               <Field label="Phòng" value={currentRoom.ten_phong} />
@@ -507,7 +507,7 @@ export default function CongNhanDetail() {
               <Field label="Ngày vào" value={currentRoom.ngay_vao ? new Date(currentRoom.ngay_vao).toLocaleDateString('vi-VN') : null} />
             </div>
           ) : phongTroNow ? (
-            <div style={s.fields}>
+            <div className="cn-detail-fields" style={s.fields}>
               <Field label="Loại" value="🏘️ Phòng trọ" />
               <Field label="Tên phòng trọ" value={phongTroNow.ten} />
               <Field label="Địa chỉ" value={phongTroNow.dia_chi} />
@@ -537,9 +537,9 @@ export default function CongNhanDetail() {
         </div>
 
         {/* Tổng tạm ứng */}
-        <div style={s.card}>
+        <div className="cn-detail-card" style={s.card}>
           <div style={s.cardTitle}>Tạm ứng</div>
-          <div style={s.fields}>
+          <div className="cn-detail-fields" style={s.fields}>
             <Field label="Tổng đã ứng">
               <span style={{ fontSize: 16, fontWeight: 700, color: 'var(--amber)', fontFamily: "'JetBrains Mono', monospace" }}>{fmt(tongUng.tong_ung)}</span>
             </Field>
@@ -557,7 +557,7 @@ export default function CongNhanDetail() {
         </div>
 
         {/* Lịch sử tài chính */}
-        <div style={{ ...s.card, gridColumn: 'span 2' }}>
+        <div className="cn-detail-card cn-history-card" style={{ ...s.card, gridColumn: 'span 2' }}>
           <div style={s.cardTitle}>Lịch sử thu/chi ({gdList.length})</div>
           {gdList.length === 0 ? (
             <div style={{ fontSize: 13, color: 'var(--text3)', fontStyle: 'italic' }}>Chưa có giao dịch nào</div>
@@ -600,9 +600,9 @@ export default function CongNhanDetail() {
         </div>
 
         {/* Hệ thống */}
-        <div style={s.card}>
+        <div className="cn-detail-card" style={s.card}>
           <div style={s.cardTitle}>Hệ thống</div>
-          <div style={s.fields}>
+          <div className="cn-detail-fields" style={s.fields}>
             <Field label="Ngày tạo" value={new Date(cn.created_at).toLocaleString('vi-VN')} />
             <Field label="Cập nhật" value={new Date(cn.updated_at).toLocaleString('vi-VN')} />
           </div>

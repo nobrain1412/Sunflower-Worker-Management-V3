@@ -145,6 +145,15 @@ body {
   gap: 14px;
 }
 
+/* Cong nhan responsive helpers */
+.cn-table-scroll .cn-table {
+  min-width: 900px;
+}
+
+.cn-name-text {
+  white-space: nowrap;
+}
+
 /* ========================================
    MOBILE RESPONSIVE — max-width: 768px
    ======================================== */
@@ -181,6 +190,19 @@ body {
     flex-direction: column !important;
   }
 
+  .dash-stat-filters {
+    width: 100%;
+    flex-wrap: wrap;
+    gap: 8px !important;
+  }
+  .dash-stat-filters select {
+    flex: 1 1 150px;
+    min-width: 0;
+  }
+  .dash-stat-grid {
+    grid-template-columns: 1fr !important;
+  }
+
   /* ---- TaiChinh ---- */
   .tai-chinh-main {
     flex-direction: column !important;
@@ -188,6 +210,27 @@ body {
   .tai-chinh-chart {
     width: 100% !important;
     flex-shrink: unset !important;
+  }
+  .tc-kpi-row {
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)) !important;
+  }
+  .tc-tabs {
+    flex-wrap: wrap;
+    gap: 8px !important;
+  }
+  .tc-filter-group {
+    margin-left: 0 !important;
+    width: 100%;
+    flex-wrap: wrap;
+  }
+  .tc-filter-group select,
+  .tc-filter-group button {
+    flex: 1 1 120px;
+    min-width: 0;
+  }
+  .tc-modal-grid,
+  .tc-category-modal-grid {
+    grid-template-columns: 1fr !important;
   }
 
   /* ---- KTX ---- */
@@ -205,6 +248,86 @@ body {
   .layout-content {
     overflow-x: hidden;
   }
+
+  /* ---- CongNhan list ---- */
+  .cn-toolbar {
+    align-items: stretch !important;
+  }
+  .cn-search-wrap {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+  .cn-search-input {
+    width: 100%;
+  }
+  .cn-add-button {
+    margin-left: 0 !important;
+    width: 100%;
+    justify-content: center;
+  }
+  .cn-name-cell .cn-name-text {
+    white-space: nowrap;
+  }
+
+  /* ---- CongNhan detail ---- */
+  .cn-profile-card {
+    padding: 16px !important;
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 12px !important;
+  }
+  .cn-profile-info {
+    width: 100%;
+  }
+  .cn-profile-name {
+    font-size: 16px;
+  }
+  .cn-profile-meta {
+    width: 100%;
+    display: grid !important;
+    grid-template-columns: 1fr;
+    gap: 6px !important;
+  }
+  .cn-profile-meta > span {
+    margin-left: 0 !important;
+  }
+  .cn-profile-actions {
+    width: 100%;
+  }
+  .cn-profile-actions button {
+    flex: 1 1 calc(50% - 8px);
+    justify-content: center;
+  }
+  .cn-attachment-grid > div {
+    width: calc(50% - 6px);
+    min-width: 0;
+  }
+  .cn-attachment-grid img {
+    width: 100% !important;
+    height: 110px !important;
+  }
+  .cn-detail-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .cn-detail-card {
+    padding: 16px !important;
+  }
+  .cn-detail-fields {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+  .cn-history-card {
+    grid-column: span 1 !important;
+  }
+  .cn-upload-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .cn-edit-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .cn-edit-grid > div {
+    grid-column: auto !important;
+  }
 }
 
 /* ========================================
@@ -218,6 +341,9 @@ body {
 
   .dash-row {
     flex-wrap: wrap;
+  }
+  .dash-stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 

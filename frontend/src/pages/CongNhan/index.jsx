@@ -5,6 +5,7 @@ import { useTinhList } from '../../hooks/useProvinces';
 import { useAuth } from '../../context/AuthContext';
 import AddCongNhanModal from './AddModal';
 import BottomSheet from '../../components/BottomSheet';
+import useIsMobile from '../../hooks/useIsMobile';
 
 const TRANG_THAI_PILL = {
   dang_lam:  { cls: 'pill-green', label: 'Đang làm' },
@@ -28,6 +29,41 @@ function fmtDate(s) {
   const dd = String(d.getDate()).padStart(2, '0');
   const mm = String(d.getMonth() + 1).padStart(2, '0');
   return `${dd}/${mm}/${d.getFullYear()}`;
+}
+
+function MobileCongNhanCard({ cn, isAdmin, onOpen, onDelete }) {
+  const pill = TRANG_THAI_PILL[cn.trang_thai] ?? TRANG_THAI_PILL.moi_vao;
+
+  return (
+    <div style={m.card} onClick={onOpen}>
+      <div style={m.head}>
+        <div style={m.avatar}>{cn.ho_ten?.[0] ?? '?'}</div>
+        <div style={{ minWidth: 0 }}>
+          <div style={m.name}>{cn.ho_ten}</div>
+          <div style={m.company}>{cn.ten_cong_ty ?? 'Chưa phân công công ty'}</div>
+        </div>
+        <span className={`pill ${pill.cls}`}>{pill.label}</span>
+      </div>
+
+      <div style={m.grid}>
+        <div style={m.item}><span style={m.label}>Vender</span><span style={m.value}>{cn.nguoi_tuyen_ho_ten ?? '—'}</span></div>
+        <div style={m.item}><span style={m.label}>SĐT</span><span style={m.value}>{cn.so_dien_thoai ?? '—'}</span></div>
+        <div style={m.item}><span style={m.label}>Ngày vào</span><span style={m.value}>{fmtDate(cn.ngay_vao_lam)}</span></div>
+        <div style={m.item}><span style={m.label}>CCCD</span><span style={m.value}>{cn.cccd ?? '—'}</span></div>
+      </div>
+
+      {isAdmin && (
+        <div style={m.actions}>
+          <button
+            onClick={onDelete}
+            style={m.deleteBtn}
+          >
+            🗑 Xoá
+          </button>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function CongNhan() {
@@ -89,19 +125,20 @@ export default function CongNhan() {
 
   const rows = data?.data ?? [];
   const meta = data?.meta ?? { total: 0, total_pages: 1 };
+  const isMobile = useIsMobile();
 
   return (
     <div style={s.root}>
       {/* Toolbar */}
-      <div style={s.toolbar}>
-        <div style={s.searchWrap}>
+      <div className="cn-toolbar" style={s.toolbar}>
+        <div className="cn-search-wrap" style={s.searchWrap}>
           <svg style={s.searchIcon} width="14" height="14" viewBox="0 0 24 24" fill="none">
             <circle cx="11" cy="11" r="8" stroke="currentColor" strokeWidth="2"/>
             <line x1="21" y1="21" x2="16.65" y2="16.65" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
           </svg>
           <input
-            className="form-input"
-            style={{ paddingLeft: 36, width: 260 }}
+            className="form-input cn-search-input"
+            style={{ paddingLeft: 36 }}
             placeholder="Tìm tên, CCCD, SĐT..."
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
@@ -131,7 +168,7 @@ export default function CongNhan() {
           )}
         </div>
 
-        <button className="btn-primary" style={{ marginLeft: 'auto' }} onClick={() => setShowAddSheet(true)}>
+        <button className="btn-primary cn-add-button" style={{ marginLeft: 'auto' }} onClick={() => setShowAddSheet(true)}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
             <line x1="12" y1="5" x2="12" y2="19" stroke="#fff" strokeWidth="2.5" strokeLinecap="round"/>
             <line x1="5" y1="12" x2="19" y2="12" stroke="#fff" strokeWidth="2.5" strokeLinecap="round"/>
@@ -162,9 +199,21 @@ export default function CongNhan() {
             <div style={s.emptySub}>Bắt đầu bằng cách thêm công nhân mới</div>
             <button className="btn-primary" style={{ marginTop: 16 }} onClick={() => setShowAdd(true)}>+ Thêm công nhân</button>
           </div>
+        ) : isMobile ? (
+          <div style={m.list}>
+            {rows.map((cn) => (
+              <MobileCongNhanCard
+                key={cn.id}
+                cn={cn}
+                isAdmin={isAdmin}
+                onOpen={() => navigate(`/cong-nhan/${cn.id}`)}
+                onDelete={(e) => handleXoa(cn, e)}
+              />
+            ))}
+          </div>
         ) : (
-          <div className="table-scroll">
-          <table style={s.table}>
+          <div className="table-scroll cn-table-scroll">
+          <table className="cn-table" style={s.table}>
             <thead>
               <tr>
                 {[
@@ -189,9 +238,9 @@ export default function CongNhan() {
                 const pill = TRANG_THAI_PILL[cn.trang_thai] ?? TRANG_THAI_PILL.moi_vao;
                 return (
                   <tr key={cn.id} style={s.tr} onClick={() => navigate(`/cong-nhan/${cn.id}`)}>
-                    <td style={s.td}>
+                    <td className="cn-name-cell" style={s.td}>
                       <div style={s.avatar}>{cn.ho_ten[0]}</div>
-                      <div style={s.name}>{cn.ho_ten}</div>
+                      <div className="cn-name-text" style={s.name}>{cn.ho_ten}</div>
                     </td>
                     <td style={s.td}><span style={s.sub}>{cn.ten_cong_ty ?? '—'}</span></td>
                     <td style={s.td}><span style={s.sub}>{cn.nguoi_tuyen_ho_ten ?? '—'}</span></td>
@@ -376,4 +425,48 @@ const bs = {
   itemSub: { fontSize: 11, color: 'var(--text2)', marginTop: 2 },
   filterGrid: { display: 'grid', gap: 12 },
   field: { display: 'flex', flexDirection: 'column', gap: 4 },
+};
+
+const m = {
+  list: { display: 'flex', flexDirection: 'column', gap: 10, padding: 10 },
+  card: {
+    background: 'var(--bg2)',
+    border: '1px solid var(--border)',
+    borderRadius: 12,
+    padding: 12,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 10,
+  },
+  head: { display: 'flex', alignItems: 'center', gap: 10 },
+  avatar: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    background: 'linear-gradient(135deg, var(--accent), var(--accent2))',
+    color: '#fff',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: 13,
+    fontWeight: 700,
+    flexShrink: 0,
+  },
+  name: { fontSize: 14, fontWeight: 700, color: 'var(--text1)' },
+  company: { fontSize: 11, color: 'var(--text2)', marginTop: 2 },
+  grid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 },
+  item: { display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 },
+  label: { fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.05em' },
+  value: { fontSize: 12, color: 'var(--text1)', overflowWrap: 'anywhere' },
+  actions: { display: 'flex', justifyContent: 'flex-end' },
+  deleteBtn: {
+    background: 'transparent',
+    border: '1px solid rgba(255,95,114,0.4)',
+    borderRadius: 8,
+    padding: '4px 10px',
+    fontSize: 11,
+    color: 'var(--red)',
+    cursor: 'pointer',
+    fontFamily: "'Be Vietnam Pro', sans-serif",
+  },
 };

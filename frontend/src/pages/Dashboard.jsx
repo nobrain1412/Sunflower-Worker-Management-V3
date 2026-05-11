@@ -7,6 +7,7 @@ import BottomSheet from '../components/BottomSheet';
 import AddCongNhanModal from './CongNhan/AddModal';
 import { useAuth } from '../context/AuthContext';
 import { useDashboard } from '../hooks/useDashboard';
+import useIsMobile from '../hooks/useIsMobile';
 
 const DONUT_COLORS = ['#4f7cff', '#7b5fff', '#2dd4bf', '#22c986', '#ffb344', '#ff5f72', '#545870'];
 
@@ -125,6 +126,7 @@ function AdminDashboard() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [expandedCty, setExpandedCty] = useState(null);
   const [statRange,   setStatRange]   = useState('hom_nay');
+  const isMobile = useIsMobile();
 
   const { data: dashRes, isLoading } = useDashboard();
   const dash = dashRes?.data ?? {};
@@ -217,7 +219,7 @@ function AdminDashboard() {
               <div style={s.cardTitle}>Thống kê công nhân</div>
               <div style={s.cardSub}>Tổng theo ngày & tháng — toàn hệ thống</div>
             </div>
-            <div style={{ display: 'flex', gap: 6 }}>
+            <div className="dash-stat-filters" style={{ display: 'flex', gap: 6 }}>
               <select style={ql.select} value={statRange} onChange={(e) => setStatRange(e.target.value)}>
                 <option value="hom_nay">Hôm nay</option>
                 <option value="thang_nay">Tháng này</option>
@@ -227,7 +229,7 @@ function AdminDashboard() {
               </select>
             </div>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+          <div className="dash-stat-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
             <div style={{ background: 'var(--bg2)', borderRadius: 10, padding: '12px 14px' }}>
               <div style={kpi.label}>Toàn hệ thống — {statRange === 'hom_nay' ? 'hôm nay' : 'tháng này'}</div>
               <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--accent)', fontFamily: "'JetBrains Mono', monospace" }}>
@@ -283,6 +285,24 @@ function AdminDashboard() {
                       <span className="pill pill-blue">{list.length} người</span>
                     </button>
                     {open && (
+                      isMobile ? (
+                        <div style={md.groupList}>
+                          {list.map((cn) => {
+                            const pill = TRANG_THAI_PILL[cn.trang_thai] ?? TRANG_THAI_PILL.moi_vao;
+                            return (
+                              <div key={cn.id} style={md.cnCard} onClick={() => navigate(`/cong-nhan/${cn.id}`)}>
+                                <div style={md.cnHead}>
+                                  <div style={md.cnTitle}>{cn.ho_ten}</div>
+                                  <span className={`pill ${pill.cls}`}>{pill.label}</span>
+                                </div>
+                                <div style={md.cnMeta}>
+                                  <span>Vender: {cn.ten_nguoi_tuyen ?? '—'}</span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
                       <table style={{ ...s.table, marginBottom: 8 }}>
                         <thead>
                           <tr>
@@ -311,6 +331,7 @@ function AdminDashboard() {
                           })}
                         </tbody>
                       </table>
+                      )
                     )}
                   </div>
                 );
@@ -327,30 +348,46 @@ function AdminDashboard() {
               <div style={s.cardSub}>Số CN mỗi người tuyển dụng đã đưa vào hệ thống</div>
             </div>
           </div>
-          <table style={s.table}>
-            <thead>
-              <tr>
-                {['Vender / Quản lý', 'Tổng CN', 'Vào hôm nay'].map((h) => (
-                  <th key={h} style={s.th}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
+          {isMobile ? (
+            <div style={md.venderList}>
               {cnTheoVender.length === 0 ? (
-                <tr><td colSpan={3} style={{ ...s.td, color: 'var(--text3)', textAlign: 'center', padding: 20 }}>Chưa có dữ liệu</td></tr>
+                <div style={{ padding: 14, fontSize: 12, color: 'var(--text3)' }}>Chưa có dữ liệu</div>
               ) : cnTheoVender.map((v) => (
-                <tr key={v.id} style={s.tr} onClick={() => navigate(`/nhan-vien/${v.id}`)}>
-                  <td style={s.td}><div style={{ ...s.cnName, color: 'var(--accent)' }}>{v.ho_ten}</div></td>
-                  <td style={s.td}><span style={{ ...s.tdSub, fontFamily: "'JetBrains Mono', monospace", fontWeight: 600 }}>{Number(v.so_luong_cn || 0)}</span></td>
-                  <td style={s.td}>
-                    {Number(v.moi_hom_nay || 0) > 0
-                      ? <span className="pill pill-green">+{Number(v.moi_hom_nay)}</span>
-                      : <span style={s.tdSub}>—</span>}
-                  </td>
-                </tr>
+                <div key={v.id} style={md.venderCard} onClick={() => navigate(`/nhan-vien/${v.id}`)}>
+                  <div style={md.cnTitle}>{v.ho_ten}</div>
+                  <div style={md.venderMeta}>
+                    <span>Tổng CN: <b>{Number(v.so_luong_cn || 0)}</b></span>
+                    <span>Hôm nay: {Number(v.moi_hom_nay || 0) > 0 ? `+${Number(v.moi_hom_nay)}` : '—'}</span>
+                  </div>
+                </div>
               ))}
-            </tbody>
-          </table>
+            </div>
+          ) : (
+            <table style={s.table}>
+              <thead>
+                <tr>
+                  {['Vender / Quản lý', 'Tổng CN', 'Vào hôm nay'].map((h) => (
+                    <th key={h} style={s.th}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {cnTheoVender.length === 0 ? (
+                  <tr><td colSpan={3} style={{ ...s.td, color: 'var(--text3)', textAlign: 'center', padding: 20 }}>Chưa có dữ liệu</td></tr>
+                ) : cnTheoVender.map((v) => (
+                  <tr key={v.id} style={s.tr} onClick={() => navigate(`/nhan-vien/${v.id}`)}>
+                    <td style={s.td}><div style={{ ...s.cnName, color: 'var(--accent)' }}>{v.ho_ten}</div></td>
+                    <td style={s.td}><span style={{ ...s.tdSub, fontFamily: "'JetBrains Mono', monospace", fontWeight: 600 }}>{Number(v.so_luong_cn || 0)}</span></td>
+                    <td style={s.td}>
+                      {Number(v.moi_hom_nay || 0) > 0
+                        ? <span className="pill pill-green">+{Number(v.moi_hom_nay)}</span>
+                        : <span style={s.tdSub}>—</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       </div>
 
@@ -454,6 +491,7 @@ function QuanLyDashboard() {
   const [showAddSheet, setShowAddSheet] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [tabCN, setTabCN] = useState('cty');
+  const isMobile = useIsMobile();
   const congTyIds = user?.cong_ty_ids ?? [];
 
   const { data: dashRes, isLoading } = useDashboard(selectedCongTyId ? { cong_ty_id: selectedCongTyId } : {});
@@ -526,30 +564,52 @@ function QuanLyDashboard() {
           </div>
           <a href="/cong-nhan" style={s.viewAll}>Xem tất cả →</a>
         </div>
-        <table style={s.table}>
-          <thead>
-            <tr>
-              {['Họ tên', 'Ngày vào', 'Trạng thái', tabCN === 'cty' ? 'Người tuyển' : 'Công ty'].map((h) => (
-                <th key={h} style={s.th}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
+        {isMobile ? (
+          <div style={md.groupList}>
             {cnList.length === 0 ? (
-              <tr><td colSpan={4} style={{ ...s.td, textAlign: 'center', color: 'var(--text3)', padding: 24 }}>Chưa có dữ liệu</td></tr>
+              <div style={{ padding: 14, fontSize: 12, color: 'var(--text3)' }}>Chưa có dữ liệu</div>
             ) : cnList.map((cn) => {
               const pill = TRANG_THAI_PILL[cn.trang_thai] ?? TRANG_THAI_PILL.moi_vao;
               return (
-                <tr key={cn.id} style={s.tr} onClick={() => navigate(`/cong-nhan/${cn.id}`)}>
-                  <td style={s.td}><div style={{ ...s.cnName, color: 'var(--accent)' }}>{cn.ho_ten}</div></td>
-                  <td style={s.td}><span style={{ ...s.tdSub, fontFamily: "'JetBrains Mono', monospace" }}>{cn.created_at ? new Date(cn.created_at).toLocaleDateString('vi-VN') : '—'}</span></td>
-                  <td style={s.td}><span className={`pill ${pill.cls}`}>{pill.label}</span></td>
-                  <td style={s.td}><span style={s.tdSub}>{tabCN === 'cty' ? (cn.ten_nguoi_tuyen ?? '—') : (cn.ten_cong_ty ?? '—')}</span></td>
-                </tr>
+                <div key={cn.id} style={md.cnCard} onClick={() => navigate(`/cong-nhan/${cn.id}`)}>
+                  <div style={md.cnHead}>
+                    <div style={md.cnTitle}>{cn.ho_ten}</div>
+                    <span className={`pill ${pill.cls}`}>{pill.label}</span>
+                  </div>
+                  <div style={md.cnMeta}>
+                    <span>Ngày vào: {cn.created_at ? new Date(cn.created_at).toLocaleDateString('vi-VN') : '—'}</span>
+                    <span>{tabCN === 'cty' ? `Vender: ${cn.ten_nguoi_tuyen ?? '—'}` : `Công ty: ${cn.ten_cong_ty ?? '—'}`}</span>
+                  </div>
+                </div>
               );
             })}
-          </tbody>
-        </table>
+          </div>
+        ) : (
+          <table style={s.table}>
+            <thead>
+              <tr>
+                {['Họ tên', 'Ngày vào', 'Trạng thái', tabCN === 'cty' ? 'Người tuyển' : 'Công ty'].map((h) => (
+                  <th key={h} style={s.th}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {cnList.length === 0 ? (
+                <tr><td colSpan={4} style={{ ...s.td, textAlign: 'center', color: 'var(--text3)', padding: 24 }}>Chưa có dữ liệu</td></tr>
+              ) : cnList.map((cn) => {
+                const pill = TRANG_THAI_PILL[cn.trang_thai] ?? TRANG_THAI_PILL.moi_vao;
+                return (
+                  <tr key={cn.id} style={s.tr} onClick={() => navigate(`/cong-nhan/${cn.id}`)}>
+                    <td style={s.td}><div style={{ ...s.cnName, color: 'var(--accent)' }}>{cn.ho_ten}</div></td>
+                    <td style={s.td}><span style={{ ...s.tdSub, fontFamily: "'JetBrains Mono', monospace" }}>{cn.created_at ? new Date(cn.created_at).toLocaleDateString('vi-VN') : '—'}</span></td>
+                    <td style={s.td}><span className={`pill ${pill.cls}`}>{pill.label}</span></td>
+                    <td style={s.td}><span style={s.tdSub}>{tabCN === 'cty' ? (cn.ten_nguoi_tuyen ?? '—') : (cn.ten_cong_ty ?? '—')}</span></td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
       </div>
 
       {/* FAB mobile */}
@@ -588,6 +648,7 @@ function VenderDashboard() {
   const { user } = useAuth();
   const [showAddSheet, setShowAddSheet] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
+  const isMobile = useIsMobile();
 
   const { data: dashRes, isLoading } = useDashboard();
   const dash = dashRes?.data ?? {};
@@ -631,30 +692,52 @@ function VenderDashboard() {
           <div style={s.cardTitle}>Danh sách công nhân</div>
           <a href="/cong-nhan" style={s.viewAll}>Xem đầy đủ →</a>
         </div>
-        <table style={s.table}>
-          <thead>
-            <tr>
-              {['Họ tên', 'SĐT', 'Ngày vào', 'Trạng thái'].map((h) => (
-                <th key={h} style={s.th}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
+        {isMobile ? (
+          <div style={md.groupList}>
             {cnMoiNhat.length === 0 ? (
-              <tr><td colSpan={4} style={{ ...s.td, color: 'var(--text3)', textAlign: 'center', padding: 20 }}>Chưa có công nhân</td></tr>
+              <div style={{ padding: 14, fontSize: 12, color: 'var(--text3)' }}>Chưa có công nhân</div>
             ) : cnMoiNhat.map((cn) => {
               const pill = TRANG_THAI_PILL[cn.trang_thai] ?? TRANG_THAI_PILL.moi_vao;
               return (
-                <tr key={cn.id} style={s.tr} onClick={() => navigate(`/cong-nhan/${cn.id}`)}>
-                  <td style={s.td}><div style={{ ...s.cnName, color: 'var(--accent)' }}>{cn.ho_ten}</div></td>
-                  <td style={s.td}><span style={s.tdSub}>{cn.so_dien_thoai ?? '—'}</span></td>
-                  <td style={s.td}><span style={{ ...s.tdSub, fontFamily: "'JetBrains Mono', monospace" }}>{cn.ngay_vao_lam ? new Date(cn.ngay_vao_lam).toLocaleDateString('vi-VN') : (cn.created_at ? new Date(cn.created_at).toLocaleDateString('vi-VN') : '—')}</span></td>
-                  <td style={s.td}><span className={`pill ${pill.cls}`}>{pill.label}</span></td>
-                </tr>
+                <div key={cn.id} style={md.cnCard} onClick={() => navigate(`/cong-nhan/${cn.id}`)}>
+                  <div style={md.cnHead}>
+                    <div style={md.cnTitle}>{cn.ho_ten}</div>
+                    <span className={`pill ${pill.cls}`}>{pill.label}</span>
+                  </div>
+                  <div style={md.cnMeta}>
+                    <span>SĐT: {cn.so_dien_thoai ?? '—'}</span>
+                    <span>Ngày vào: {cn.ngay_vao_lam ? new Date(cn.ngay_vao_lam).toLocaleDateString('vi-VN') : (cn.created_at ? new Date(cn.created_at).toLocaleDateString('vi-VN') : '—')}</span>
+                  </div>
+                </div>
               );
             })}
-          </tbody>
-        </table>
+          </div>
+        ) : (
+          <table style={s.table}>
+            <thead>
+              <tr>
+                {['Họ tên', 'SĐT', 'Ngày vào', 'Trạng thái'].map((h) => (
+                  <th key={h} style={s.th}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {cnMoiNhat.length === 0 ? (
+                <tr><td colSpan={4} style={{ ...s.td, color: 'var(--text3)', textAlign: 'center', padding: 20 }}>Chưa có công nhân</td></tr>
+              ) : cnMoiNhat.map((cn) => {
+                const pill = TRANG_THAI_PILL[cn.trang_thai] ?? TRANG_THAI_PILL.moi_vao;
+                return (
+                  <tr key={cn.id} style={s.tr} onClick={() => navigate(`/cong-nhan/${cn.id}`)}>
+                    <td style={s.td}><div style={{ ...s.cnName, color: 'var(--accent)' }}>{cn.ho_ten}</div></td>
+                    <td style={s.td}><span style={s.tdSub}>{cn.so_dien_thoai ?? '—'}</span></td>
+                    <td style={s.td}><span style={{ ...s.tdSub, fontFamily: "'JetBrains Mono', monospace" }}>{cn.ngay_vao_lam ? new Date(cn.ngay_vao_lam).toLocaleDateString('vi-VN') : (cn.created_at ? new Date(cn.created_at).toLocaleDateString('vi-VN') : '—')}</span></td>
+                    <td style={s.td}><span className={`pill ${pill.cls}`}>{pill.label}</span></td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
       </div>
 
       {/* FAB mobile */}
@@ -769,4 +852,30 @@ const vd = {
     border: 'none', borderRadius: 8, color: '#fff',
     fontSize: 13, fontWeight: 600, padding: '9px 16px', cursor: 'pointer',
   },
+};
+
+const md = {
+  groupList: { display: 'flex', flexDirection: 'column', gap: 8 },
+  cnCard: {
+    background: 'var(--bg2)',
+    border: '1px solid var(--border)',
+    borderRadius: 10,
+    padding: '10px 12px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 6,
+    cursor: 'pointer',
+  },
+  cnHead: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  cnTitle: { fontSize: 13, fontWeight: 700, color: 'var(--text1)' },
+  cnMeta: { display: 'flex', flexDirection: 'column', gap: 2, fontSize: 12, color: 'var(--text2)' },
+  venderList: { display: 'flex', flexDirection: 'column', gap: 8 },
+  venderCard: {
+    background: 'var(--bg2)',
+    border: '1px solid var(--border)',
+    borderRadius: 10,
+    padding: '10px 12px',
+    cursor: 'pointer',
+  },
+  venderMeta: { display: 'flex', justifyContent: 'space-between', marginTop: 6, fontSize: 12, color: 'var(--text2)' },
 };

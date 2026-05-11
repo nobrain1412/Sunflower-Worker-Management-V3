@@ -3,6 +3,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recha
 import { useGiaoDichList, useTongThang, useTaoGiaoDich, useXoaGiaoDich, useDanhMuc, useTaoDanhMuc, useCapNhatDanhMuc } from '../../hooks/useTaiChinh';
 import { useTongTheoThang } from '../../hooks/useDashboard';
 import { useAuth } from '../../context/AuthContext';
+import useIsMobile from '../../hooks/useIsMobile';
 
 // Mới: chỉ còn 3 nhóm chính. Phân loại nhỏ chuyển sang `danh_muc_id`.
 const LOAI_MAIN = ['thu', 'chi', 'tieu'];
@@ -27,6 +28,34 @@ const LOAI_LABEL = {
 };
 
 function fmt(n) { return Number(n || 0).toLocaleString('vi-VN') + 'đ'; }
+
+function MobileGiaoDichCard({ g, isVender, onDelete }) {
+  const loai = LOAI_LABEL[g.loai];
+  const isThu = loai?.type === 'thu';
+
+  return (
+    <div style={mobile.card}>
+      <div style={mobile.head}>
+        <span className="pill" style={{ background: (loai?.color ?? 'var(--text3)') + '1a', color: loai?.color }}>
+          {loai?.label ?? g.loai}
+        </span>
+        <span style={{ ...mobile.amount, color: isThu ? 'var(--green)' : 'var(--red)' }}>
+          {isThu ? '+' : '-'}{fmt(g.so_tien)}
+        </span>
+      </div>
+      <div style={mobile.metaGrid}>
+        <div style={mobile.metaItem}><span style={mobile.metaLabel}>Danh mục</span><span style={mobile.metaVal}>{g.danh_muc_ten ?? '—'}</span></div>
+        <div style={mobile.metaItem}><span style={mobile.metaLabel}>Ngày</span><span style={mobile.metaVal}>{g.ngay ? new Date(g.ngay).toLocaleDateString('vi-VN') : '—'}</span></div>
+        <div style={{ ...mobile.metaItem, gridColumn: 'span 2' }}><span style={mobile.metaLabel}>Ghi chú</span><span style={mobile.metaVal}>{g.ghi_chu ?? '—'}</span></div>
+      </div>
+      {!isVender && (
+        <div style={mobile.actions}>
+          <button onClick={() => onDelete(g)} style={mobile.deleteBtn}>🗑 Xoá</button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ─── Modal thêm giao dịch ─────────────────────────────────
 function AddGiaoDichModal({ onClose, isVender }) {
@@ -72,7 +101,7 @@ function AddGiaoDichModal({ onClose, isVender }) {
     <div style={M.overlay} onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div style={M.modal}>
         <div style={M.title}>Thêm giao dịch</div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+        <div className="tc-modal-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             <label className="form-label">Loại *</label>
             <select className="form-input" name="loai" value={form.loai} onChange={handleChange} disabled={isVender}>
@@ -142,7 +171,7 @@ function DanhMucModal({ onClose }) {
       <div style={{ ...M.modal, maxWidth: 520 }}>
         <div style={M.title}>Quản lý danh mục</div>
         {/* Thêm mới */}
-        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 8, marginBottom: 10 }}>
+        <div className="tc-category-modal-grid" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 8, marginBottom: 10 }}>
           <input className="form-input" placeholder="Tên danh mục..." value={form.ten} onChange={(e) => setForm((f) => ({ ...f, ten: e.target.value }))} />
           <select className="form-input" value={form.loai} onChange={(e) => setForm((f) => ({ ...f, loai: e.target.value }))}>
             <option value="thu">Thu</option>
@@ -209,6 +238,7 @@ export default function TaiChinh() {
   const tongData = tongRes?.data ?? {};
   const tongThu  = Number(tongData.tong_thu ?? 0);
   const tongChi  = Number(tongData.tong_chi ?? 0) + Number(tongData.da_hoan ?? 0);
+  const isMobile = useIsMobile();
 
   async function handleXoa(gd) {
     if (!window.confirm(`Bạn chắc muốn xoá giao dịch ${fmt(gd.so_tien)} này?`)) return;
@@ -218,13 +248,13 @@ export default function TaiChinh() {
   return (
     <div style={s.root}>
       {/* KPI row */}
-      <div style={s.kpiRow}>
+      <div className="tc-kpi-row" style={s.kpiRow}>
         {[
           { label: 'Tổng thu tháng này',   value: fmt(tongThu), color: 'var(--green)' },
           { label: 'Tổng chi tháng này',   value: fmt(tongChi), color: 'var(--red)' },
           { label: 'Tổng tiêu',            value: fmt(0),       color: 'var(--accent)' },
         ].map((k) => (
-          <div key={k.label} style={s.kpi}>
+          <div key={k.label} className="tc-kpi-card" style={s.kpi}>
             <div style={s.kpiLabel}>{k.label}</div>
             <div style={{ ...s.kpiValue, color: k.color }}>{k.value}</div>
           </div>
@@ -253,12 +283,12 @@ export default function TaiChinh() {
 
         {/* Tabs */}
         <div style={{ ...s.card, flex: 1, minWidth: 0 }}>
-          <div style={s.tabs}>
+          <div className="tc-tabs" style={s.tabs}>
             {[['giao-dich','Giao dịch'], ...(!isVender ? [['danh-muc','Danh mục']] : [])].map(([v, label]) => (
               <button key={v} style={{ ...s.tab, ...(tab === v ? s.tabActive : {}) }} onClick={() => setTab(v)}>{label}</button>
             ))}
-            <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center' }}>
-              {tab === 'giao-dich' && (
+            <div className="tc-filter-group" style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center' }}>
+              {tab === 'giao-dich' && !isMobile && (
                 <>
                   {/* Bộ lọc tháng/năm */}
                   <select style={s.filterSelect} value={thang} onChange={(e) => setThang(Number(e.target.value))}>
@@ -280,7 +310,41 @@ export default function TaiChinh() {
             </div>
           </div>
 
-          {tab === 'giao-dich' && (
+          {tab === 'giao-dich' && isMobile && (
+            <div style={mobile.filterPanel}>
+              <div style={mobile.filterRow}>
+                <select style={s.filterSelect} value={thang} onChange={(e) => setThang(Number(e.target.value))}>
+                  {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => <option key={m} value={m}>T{m}</option>)}
+                </select>
+                <select style={s.filterSelect} value={nam} onChange={(e) => setNam(Number(e.target.value))}>
+                  {[2024,2025,2026,2027].map((y) => <option key={y} value={y}>{y}</option>)}
+                </select>
+              </div>
+              <select style={s.filterSelect} value={filterLoai} onChange={(e) => setFilterLoai(e.target.value)}>
+                <option value="">Tất cả loại</option>
+                <option value="thu">Thu</option>
+                <option value="chi">Chi</option>
+                <option value="tieu">Tiêu</option>
+                <option value="tam_ung">Tạm ứng</option>
+              </select>
+            </div>
+          )}
+
+          {tab === 'giao-dich' && isMobile && (
+            <div>
+              {gdList.length === 0 ? (
+                <div style={{ padding: '24px 0', textAlign: 'center', color: 'var(--text3)' }}>Không có giao dịch nào trong tháng {thang}/{nam}</div>
+              ) : (
+                <div style={mobile.list}>
+                  {gdList.map((g) => (
+                    <MobileGiaoDichCard key={g.id} g={g} isVender={isVender} onDelete={handleXoa} />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {tab === 'giao-dich' && !isMobile && (
             <div className="table-scroll">
               {gdList.length === 0 ? (
                 <div style={{ padding: '30px 0', textAlign: 'center', color: 'var(--text3)' }}>Không có giao dịch nào trong tháng {thang}/{nam}</div>
@@ -398,4 +462,36 @@ const M = {
   title:   { fontSize: 15, fontWeight: 700, color: 'var(--text1)', marginBottom: 16 },
   err:     { color: 'var(--red)', fontSize: 12, marginBottom: 8 },
   actions: { display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 },
+};
+
+const mobile = {
+  filterPanel: { display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 },
+  filterRow: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 },
+  list: { display: 'flex', flexDirection: 'column', gap: 10 },
+  card: {
+    background: 'var(--bg2)',
+    border: '1px solid var(--border)',
+    borderRadius: 12,
+    padding: 12,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 10,
+  },
+  head: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
+  amount: { fontFamily: "'JetBrains Mono', monospace", fontSize: 14, fontWeight: 700 },
+  metaGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 },
+  metaItem: { display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 },
+  metaLabel: { fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.05em' },
+  metaVal: { fontSize: 12, color: 'var(--text2)', overflowWrap: 'anywhere' },
+  actions: { display: 'flex', justifyContent: 'flex-end' },
+  deleteBtn: {
+    background: 'transparent',
+    border: '1px solid var(--border)',
+    borderRadius: 8,
+    padding: '4px 10px',
+    fontSize: 11,
+    color: 'var(--red)',
+    cursor: 'pointer',
+    fontFamily: "'Be Vietnam Pro', sans-serif",
+  },
 };
