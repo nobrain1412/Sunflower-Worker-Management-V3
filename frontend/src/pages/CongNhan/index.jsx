@@ -104,9 +104,9 @@ export default function CongNhan() {
   }
   const sortIcon = (field) => sortBy === field ? (sortOrder === 'asc' ? ' ↑' : ' ↓') : '';
 
-  // Debounce live search 300ms
+  // Debounce live search để giảm dồn request khi gõ nhanh
   useEffect(() => {
-    const t = setTimeout(() => { setSearch(searchInput); setPage(1); }, 300);
+    const t = setTimeout(() => { setSearch(searchInput); setPage(1); }, 500);
     return () => clearTimeout(t);
   }, [searchInput]);
 

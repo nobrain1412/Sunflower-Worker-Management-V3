@@ -6,6 +6,12 @@ import api, {
 } from '../hooks/useApi';
 
 const AuthContext = createContext(null);
+const AUTH_FAILURE_CODES = new Set([
+  'NO_REFRESH_TOKEN',
+  'INVALID_REFRESH_TOKEN',
+  'USER_NOT_FOUND',
+  'ACCOUNT_DISABLED',
+]);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => {
@@ -111,8 +117,13 @@ export function AuthProvider({ children }) {
         } else {
           clearAuthData();
         }
-      } catch {
-        if (active) clearAuthData();
+      } catch (err) {
+        if (!active) return;
+        // Chỉ clear auth khi refresh token thật sự không hợp lệ/hết phiên.
+        // Trường hợp lỗi mạng tạm thời thì giữ phiên local để tránh bị logout khi reload.
+        if (AUTH_FAILURE_CODES.has(err?.code)) {
+          clearAuthData();
+        }
       } finally {
         if (active) setIsAuthReady(true);
       }

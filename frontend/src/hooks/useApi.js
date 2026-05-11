@@ -9,6 +9,13 @@ const api = axios.create({
 let accessToken = localStorage.getItem('access_token');
 let refreshPromise = null;
 let unauthorizedHandler = null;
+const AUTH_FAILURE_CODES = new Set([
+  'NO_REFRESH_TOKEN',
+  'INVALID_REFRESH_TOKEN',
+  'USER_NOT_FOUND',
+  'ACCOUNT_DISABLED',
+  'INVALID_REFRESH_RESPONSE',
+]);
 
 function normalizeError(err) {
   if (err?.code && err?.message) return err;
@@ -75,8 +82,12 @@ api.interceptors.response.use(
         originalRequest.headers.Authorization = `Bearer ${token}`;
         return api(originalRequest);
       } catch (refreshErr) {
-        clearAccessToken();
-        if (unauthorizedHandler) unauthorizedHandler();
+        // Chỉ buộc logout khi refresh token thực sự không còn hợp lệ.
+        // Với lỗi tạm thời (network/rate-limit), giữ phiên để user không bị đá ra màn login đột ngột.
+        if (AUTH_FAILURE_CODES.has(refreshErr?.code)) {
+          clearAccessToken();
+          if (unauthorizedHandler) unauthorizedHandler();
+        }
         return Promise.reject(normalizeError(refreshErr));
       }
     }
