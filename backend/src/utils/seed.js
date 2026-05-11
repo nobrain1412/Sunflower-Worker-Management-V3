@@ -1,12 +1,11 @@
 /**
  * Seed dữ liệu demo liên kết đầy đủ.
  * Yêu cầu demo:
- * - 5 KTX
- * - 20 công ty
- * - 20 quản lý
- * - 10 vender
- * - 200 công nhân đủ thông tin
- * - Thu/chi cho 2 tháng gần nhất
+ * - 10 users
+ * - 10 công ty
+ * - 50 công nhân đủ thông tin
+ * - Không seed bảng chấm công
+ * - Tài chính random theo khoản thu/chi/tiêu
  */
 require('dotenv').config();
 const bcrypt = require('bcryptjs');
@@ -26,6 +25,16 @@ const FIRST_NAMES = ['An', 'Binh', 'Chi', 'Dung', 'Hieu', 'Khanh', 'Linh', 'Nam'
 const PROVINCES = ['Ha Noi', 'Hai Duong', 'Nghe An', 'Da Nang', 'Quang Nam', 'Binh Dinh', 'Khanh Hoa', 'Dong Nai', 'Can Tho', 'An Giang'];
 const BANKS = ['Vietcombank', 'BIDV', 'VietinBank', 'Techcombank', 'ACB', 'MB', 'TPBank'];
 const RETRYABLE_ERRORS = ['ETIMEDOUT', 'ECONNRESET', 'EPIPE', 'ENOTFOUND', '57P01', '40001'];
+const SEED_SIZE = {
+  managers: 4,
+  venders: 3,
+  ctv: 1,
+  companies: 10,
+  workers: 50,
+  ktx: 3,
+  roomsPerKtx: 6,
+  bedsPerRoom: 6,
+};
 
 function pad2(n) { return String(n).padStart(2, '0'); }
 function rand(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
@@ -140,35 +149,35 @@ async function seed() {
     const venderIds = [];
     const ctvIds = [];
 
-    for (let i = 1; i <= 20; i += 1) {
+    for (let i = 1; i <= SEED_SIZE.managers; i += 1) {
       managerIds.push(await createUser(`ql_${pad2(i)}`, `Quan Ly ${fullName(i)}`, 'quan_ly', hashQl, {
         so_dien_thoai: phone(100 + i),
         ngan_hang: pick(BANKS),
         so_tai_khoan: accountNo(100 + i),
         ten_chu_tk: `QUAN LY ${i}`,
       }));
-      logProgress('managers', i, 20, 5);
+      logProgress('managers', i, SEED_SIZE.managers, 2);
     }
-    for (let i = 1; i <= 10; i += 1) {
+    for (let i = 1; i <= SEED_SIZE.venders; i += 1) {
       venderIds.push(await createUser(`vender_${pad2(i)}`, `Vender ${fullName(i + 50)}`, 'vender', hashVender, {
         so_dien_thoai: phone(200 + i),
         ngan_hang: pick(BANKS),
         so_tai_khoan: accountNo(200 + i),
         ten_chu_tk: `VENDER ${i}`,
       }));
-      logProgress('venders', i, 10, 5);
+      logProgress('venders', i, SEED_SIZE.venders, 2);
     }
-    for (let i = 1; i <= 5; i += 1) {
+    for (let i = 1; i <= SEED_SIZE.ctv; i += 1) {
       ctvIds.push(await createUser(`ctv_${pad2(i)}`, `Cong Tac Vien ${fullName(i + 80)}`, 'cong_tac_vien', hashCtv, {
         so_dien_thoai: phone(300 + i),
         tien_cong_moi_nguoi: 120000 + i * 10000,
       }));
-      logProgress('ctv', i, 5, 5);
+      logProgress('ctv', i, SEED_SIZE.ctv, 1);
     }
 
     logPhase('Create companies');
     const companyRows = [];
-    for (let i = 1; i <= 20; i += 1) {
+    for (let i = 1; i <= SEED_SIZE.companies; i += 1) {
       const r = await queryWithRetry(
         `INSERT INTO cong_ty
           (ten_cong_ty, dia_chi, so_dien_thoai, email, luong_co_ban, luong_theo_gio, he_so_ot, ngay_lam_chuan, luong_tc_ngay, luong_hc_dem, luong_tc_dem, luong_chu_nhat, luong_ngay_le, tien_dong_phuc, tien_phat_nghi, don_gia_theo_gio_vender, tro_cap, chuyen_can, ngay_chot_cong, mo_ta_cong_viec)
@@ -198,7 +207,7 @@ async function seed() {
         ],
       );
       companyRows.push(r.rows[0]);
-      logProgress('companies', i, 20, 5);
+      logProgress('companies', i, SEED_SIZE.companies, 2);
     }
     const companyIds = companyRows.map((r) => r.id);
 
@@ -212,6 +221,9 @@ async function seed() {
 
     const dmRes = await queryWithRetry(`SELECT id, ten FROM danh_muc_giao_dich`, [], 'select danh_muc');
     const dmMap = Object.fromEntries(dmRes.rows.map((r) => [r.ten, r.id]));
+    const thuCategoryNames = ['Lương', 'Thưởng', 'Phụ cấp', 'Hoàn ứng'].filter((name) => dmMap[name]);
+    const chiCategoryNames = ['Khấu trừ', 'Tạm ứng', 'Tiền phòng KTX', 'Bảo hiểm', 'Đồng phục', 'Phạt nghỉ', 'Khác'].filter((name) => dmMap[name]);
+    const tieuCategoryNames = ['Chi phí lương'].filter((name) => dmMap[name]);
 
     const workerRows = [];
     const phanCongRows = [];
@@ -219,7 +231,7 @@ async function seed() {
     const statusPool = ['dang_lam', 'dang_lam', 'dang_lam', 'moi_vao', 'nghi_phep', 'nghi_viec'];
 
     logPhase('Create workers + assignments');
-    for (let i = 1; i <= 200; i += 1) {
+    for (let i = 1; i <= SEED_SIZE.workers; i += 1) {
       const recruiterId = recruiterPool[i % recruiterPool.length];
       const companyId = companyIds[(i * 3) % companyIds.length];
       const status = statusPool[i % statusPool.length];
@@ -268,48 +280,28 @@ async function seed() {
         [r.rows[0].id, companyId, ngayVao, 'Phan cong seed'],
       );
       phanCongRows.push(pc.rows[0]);
-      logProgress('workers', i, 200, 20);
+      logProgress('workers', i, SEED_SIZE.workers, 10);
     }
 
-    logPhase('Create attendance (cham_cong)');
-    const activePc = phanCongRows.slice(0, 120);
-    let chamCongCount = 0;
-    for (const pc of activePc) {
-      for (let d = 2; d <= 24; d += 1) {
-        const day = daysAgo(d);
-        const weekDay = day.getDay();
-        if (weekDay === 0) continue;
-        if (weekDay === 6 && chance(0.5)) continue;
-        const ngay = toYmd(day);
-        await queryWithRetry(
-          `INSERT INTO cham_cong (phan_cong_id, ngay, so_gio, so_gio_ot, ca_lam, ghi_chu)
-           VALUES ($1,$2,$3,$4,$5,$6)`,
-          [pc.id, ngay, 8, chance(0.35) ? rand(1, 3) : 0, weekDay === 6 ? 'Ca B' : 'Ca A', 'Cham cong demo'],
-        );
-        chamCongCount += 1;
-        if (chamCongCount % 300 === 0) {
-          console.log(`[cham_cong] inserted ${chamCongCount}`);
-        }
-      }
-    }
-    console.log(`[cham_cong] inserted total ${chamCongCount}`);
+    logPhase('Skip attendance');
+    console.log('Skipping cham_cong seeding as requested.');
 
     logPhase('Create KTX / rooms / beds');
     const roomRows = [];
     const bedRows = [];
-    for (let k = 1; k <= 5; k += 1) {
+    for (let k = 1; k <= SEED_SIZE.ktx; k += 1) {
       const ktx = await queryWithRetry(
         `INSERT INTO ky_tuc_xa (ten, dia_chi, ghi_chu) VALUES ($1,$2,$3) RETURNING id`,
         [`KTX ${pad2(k)}`, `${200 + k} Duong KTX, ${pick(PROVINCES)}`, `KTX demo ${k}`],
       );
-      for (let r = 1; r <= 8; r += 1) {
+      for (let r = 1; r <= SEED_SIZE.roomsPerKtx; r += 1) {
         const room = await queryWithRetry(
           `INSERT INTO phong (ktx_id, ten_phong, tang, suc_chua, tien_phong, ghi_chu)
            VALUES ($1,$2,$3,$4,$5,$6) RETURNING id, tien_phong`,
           [ktx.rows[0].id, `P${k}${pad2(r)}`, 1 + Math.floor((r - 1) / 3), 6, 1500000 + r * 80000, 'Phong demo'],
         );
         roomRows.push(room.rows[0]);
-        for (let b = 1; b <= 6; b += 1) {
+        for (let b = 1; b <= SEED_SIZE.bedsPerRoom; b += 1) {
           const bed = await queryWithRetry(
             `INSERT INTO giuong (phong_id, so_thu_tu, ghi_chu) VALUES ($1,$2,$3) RETURNING id, phong_id`,
             [room.rows[0].id, b, 'Giuong demo'],
@@ -317,12 +309,12 @@ async function seed() {
           bedRows.push(bed.rows[0]);
         }
       }
-      logProgress('ktx', k, 5, 1);
+      logProgress('ktx', k, SEED_SIZE.ktx, 1);
     }
 
     logPhase('Assign workers to KTX beds');
     const activeWorkers = workerRows.filter((w) => w.trang_thai !== 'nghi_viec');
-    const ktxWorkers = activeWorkers.slice(0, 150);
+    const ktxWorkers = activeWorkers.slice(0, Math.min(activeWorkers.length, bedRows.length));
     for (let i = 0; i < ktxWorkers.length; i += 1) {
       const w = ktxWorkers[i];
       const bed = bedRows[i];
@@ -356,7 +348,7 @@ async function seed() {
 
     logPhase('Create external hostels (phong_tro)');
     const phongTroIds = [];
-    for (let i = 1; i <= 15; i += 1) {
+    for (let i = 1; i <= 8; i += 1) {
       const pt = await queryWithRetry(
         `INSERT INTO phong_tro (ten, dia_chi, map_url, chu_tro, sdt_chu_tro, so_phong, tien_phong, ghi_chu, ngan_hang, so_tai_khoan, ten_chu_tk)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
@@ -375,11 +367,11 @@ async function seed() {
         ],
       );
       phongTroIds.push(pt.rows[0].id);
-      logProgress('phong_tro', i, 15, 5);
+      logProgress('phong_tro', i, 8, 2);
     }
 
     logPhase('Assign workers to hostels');
-    const troWorkers = activeWorkers.slice(150);
+    const troWorkers = activeWorkers.slice(ktxWorkers.length);
     for (let i = 0; i < troWorkers.length; i += 1) {
       const w = troWorkers[i];
       await queryWithRetry(
@@ -393,43 +385,51 @@ async function seed() {
     logPhase('Create finance transactions');
     let gdtcCount = 0;
     for (const w of workerRows) {
-      const comp = companyRows.find((c) => c.id === w.cong_ty_id);
-      for (const m of [m1, m0]) {
-        await queryWithRetry(
-          `INSERT INTO giao_dich_tai_chinh
-            (cong_nhan_id, danh_muc_id, loai, so_tien, ngay, ghi_chu, created_by)
-           VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-          [w.id, dmMap.Lương, 'luong', Number(comp.luong_co_ban), `${m.nam}-${pad2(m.thang)}-25`, `Luong thang ${m.thang}/${m.nam}`, keToanId],
-        );
-        gdtcCount += 1;
-        if (chance(0.35)) {
-          await queryWithRetry(
-            `INSERT INTO giao_dich_tai_chinh
-              (cong_nhan_id, danh_muc_id, loai, so_tien, ngay, ghi_chu, created_by)
-             VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-            [w.id, dmMap.Thưởng, 'thuong', rand(200000, 1200000), `${m.nam}-${pad2(m.thang)}-26`, 'Thuong hieu suat', keToanId],
-          );
-          gdtcCount += 1;
-        }
-      }
-      if (chance(0.45)) {
+      // Không bắt buộc công nhân nào cũng có giao dịch.
+      if (chance(0.28)) continue;
+
+      const txCount = rand(1, 4);
+      for (let i = 0; i < txCount; i += 1) {
+        const loai = pick(['thu', 'chi', 'tieu']);
+        const categoryPool = loai === 'thu'
+          ? thuCategoryNames
+          : loai === 'chi'
+            ? chiCategoryNames
+            : tieuCategoryNames;
+        if (!categoryPool.length) continue;
+
+        const categoryName = pick(categoryPool);
+        const danhMucId = dmMap[categoryName];
+        const soTien = loai === 'thu'
+          ? rand(300000, 6500000)
+          : loai === 'chi'
+            ? rand(150000, 2800000)
+            : rand(200000, 3500000);
+
+        const note = loai === 'thu'
+          ? pick(['Thu tiền lương', 'Thu thưởng', 'Thu phụ cấp', 'Hoàn ứng'])
+          : loai === 'chi'
+            ? pick(['Chi bảo hiểm', 'Khấu trừ tạm ứng', 'Chi đồng phục', 'Chi tiền phòng'])
+            : pick(['Tiêu hao vật tư', 'Chi phí lương', 'Chi phí vận hành']);
+
         await queryWithRetry(
           `INSERT INTO giao_dich_tai_chinh
             (cong_nhan_id, danh_muc_id, loai, so_tien, ngay, ghi_chu, created_by, da_hoan_tien)
            VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-          [w.id, dmMap['Tạm ứng'], 'tam_ung', rand(300000, 2500000), toYmd(daysAgo(rand(3, 45))), 'Tam ung demo', w.nguoi_tuyen_id || adminId, chance(0.4)],
+          [
+            w.id,
+            danhMucId,
+            loai,
+            soTien,
+            toYmd(daysAgo(rand(2, 90))),
+            `${note} (${categoryName})`,
+            pick([keToanId, adminId, w.nguoi_tuyen_id || adminId]),
+            loai === 'chi' && categoryName === 'Tạm ứng' ? chance(0.4) : false,
+          ],
         );
         gdtcCount += 1;
       }
-      if (chance(0.25)) {
-        await queryWithRetry(
-          `INSERT INTO giao_dich_tai_chinh
-            (cong_nhan_id, danh_muc_id, loai, so_tien, ngay, ghi_chu, created_by)
-           VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-          [w.id, dmMap['Tiền phòng KTX'], 'tien_phong_ktx', rand(350000, 900000), toYmd(daysAgo(rand(5, 40))), 'Khau tru tien phong', keToanId],
-        );
-        gdtcCount += 1;
-      }
+
       if (gdtcCount % 200 === 0) {
         console.log(`[giao_dich_tai_chinh] inserted ${gdtcCount}`);
       }
@@ -461,11 +461,11 @@ async function seed() {
     console.log('Seed done.');
     console.log('Accounts:');
     console.log(`- admin / ${PASSWORDS.admin}`);
-    console.log(`- ql_01..ql_20 / ${PASSWORDS.quan_ly}`);
-    console.log(`- vender_01..vender_10 / ${PASSWORDS.vender}`);
+    console.log(`- ql_01..ql_04 / ${PASSWORDS.quan_ly}`);
+    console.log(`- vender_01..vender_03 / ${PASSWORDS.vender}`);
     console.log(`- ke_toan / ${PASSWORDS.ke_toan}`);
-    console.log(`- ctv_01..ctv_05 / ${PASSWORDS.cong_tac_vien}`);
-    console.log('Data counts: 5 KTX, 20 cong ty, 20 quan ly, 10 vender, 200 cong nhan, 2 thang thu/chi.');
+    console.log(`- ctv_01 / ${PASSWORDS.cong_tac_vien}`);
+    console.log('Data counts: 10 users, 10 cong ty, 50 cong nhan, khong seed cham_cong, tai chinh random thu/chi/tieu.');
   } catch (err) {
     throw err;
   } finally {
