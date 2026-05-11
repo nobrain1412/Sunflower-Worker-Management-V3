@@ -212,14 +212,14 @@ async function autoUpdateTrangThai() {
   );
 }
 
-async function softDelete(id) {
+async function hardDelete(id) {
   const result = await db.query(
-    `UPDATE cong_nhan SET deleted_at = NOW()
-     WHERE id = $1 AND deleted_at IS NULL
+    `DELETE FROM cong_nhan
+     WHERE id = $1
      RETURNING id`,
     [id],
   );
   return result.rows[0] || null;
 }
 
-module.exports = { findAll, findById, findByCccd, create, update, updateAnh, findByCongTy, softDelete, autoUpdateTrangThai };
+module.exports = { findAll, findById, findByCccd, create, update, updateAnh, findByCongTy, hardDelete, autoUpdateTrangThai };

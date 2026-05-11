@@ -328,6 +328,12 @@ body {
   .cn-edit-grid > div {
     grid-column: auto !important;
   }
+  .nhan-su-form-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .nhan-su-form-grid > div {
+    grid-column: auto !important;
+  }
 }
 
 /* ========================================

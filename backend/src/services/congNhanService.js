@@ -81,7 +81,18 @@ async function capNhat(id, data) {
 }
 
 async function xoa(id) {
-  const deleted = await congNhanModel.softDelete(id);
+  let deleted;
+  try {
+    deleted = await congNhanModel.hardDelete(id);
+  } catch (error) {
+    if (error.code === '23503') {
+      const err = new Error('Công nhân đang có dữ liệu liên kết (phân công, tài chính, chỗ ở...). Vui lòng xoá dữ liệu liên quan trước.');
+      err.statusCode = 409;
+      err.code = 'CONG_NHAN_HAS_RELATIONS';
+      throw err;
+    }
+    throw error;
+  }
   if (!deleted) {
     const err = new Error('Không tìm thấy công nhân');
     err.statusCode = 404;

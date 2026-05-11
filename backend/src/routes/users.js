@@ -109,16 +109,27 @@ router.put('/:id', requireRole('admin'), validate(updateSchema), asyncWrapper(as
   sendSuccess(res, updated, 'Cập nhật thành công');
 }));
 
-// DELETE /api/users/:id — vô hiệu hoá (admin)
+// DELETE /api/users/:id — xoá vĩnh viễn (admin)
 router.delete('/:id', requireRole('admin'), asyncWrapper(async (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (req.user.id === id) {
     const e = new Error('Không thể tự xoá tài khoản của chính bạn');
     e.statusCode = 400; throw e;
   }
-  const r = await userModel.softDeactivate(id);
+  let r;
+  try {
+    r = await userModel.hardDelete(id);
+  } catch (error) {
+    if (error.code === '23503') {
+      const e = new Error('User đang có dữ liệu liên kết (công nhân, giao dịch...). Vui lòng xoá hoặc chuyển dữ liệu liên quan trước.');
+      e.statusCode = 409;
+      e.code = 'USER_HAS_RELATIONS';
+      throw e;
+    }
+    throw error;
+  }
   if (!r) { const e = new Error('Không tìm thấy user'); e.statusCode = 404; throw e; }
-  sendSuccess(res, null, 'Đã vô hiệu hoá user');
+  sendSuccess(res, null, 'Đã xoá user');
 }));
 
 module.exports = router;

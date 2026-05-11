@@ -116,9 +116,9 @@ async function setCongTyIds(userId, congTyIds = []) {
   }
 }
 
-async function softDeactivate(id) {
+async function hardDelete(id) {
   const result = await db.query(
-    `UPDATE users SET active = FALSE WHERE id = $1 RETURNING id`,
+    `DELETE FROM users WHERE id = $1 RETURNING id`,
     [id],
   );
   return result.rows[0] || null;
@@ -127,5 +127,5 @@ async function softDeactivate(id) {
 module.exports = {
   ROLE_VALUES,
   findByUsername, findById, findCongTyIds, findAll,
-  create, update, setCongTyIds, softDeactivate,
+  create, update, setCongTyIds, hardDelete,
 };

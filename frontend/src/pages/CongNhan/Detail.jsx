@@ -30,6 +30,11 @@ const LOAI_LABEL = {
 };
 
 function fmt(n) { return Number(n || 0).toLocaleString('vi-VN') + 'đ'; }
+function mediaUrl(path) {
+  if (!path) return '';
+  if (/^https?:\/\//i.test(path)) return path;
+  return path;
+}
 
 function Field({ label, value, children }) {
   return (
@@ -142,7 +147,7 @@ function UploadAnhModal({ cn, onClose }) {
               {previews[field] ? (
                 <img src={previews[field]} alt={labels[field]} style={up.preview} />
               ) : cn[field] ? (
-                <img src={`http://localhost:3000${cn[field]}`} alt={labels[field]} style={up.preview} />
+                <img src={mediaUrl(cn[field])} alt={labels[field]} style={up.preview} />
               ) : (
                 <div style={up.placeholder}>
                   <div style={{ fontSize: 24 }}>📷</div>
@@ -370,7 +375,7 @@ export default function CongNhanDetail() {
         {/* Avatar / ảnh chân dung */}
         <div style={s.profileAvatar}>
           {cn.anh_chan_dung ? (
-            <img src={`http://localhost:3000${cn.anh_chan_dung}`} alt="avatar" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 12 }} />
+            <img src={mediaUrl(cn.anh_chan_dung)} alt="avatar" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 12 }} />
           ) : (
             <span>{cn.ho_ten[0]}</span>
           )}
@@ -421,7 +426,7 @@ export default function CongNhanDetail() {
               cn[field] ? (
                 <div key={field} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   <img
-                    src={`http://localhost:3000${cn[field]}`}
+                    src={mediaUrl(cn[field])}
                     alt={label}
                     style={{ width: 140, height: 100, objectFit: 'cover', borderRadius: 8, border: '1px solid var(--border)' }}
                   />

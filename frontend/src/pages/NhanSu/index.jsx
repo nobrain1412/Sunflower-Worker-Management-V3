@@ -7,6 +7,7 @@
 import { useState } from 'react';
 import { useUserList, useCongTacVien, useTaoUser, useCapNhatUser, useXoaUser } from '../../hooks/useUsers';
 import { useCongTyList } from '../../hooks/useCongNhan';
+import useIsMobile from '../../hooks/useIsMobile';
 
 const ROLE_LABEL = {
   admin: 'Quản trị',
@@ -96,7 +97,7 @@ function UserModal({ user, onClose }) {
     <div style={M.overlay} onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div style={M.modal}>
         <div style={M.title}>{isEdit ? 'Sửa user' : 'Thêm user mới'}</div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+        <div className="nhan-su-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
           <div style={F.col}>
             <label className="form-label">Tên đăng nhập *</label>
             <input className="form-input" name="ten_dang_nhap" value={form.ten_dang_nhap}
@@ -186,102 +187,181 @@ export default function NhanSu() {
 
   const users = userRes?.data ?? [];
   const ctvs  = ctvRes?.data ?? [];
+  const isMobile = useIsMobile();
 
   // Nhân viên = mọi role trừ vender + cong_tac_vien (theo nghĩa nội bộ)
   const nhanVien = users.filter((u) => ['admin','quan_ly','ke_toan','vender'].includes(u.vai_tro));
 
   async function handleXoa(u) {
-    if (!window.confirm(`Vô hiệu hoá user "${u.ho_ten}"?`)) return;
+    if (!window.confirm(`Xoá vĩnh viễn user "${u.ho_ten}"?`)) return;
     await xoa.mutateAsync(u.id);
   }
 
   return (
     <div style={s.root}>
-      <div style={s.header}>
-        <div style={s.tabs}>
+      <div style={{ ...s.header, ...(isMobile ? s.headerMobile : {}) }}>
+        <div style={{ ...s.tabs, ...(isMobile ? s.tabsMobile : {}) }}>
           {[['user','Tất cả user'],['nhan-vien','Nhân viên'],['ctv','Cộng tác viên']].map(([v, l]) => (
             <button key={v} style={{ ...s.tab, ...(tab === v ? s.tabActive : {}) }}
               onClick={() => setTab(v)}>{l}</button>
           ))}
         </div>
-        <button className="btn-primary" onClick={() => { setEditing(null); setShowAdd(true); }}>
+        <button className="btn-primary" style={isMobile ? s.addBtnMobile : undefined} onClick={() => { setEditing(null); setShowAdd(true); }}>
           + Thêm user
         </button>
       </div>
 
       <div style={s.card}>
         {tab === 'user' && (
-          <table style={s.table}>
-            <thead><tr>{['Tên','Đăng nhập','Vai trò','SĐT','Trạng thái',''].map((h, i) => <th key={i} style={s.th}>{h}</th>)}</tr></thead>
-            <tbody>
-              {users.length === 0 ? <tr><td colSpan={6} style={s.empty}>Chưa có user</td></tr> :
-                users.map((u) => (
-                  <tr key={u.id} style={s.tr}>
-                    <td style={s.td}><b style={{ color: 'var(--text1)' }}>{u.ho_ten}</b></td>
-                    <td style={s.td}><span style={s.mono}>{u.ten_dang_nhap}</span></td>
-                    <td style={s.td}><span className={`pill ${ROLE_PILL[u.vai_tro] ?? 'pill-blue'}`}>{ROLE_LABEL[u.vai_tro] ?? u.vai_tro}</span></td>
-                    <td style={s.td}><span style={s.sub}>{u.so_dien_thoai ?? '—'}</span></td>
-                    <td style={s.td}>
-                      <span className={`pill ${u.active ? 'pill-green' : 'pill-red'}`}>
-                        {u.active ? 'Hoạt động' : 'Đã khoá'}
-                      </span>
-                    </td>
-                    <td style={s.td}>
-                      <button className="btn-ghost" style={{ fontSize: 11, padding: '4px 8px' }}
-                        onClick={() => { setEditing(u); setShowAdd(true); }}>Sửa</button>
-                      <button style={{ ...s.delBtn, marginLeft: 4 }} onClick={() => handleXoa(u)}>🗑</button>
-                    </td>
-                  </tr>
-                ))}
-            </tbody>
-          </table>
+          isMobile ? (
+            <div style={m.list}>
+              {users.length === 0 ? (
+                <div style={s.empty}>Chưa có user</div>
+              ) : users.map((u) => (
+                <div key={u.id} style={m.card}>
+                  <div style={m.head}>
+                    <b style={{ color: 'var(--text1)', fontSize: 14 }}>{u.ho_ten}</b>
+                    <span className={`pill ${ROLE_PILL[u.vai_tro] ?? 'pill-blue'}`}>{ROLE_LABEL[u.vai_tro] ?? u.vai_tro}</span>
+                  </div>
+                  <div style={m.metaGrid}>
+                    <div style={m.metaItem}><span style={m.metaLabel}>Đăng nhập</span><span style={s.mono}>{u.ten_dang_nhap}</span></div>
+                    <div style={m.metaItem}><span style={m.metaLabel}>SĐT</span><span style={s.sub}>{u.so_dien_thoai ?? '—'}</span></div>
+                    <div style={m.metaItem}><span style={m.metaLabel}>Trạng thái</span>
+                      <span className={`pill ${u.active ? 'pill-green' : 'pill-red'}`}>{u.active ? 'Hoạt động' : 'Đã khoá'}</span>
+                    </div>
+                  </div>
+                  <div style={m.actions}>
+                    <button className="btn-ghost" style={{ fontSize: 11, padding: '4px 8px' }} onClick={() => { setEditing(u); setShowAdd(true); }}>Sửa</button>
+                    <button style={{ ...s.delBtn, marginLeft: 4 }} onClick={() => handleXoa(u)}>🗑</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <table style={s.table}>
+              <thead><tr>{['Tên','Đăng nhập','Vai trò','SĐT','Trạng thái',''].map((h, i) => <th key={i} style={s.th}>{h}</th>)}</tr></thead>
+              <tbody>
+                {users.length === 0 ? <tr><td colSpan={6} style={s.empty}>Chưa có user</td></tr> :
+                  users.map((u) => (
+                    <tr key={u.id} style={s.tr}>
+                      <td style={s.td}><b style={{ color: 'var(--text1)' }}>{u.ho_ten}</b></td>
+                      <td style={s.td}><span style={s.mono}>{u.ten_dang_nhap}</span></td>
+                      <td style={s.td}><span className={`pill ${ROLE_PILL[u.vai_tro] ?? 'pill-blue'}`}>{ROLE_LABEL[u.vai_tro] ?? u.vai_tro}</span></td>
+                      <td style={s.td}><span style={s.sub}>{u.so_dien_thoai ?? '—'}</span></td>
+                      <td style={s.td}>
+                        <span className={`pill ${u.active ? 'pill-green' : 'pill-red'}`}>
+                          {u.active ? 'Hoạt động' : 'Đã khoá'}
+                        </span>
+                      </td>
+                      <td style={s.td}>
+                        <button className="btn-ghost" style={{ fontSize: 11, padding: '4px 8px' }}
+                          onClick={() => { setEditing(u); setShowAdd(true); }}>Sửa</button>
+                        <button style={{ ...s.delBtn, marginLeft: 4 }} onClick={() => handleXoa(u)}>🗑</button>
+                      </td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          )
         )}
 
         {tab === 'nhan-vien' && (
-          <table style={s.table}>
-            <thead><tr>{['Tên','Vai trò','Tổng CN đang làm','Công ty quản lý',''].map((h, i) => <th key={i} style={s.th}>{h}</th>)}</tr></thead>
-            <tbody>
-              {nhanVien.length === 0 ? <tr><td colSpan={5} style={s.empty}>Chưa có nhân viên</td></tr> :
-                nhanVien.map((u) => (
-                  <tr key={u.id} style={s.tr}>
-                    <td style={s.td}><b style={{ color: 'var(--text1)' }}>{u.ho_ten}</b></td>
-                    <td style={s.td}><span className={`pill ${ROLE_PILL[u.vai_tro] ?? 'pill-blue'}`}>{ROLE_LABEL[u.vai_tro]}</span></td>
-                    <td style={s.td}>
-                      <span style={s.mono}>
-                        {u.vai_tro === 'quan_ly' ? Number(u.so_cn_quan_ly || 0) : Number(u.so_cn_tuyen || 0)}
-                      </span>
-                    </td>
-                    <td style={s.td}><span style={s.sub}>{u.cong_ty_quan_ly_ten || '—'}</span></td>
-                    <td style={s.td}>
-                      <button className="btn-ghost" style={{ fontSize: 11, padding: '4px 8px' }}
-                        onClick={() => { setEditing(u); setShowAdd(true); }}>Sửa</button>
-                    </td>
-                  </tr>
-                ))}
-            </tbody>
-          </table>
+          isMobile ? (
+            <div style={m.list}>
+              {nhanVien.length === 0 ? (
+                <div style={s.empty}>Chưa có nhân viên</div>
+              ) : nhanVien.map((u) => (
+                <div key={u.id} style={m.card}>
+                  <div style={m.head}>
+                    <b style={{ color: 'var(--text1)', fontSize: 14 }}>{u.ho_ten}</b>
+                    <span className={`pill ${ROLE_PILL[u.vai_tro] ?? 'pill-blue'}`}>{ROLE_LABEL[u.vai_tro]}</span>
+                  </div>
+                  <div style={m.metaGrid}>
+                    <div style={m.metaItem}>
+                      <span style={m.metaLabel}>Tổng CN đang làm</span>
+                      <span style={s.mono}>{u.vai_tro === 'quan_ly' ? Number(u.so_cn_quan_ly || 0) : Number(u.so_cn_tuyen || 0)}</span>
+                    </div>
+                    <div style={{ ...m.metaItem, gridColumn: 'span 2' }}>
+                      <span style={m.metaLabel}>Công ty quản lý</span>
+                      <span style={s.sub}>{u.cong_ty_quan_ly_ten || '—'}</span>
+                    </div>
+                  </div>
+                  <div style={m.actions}>
+                    <button className="btn-ghost" style={{ fontSize: 11, padding: '4px 8px' }} onClick={() => { setEditing(u); setShowAdd(true); }}>Sửa</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <table style={s.table}>
+              <thead><tr>{['Tên','Vai trò','Tổng CN đang làm','Công ty quản lý',''].map((h, i) => <th key={i} style={s.th}>{h}</th>)}</tr></thead>
+              <tbody>
+                {nhanVien.length === 0 ? <tr><td colSpan={5} style={s.empty}>Chưa có nhân viên</td></tr> :
+                  nhanVien.map((u) => (
+                    <tr key={u.id} style={s.tr}>
+                      <td style={s.td}><b style={{ color: 'var(--text1)' }}>{u.ho_ten}</b></td>
+                      <td style={s.td}><span className={`pill ${ROLE_PILL[u.vai_tro] ?? 'pill-blue'}`}>{ROLE_LABEL[u.vai_tro]}</span></td>
+                      <td style={s.td}>
+                        <span style={s.mono}>
+                          {u.vai_tro === 'quan_ly' ? Number(u.so_cn_quan_ly || 0) : Number(u.so_cn_tuyen || 0)}
+                        </span>
+                      </td>
+                      <td style={s.td}><span style={s.sub}>{u.cong_ty_quan_ly_ten || '—'}</span></td>
+                      <td style={s.td}>
+                        <button className="btn-ghost" style={{ fontSize: 11, padding: '4px 8px' }}
+                          onClick={() => { setEditing(u); setShowAdd(true); }}>Sửa</button>
+                      </td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          )
         )}
 
         {tab === 'ctv' && (
-          <table style={s.table}>
-            <thead><tr>{['Tên','SĐT','Số người tuyển','Tiền công/người','Tổng tiền',''].map((h, i) => <th key={i} style={s.th}>{h}</th>)}</tr></thead>
-            <tbody>
-              {ctvs.length === 0 ? <tr><td colSpan={6} style={s.empty}>Chưa có cộng tác viên</td></tr> :
-                ctvs.map((u) => (
-                  <tr key={u.id} style={s.tr}>
-                    <td style={s.td}><b style={{ color: 'var(--text1)' }}>{u.ho_ten}</b></td>
-                    <td style={s.td}><span style={s.sub}>{u.so_dien_thoai ?? '—'}</span></td>
-                    <td style={s.td}><span style={s.mono}>{Number(u.so_cn_tuyen || 0)}</span></td>
-                    <td style={s.td}><span style={s.mono}>{fmtMoney(u.tien_cong_moi_nguoi)}</span></td>
-                    <td style={s.td}><span style={{ ...s.mono, color: 'var(--green)', fontWeight: 700 }}>{fmtMoney(u.tong_tien_cong)}</span></td>
-                    <td style={s.td}>
-                      <button className="btn-ghost" style={{ fontSize: 11, padding: '4px 8px' }}
-                        onClick={() => { setEditing(u); setShowAdd(true); }}>Sửa</button>
-                    </td>
-                  </tr>
-                ))}
-            </tbody>
-          </table>
+          isMobile ? (
+            <div style={m.list}>
+              {ctvs.length === 0 ? (
+                <div style={s.empty}>Chưa có cộng tác viên</div>
+              ) : ctvs.map((u) => (
+                <div key={u.id} style={m.card}>
+                  <div style={m.head}>
+                    <b style={{ color: 'var(--text1)', fontSize: 14 }}>{u.ho_ten}</b>
+                    <span className="pill pill-green">CTV</span>
+                  </div>
+                  <div style={m.metaGrid}>
+                    <div style={m.metaItem}><span style={m.metaLabel}>SĐT</span><span style={s.sub}>{u.so_dien_thoai ?? '—'}</span></div>
+                    <div style={m.metaItem}><span style={m.metaLabel}>Số người tuyển</span><span style={s.mono}>{Number(u.so_cn_tuyen || 0)}</span></div>
+                    <div style={m.metaItem}><span style={m.metaLabel}>Tiền công/người</span><span style={s.mono}>{fmtMoney(u.tien_cong_moi_nguoi)}</span></div>
+                    <div style={m.metaItem}><span style={m.metaLabel}>Tổng tiền</span><span style={{ ...s.mono, color: 'var(--green)', fontWeight: 700 }}>{fmtMoney(u.tong_tien_cong)}</span></div>
+                  </div>
+                  <div style={m.actions}>
+                    <button className="btn-ghost" style={{ fontSize: 11, padding: '4px 8px' }} onClick={() => { setEditing(u); setShowAdd(true); }}>Sửa</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <table style={s.table}>
+              <thead><tr>{['Tên','SĐT','Số người tuyển','Tiền công/người','Tổng tiền',''].map((h, i) => <th key={i} style={s.th}>{h}</th>)}</tr></thead>
+              <tbody>
+                {ctvs.length === 0 ? <tr><td colSpan={6} style={s.empty}>Chưa có cộng tác viên</td></tr> :
+                  ctvs.map((u) => (
+                    <tr key={u.id} style={s.tr}>
+                      <td style={s.td}><b style={{ color: 'var(--text1)' }}>{u.ho_ten}</b></td>
+                      <td style={s.td}><span style={s.sub}>{u.so_dien_thoai ?? '—'}</span></td>
+                      <td style={s.td}><span style={s.mono}>{Number(u.so_cn_tuyen || 0)}</span></td>
+                      <td style={s.td}><span style={s.mono}>{fmtMoney(u.tien_cong_moi_nguoi)}</span></td>
+                      <td style={s.td}><span style={{ ...s.mono, color: 'var(--green)', fontWeight: 700 }}>{fmtMoney(u.tong_tien_cong)}</span></td>
+                      <td style={s.td}>
+                        <button className="btn-ghost" style={{ fontSize: 11, padding: '4px 8px' }}
+                          onClick={() => { setEditing(u); setShowAdd(true); }}>Sửa</button>
+                      </td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          )
         )}
       </div>
 
@@ -296,10 +376,13 @@ export default function NhanSu() {
 const s = {
   root: { display: 'flex', flexDirection: 'column', gap: 14 },
   header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
+  headerMobile: { flexDirection: 'column', alignItems: 'stretch', gap: 10 },
   tabs: { display: 'flex', gap: 4 },
+  tabsMobile: { overflowX: 'auto', paddingBottom: 4 },
   tab: { background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600,
     color: 'var(--text3)', padding: '8px 14px', borderRadius: 8, fontFamily: "'Be Vietnam Pro', sans-serif" },
   tabActive: { background: 'var(--bg3)', color: 'var(--text1)' },
+  addBtnMobile: { width: '100%', justifyContent: 'center' },
   card: { background: 'var(--bg1)', border: '1px solid var(--border)', borderRadius: 14, padding: '18px 20px' },
   table: { width: '100%', borderCollapse: 'collapse' },
   th: { fontSize: 10, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase',
@@ -325,4 +408,22 @@ const M = {
   title: { fontSize: 15, fontWeight: 700, color: 'var(--text1)', marginBottom: 16 },
   err: { color: 'var(--red)', fontSize: 12, marginBottom: 8 },
   actions: { display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 },
+};
+
+const m = {
+  list: { display: 'flex', flexDirection: 'column', gap: 10 },
+  card: {
+    background: 'var(--bg2)',
+    border: '1px solid var(--border)',
+    borderRadius: 12,
+    padding: 12,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 10,
+  },
+  head: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  metaGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 },
+  metaItem: { display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 },
+  metaLabel: { fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.05em' },
+  actions: { display: 'flex', justifyContent: 'flex-end' },
 };
