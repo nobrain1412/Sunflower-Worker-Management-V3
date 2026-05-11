@@ -30,7 +30,7 @@
 - tất cả các option lọc dữ liệu được thu vào trong 1 của sổ phụ, của sổ này sẽ hiện lên khi chọn nút lọc dữ liệu
 # Ký túc xá
 - cho phép vender sử dụng chức năng nhà trọ
-- chức năng ký túc xá chỉ dành cho admin
+- chức năng ký túc xá chỉ dành cho admin, những role khác ngoài admin sẽ bị ẩn ký túc xá
 # công ty
 
 # tài chính
