@@ -68,6 +68,7 @@ function UserModal({ user, onClose }) {
     setErr('');
     if (!form.ho_ten || !form.ten_dang_nhap) { setErr('Tên đăng nhập và họ tên là bắt buộc'); return; }
     if (!isEdit && !form.mat_khau) { setErr('Mật khẩu là bắt buộc khi tạo mới'); return; }
+    if (form.mat_khau && form.mat_khau.length < 6) { setErr('Mật khẩu chỉ cần tối thiểu 6 ký tự'); return; }
 
     const payload = {
       ho_ten: form.ho_ten,

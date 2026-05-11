@@ -4,6 +4,7 @@ import { useCongNhanList, useVenders, useCongTyList, useXoaCongNhan } from '../.
 import { useTinhList } from '../../hooks/useProvinces';
 import { useAuth } from '../../context/AuthContext';
 import AddCongNhanModal from './AddModal';
+import BottomSheet from '../../components/BottomSheet';
 
 const TRANG_THAI_PILL = {
   dang_lam:  { cls: 'pill-green', label: 'Đang làm' },
@@ -53,6 +54,8 @@ export default function CongNhan() {
   const [sortOrder,setSortOrder]      = useState('asc');
   const [page, setPage]               = useState(1);
   const [showAdd, setShowAdd]         = useState(false);
+  const [showAddSheet, setShowAddSheet] = useState(false);
+  const [showFilterSheet, setShowFilterSheet] = useState(false);
 
   function toggleSort(field) {
     if (sortBy === field) {
@@ -105,62 +108,30 @@ export default function CongNhan() {
           />
         </div>
 
-        <div style={s.filters}>
-          <select
-            className="form-input" style={{ width: 150 }}
-            value={trangThai}
-            onChange={(e) => { setTrangThai(e.target.value); setPage(1); }}
-          >
-            {STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
-
-          {canFilterAll && (
-            <>
-              <select
-                className="form-input" style={{ width: 170 }}
-                value={congTyId}
-                onChange={(e) => { setCongTyId(e.target.value); setPage(1); }}
-              >
-                <option value="">Tất cả công ty</option>
-                {congTyArr.map((ct) => <option key={ct.id} value={ct.id}>{ct.ten_cong_ty}</option>)}
-              </select>
-              <select
-                className="form-input" style={{ width: 170 }}
-                value={venderId}
-                onChange={(e) => { setVenderId(e.target.value); setPage(1); }}
-              >
-                <option value="">Tất cả vender</option>
-                {venders.map((v) => <option key={v.id} value={v.id}>{v.ho_ten}</option>)}
-              </select>
-            </>
-          )}
-
-          {/* Lọc theo tỉnh quê quán */}
-          <select
-            className="form-input" style={{ width: 170 }}
-            value={tinh}
-            onChange={(e) => { setTinh(e.target.value); setPage(1); }}
-          >
-            <option value="">Tất cả tỉnh</option>
-            {tinhList.map((t) => <option key={t.code} value={t.name}>{t.name}</option>)}
-          </select>
-
-          {/* Lọc theo 1 ngày vào làm — định dạng dd/mm/yyyy hiển thị bởi browser locale */}
-          <input
-            type="date" className="form-input" style={{ width: 150 }}
-            value={ngay} onChange={(e) => { setNgay(e.target.value); setPage(1); }}
-            title="Ngày vào làm"
-            placeholder="dd/mm/yyyy"
-            lang="vi-VN"
-          />
-          {ngay && (
-            <button className="btn-ghost" style={{ fontSize: 12, padding: '6px 10px' }}
-              onClick={() => { setNgay(''); setPage(1); }}
-            >× Xóa ngày</button>
+        <div style={s.toolbarActions}>
+          <button className="btn-ghost" style={s.filterBtn} onClick={() => setShowFilterSheet(true)}>
+            <span>⚙</span>
+            Bộ lọc
+          </button>
+          {(trangThai || venderId || congTyId || tinh || ngay) && (
+            <button
+              className="btn-ghost"
+              style={{ fontSize: 12, padding: '6px 10px' }}
+              onClick={() => {
+                setTrangThai('');
+                setVenderId('');
+                setCongTyId('');
+                setTinh('');
+                setNgay('');
+                setPage(1);
+              }}
+            >
+              Xoá lọc
+            </button>
           )}
         </div>
 
-        <button className="btn-primary" style={{ marginLeft: 'auto' }} onClick={() => setShowAdd(true)}>
+        <button className="btn-primary" style={{ marginLeft: 'auto' }} onClick={() => setShowAddSheet(true)}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
             <line x1="12" y1="5" x2="12" y2="19" stroke="#fff" strokeWidth="2.5" strokeLinecap="round"/>
             <line x1="5" y1="12" x2="19" y2="12" stroke="#fff" strokeWidth="2.5" strokeLinecap="round"/>
@@ -174,6 +145,9 @@ export default function CongNhan() {
           <b style={{ color: 'var(--text1)', fontFamily: "'JetBrains Mono', monospace" }}>{meta.total}</b> công nhân
           {trangThai && ` · ${STATUS_OPTIONS.find(o => o.value === trangThai)?.label}`}
         </span>
+        {(venderId || congTyId || tinh || ngay) && (
+          <span style={s.filterHint}>Đang áp dụng bộ lọc nâng cao</span>
+        )}
       </div>
 
       <div style={s.card}>
@@ -265,6 +239,95 @@ export default function CongNhan() {
         </div>
       )}
 
+      <BottomSheet open={showAddSheet} onClose={() => setShowAddSheet(false)} title="Thêm công nhân">
+        <div style={bs.list}>
+          {[
+            {
+              icon: '✍️',
+              label: 'Nhập thủ công',
+              sub: 'Điền form thông tin cá nhân',
+              action: () => {
+                setShowAddSheet(false);
+                setShowAdd(true);
+              },
+            },
+            {
+              icon: '🪪',
+              label: 'Quét CCCD',
+              sub: 'Đọc dữ liệu từ ảnh CCCD',
+              action: () => {
+                window.location.href = '/ocr/cccd';
+              },
+            },
+            {
+              icon: '📋',
+              label: 'Quét danh sách viết tay',
+              sub: 'Nhận diện nhiều công nhân cùng lúc',
+              action: () => {
+                window.location.href = '/ocr/danh-sach';
+              },
+            },
+          ].map(({ icon, label, sub, action }) => (
+            <button key={label} style={bs.item} onClick={action}>
+              <div style={bs.itemIcon}>{icon}</div>
+              <div>
+                <div style={bs.itemLabel}>{label}</div>
+                <div style={bs.itemSub}>{sub}</div>
+              </div>
+            </button>
+          ))}
+        </div>
+      </BottomSheet>
+
+      <BottomSheet open={showFilterSheet} onClose={() => setShowFilterSheet(false)} title="Bộ lọc công nhân">
+        <div style={bs.filterGrid}>
+          <div style={bs.field}>
+            <label className="form-label">Trạng thái</label>
+            <select className="form-input" value={trangThai} onChange={(e) => { setTrangThai(e.target.value); setPage(1); }}>
+              {STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
+
+          {canFilterAll && (
+            <>
+              <div style={bs.field}>
+                <label className="form-label">Công ty</label>
+                <select className="form-input" value={congTyId} onChange={(e) => { setCongTyId(e.target.value); setPage(1); }}>
+                  <option value="">Tất cả công ty</option>
+                  {congTyArr.map((ct) => <option key={ct.id} value={ct.id}>{ct.ten_cong_ty}</option>)}
+                </select>
+              </div>
+              <div style={bs.field}>
+                <label className="form-label">Vender</label>
+                <select className="form-input" value={venderId} onChange={(e) => { setVenderId(e.target.value); setPage(1); }}>
+                  <option value="">Tất cả vender</option>
+                  {venders.map((v) => <option key={v.id} value={v.id}>{v.ho_ten}</option>)}
+                </select>
+              </div>
+            </>
+          )}
+
+          <div style={bs.field}>
+            <label className="form-label">Tỉnh</label>
+            <select className="form-input" value={tinh} onChange={(e) => { setTinh(e.target.value); setPage(1); }}>
+              <option value="">Tất cả tỉnh</option>
+              {tinhList.map((t) => <option key={t.code} value={t.name}>{t.name}</option>)}
+            </select>
+          </div>
+
+          <div style={bs.field}>
+            <label className="form-label">Ngày vào làm</label>
+            <input
+              type="date"
+              className="form-input"
+              value={ngay}
+              onChange={(e) => { setNgay(e.target.value); setPage(1); }}
+              lang="vi-VN"
+            />
+          </div>
+        </div>
+      </BottomSheet>
+
       {showAdd && <AddCongNhanModal onClose={() => setShowAdd(false)} />}
     </div>
   );
@@ -275,9 +338,11 @@ const s = {
   toolbar: { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' },
   searchWrap: { position: 'relative', display: 'flex', alignItems: 'center' },
   searchIcon: { position: 'absolute', left: 11, color: 'var(--text3)', pointerEvents: 'none' },
-  filters: { display: 'flex', gap: 8, flexWrap: 'wrap' },
-  statsRow: { display: 'flex', alignItems: 'center' },
+  toolbarActions: { display: 'flex', alignItems: 'center', gap: 8 },
+  filterBtn: { fontSize: 12, padding: '6px 10px' },
+  statsRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' },
   statText: { fontSize: 12, color: 'var(--text2)' },
+  filterHint: { fontSize: 11, color: 'var(--accent)' },
   card: { background: 'var(--bg1)', border: '1px solid var(--border)', borderRadius: 14, overflow: 'hidden' },
   table: { width: '100%', borderCollapse: 'collapse' },
   th: { fontSize: 10, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', textAlign: 'left', padding: '12px 16px', borderBottom: '1px solid var(--border)', background: 'var(--bg1)' },
@@ -296,4 +361,19 @@ const s = {
   emptySub:   { fontSize: 13, color: 'var(--text2)', marginTop: 4 },
   pagination: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16 },
   pageInfo:   { fontSize: 12, color: 'var(--text2)' },
+};
+
+const bs = {
+  list: { display: 'flex', flexDirection: 'column', gap: 8 },
+  item: {
+    display: 'flex', alignItems: 'center', gap: 12,
+    background: 'var(--bg2)', border: '1px solid var(--border)',
+    borderRadius: 12, padding: '12px 14px', cursor: 'pointer',
+    width: '100%', textAlign: 'left',
+  },
+  itemIcon: { width: 36, height: 36, borderRadius: 10, background: 'var(--bg3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 },
+  itemLabel: { fontSize: 13, fontWeight: 600, color: 'var(--text1)' },
+  itemSub: { fontSize: 11, color: 'var(--text2)', marginTop: 2 },
+  filterGrid: { display: 'grid', gap: 12 },
+  field: { display: 'flex', flexDirection: 'column', gap: 4 },
 };

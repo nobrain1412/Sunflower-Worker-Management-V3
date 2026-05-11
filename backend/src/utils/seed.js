@@ -1,206 +1,399 @@
 /**
- * Seed dữ liệu test đầy đủ cho tất cả role.
- * Dùng: node src/utils/seed.js
- *
- * Sẽ XÓA toàn bộ data cũ và tạo lại — CHỈ dùng môi trường dev.
- *
- * Tài khoản sau khi seed:
- *   admin        / Admin@123    → Quản trị viên
- *   tuan_ql      / QL@123       → Quản lý (Cty ABC + Cty XYZ)   ← 1 QL nhiều cty
- *   minh_ql      / QL@123       → Quản lý (Cty XYZ + Cty DEF)   ← 1 cty nhiều QL (XYZ)
- *   hoa_vender   / VD@123       → Vender
- *   duc_vender   / VD@123       → Vender
+ * Seed dữ liệu demo liên kết đầy đủ.
+ * Yêu cầu demo:
+ * - 5 KTX
+ * - 20 công ty
+ * - 20 quản lý
+ * - 10 vender
+ * - 200 công nhân đủ thông tin
+ * - Thu/chi cho 2 tháng gần nhất
  */
 require('dotenv').config();
 const bcrypt = require('bcryptjs');
-const db     = require('./db');
+const db = require('./db');
 
-const MAT_KHAU_QL  = 'QL@123';
-const MAT_KHAU_VD  = 'VD@123';
-const MAT_KHAU_ADM = 'Admin@123';
+const PASSWORDS = {
+  admin: 'Admin@123',
+  quan_ly: 'QL@123',
+  vender: 'VD@123',
+  ke_toan: 'KT@123',
+  cong_tac_vien: 'CTV@123',
+};
+
+const LAST_NAMES = ['Nguyen', 'Tran', 'Le', 'Pham', 'Hoang', 'Vo', 'Dang', 'Bui', 'Do', 'Ngo'];
+const MIDDLE_NAMES = ['Van', 'Thi', 'Minh', 'Duc', 'Quoc', 'Thanh', 'Gia', 'Anh', 'Bao', 'Thuy'];
+const FIRST_NAMES = ['An', 'Binh', 'Chi', 'Dung', 'Hieu', 'Khanh', 'Linh', 'Nam', 'Phuong', 'Quynh'];
+const PROVINCES = ['Ha Noi', 'Hai Duong', 'Nghe An', 'Da Nang', 'Quang Nam', 'Binh Dinh', 'Khanh Hoa', 'Dong Nai', 'Can Tho', 'An Giang'];
+const BANKS = ['Vietcombank', 'BIDV', 'VietinBank', 'Techcombank', 'ACB', 'MB', 'TPBank'];
+
+function pad2(n) { return String(n).padStart(2, '0'); }
+function rand(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
+function pick(arr) { return arr[rand(0, arr.length - 1)]; }
+function chance(rate) { return Math.random() < rate; }
+function toYmd(d) { return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; }
+function daysAgo(num) { const d = new Date(); d.setDate(d.getDate() - num); return d; }
+function addDays(ymd, days) { const d = new Date(ymd); d.setDate(d.getDate() + days); return toYmd(d); }
+
+function fullName(i) {
+  return `${LAST_NAMES[i % LAST_NAMES.length]} ${MIDDLE_NAMES[(i * 3) % MIDDLE_NAMES.length]} ${FIRST_NAMES[(i * 7) % FIRST_NAMES.length]}`;
+}
+function cccd(i) { return String(900000000000 + i); }
+function phone(i) { return `0${9 - (i % 4)}${String(10000000 + i).padStart(8, '0')}`.slice(0, 10); }
+function accountNo(i) { return String(100000000000 + i); }
+function salaryBase(i) { return 5200000 + (i % 8) * 250000; }
+function monthInfo(offset) {
+  const now = new Date();
+  const d = new Date(now.getFullYear(), now.getMonth() - offset, 1);
+  return { thang: d.getMonth() + 1, nam: d.getFullYear() };
+}
+
+async function createUser(ten_dang_nhap, ho_ten, vai_tro, hash, extra = {}) {
+  const r = await db.query(
+    `INSERT INTO users
+      (ten_dang_nhap, mat_khau_hash, ho_ten, vai_tro, so_dien_thoai, ngan_hang, so_tai_khoan, ten_chu_tk, tien_cong_moi_nguoi)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+     RETURNING id`,
+    [
+      ten_dang_nhap,
+      hash,
+      ho_ten,
+      vai_tro,
+      extra.so_dien_thoai || null,
+      extra.ngan_hang || null,
+      extra.so_tai_khoan || null,
+      extra.ten_chu_tk || null,
+      extra.tien_cong_moi_nguoi || 0,
+    ],
+  );
+  return r.rows[0].id;
+}
 
 async function seed() {
-  console.log('⚠️  Seed sẽ XÓA toàn bộ data hiện tại...\n');
+  console.log('Seeding demo data...');
 
-  // ── 0. Xóa data cũ theo thứ tự FK ────────────────────────────────────────
-  await db.query('DELETE FROM refresh_tokens');
-  await db.query('DELETE FROM quan_ly_cong_ty');
-  await db.query('DELETE FROM cong_nhan');
-  await db.query('DELETE FROM cong_ty');
-  await db.query('DELETE FROM users');
-  // Reset sequences
-  for (const t of ['users', 'cong_ty', 'cong_nhan', 'quan_ly_cong_ty']) {
-    await db.query(`ALTER SEQUENCE ${t}_id_seq RESTART WITH 1`);
-  }
-  console.log('✓ Đã xóa data cũ\n');
-
-  // ── 1. Hash passwords song song ──────────────────────────────────────────
-  const [hashAdm, hashQL, hashVD] = await Promise.all([
-    bcrypt.hash(MAT_KHAU_ADM, 10),
-    bcrypt.hash(MAT_KHAU_QL, 10),
-    bcrypt.hash(MAT_KHAU_VD, 10),
-  ]);
-
-  // ── 2. Tạo users ─────────────────────────────────────────────────────────
-  const usersData = [
-    { ten_dang_nhap: 'admin',      ho_ten: 'Nguyễn Quản Trị',     vai_tro: 'admin',   hash: hashAdm },
-    { ten_dang_nhap: 'tuan_ql',    ho_ten: 'Nguyễn Thành Tuấn',   vai_tro: 'quan_ly', hash: hashQL  },
-    { ten_dang_nhap: 'minh_ql',    ho_ten: 'Trần Văn Minh',       vai_tro: 'quan_ly', hash: hashQL  },
-    { ten_dang_nhap: 'hoa_vender', ho_ten: 'Lê Thị Hoa',          vai_tro: 'vender',  hash: hashVD  },
-    { ten_dang_nhap: 'duc_vender', ho_ten: 'Phạm Văn Đức',        vai_tro: 'vender',  hash: hashVD  },
-  ];
-
-  const userIds = {};
-  for (const u of usersData) {
-    const r = await db.query(
-      `INSERT INTO users (ten_dang_nhap, mat_khau_hash, ho_ten, vai_tro)
-       VALUES ($1, $2, $3, $4) RETURNING id`,
-      [u.ten_dang_nhap, u.hash, u.ho_ten, u.vai_tro],
-    );
-    userIds[u.ten_dang_nhap] = r.rows[0].id;
-  }
-  console.log('✓ Đã tạo 5 users:', Object.entries(userIds).map(([k, v]) => `${k}(#${v})`).join(', '));
-
-  // ── 3. Tạo công ty ────────────────────────────────────────────────────────
-  const congTyData = [
-    {
-      ten: 'Công ty TNHH Sản xuất ABC',
-      dia_chi: '123 Nguyễn Văn Linh, Q.7, TP.HCM',
-      sdt: '0281234567', email: 'abc@congty.vn',
-      luong_co_ban: 5500000, luong_theo_gio: 35000, he_so_ot: 1.5, ngay_lam_chuan: 26,
-    },
-    {
-      ten: 'Công ty Cổ phần Dịch vụ XYZ',
-      dia_chi: '456 Lê Văn Việt, Q.9, TP.HCM',
-      sdt: '0287654321', email: 'xyz@congty.vn',
-      luong_co_ban: 6000000, luong_theo_gio: 40000, he_so_ot: 1.5, ngay_lam_chuan: 26,
-    },
-    {
-      ten: 'Công ty TNHH Thương mại DEF',
-      dia_chi: '789 Đinh Tiên Hoàng, Bình Thạnh, TP.HCM',
-      sdt: '0289876543', email: 'def@congty.vn',
-      luong_co_ban: 5200000, luong_theo_gio: 33000, he_so_ot: 1.5, ngay_lam_chuan: 26,
-    },
-    {
-      ten: 'Công ty Cổ phần Xây dựng GHI',
-      dia_chi: '321 Cộng Hòa, Tân Bình, TP.HCM',
-      sdt: '0283456789', email: 'ghi@congty.vn',
-      luong_co_ban: 5800000, luong_theo_gio: 38000, he_so_ot: 2.0, ngay_lam_chuan: 26,
-    },
-  ];
-
-  const congTyIds = [];
-  for (const ct of congTyData) {
-    const r = await db.query(
-      `INSERT INTO cong_ty (ten_cong_ty, dia_chi, so_dien_thoai, email, luong_co_ban, luong_theo_gio, he_so_ot, ngay_lam_chuan)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
-      [ct.ten, ct.dia_chi, ct.sdt, ct.email, ct.luong_co_ban, ct.luong_theo_gio, ct.he_so_ot, ct.ngay_lam_chuan],
-    );
-    congTyIds.push(r.rows[0].id);
-  }
-  const [ctyABC, ctyXYZ, ctyDEF, ctyGHI] = congTyIds;
-  console.log(`✓ Đã tạo 4 công ty: ABC(#${ctyABC}) XYZ(#${ctyXYZ}) DEF(#${ctyDEF}) GHI(#${ctyGHI})`);
-
-  // ── 4. Phân công quản lý ──────────────────────────────────────────────────
-  // tuan_ql   → ABC + XYZ   (1 quản lý nhiều công ty)
-  // minh_ql   → XYZ + DEF   (XYZ có 2 quản lý: tuan + minh)
-  const assignments = [
-    [userIds.tuan_ql, ctyABC],
-    [userIds.tuan_ql, ctyXYZ],
-    [userIds.minh_ql, ctyXYZ],
-    [userIds.minh_ql, ctyDEF],
-  ];
-  for (const [uid, cid] of assignments) {
+  await db.query('BEGIN');
+  try {
     await db.query(
-      `INSERT INTO quan_ly_cong_ty (user_id, cong_ty_id) VALUES ($1, $2)`,
-      [uid, cid],
+      `TRUNCATE TABLE
+        refresh_tokens, cham_cong, phan_cong, giao_dich_tai_chinh, hoa_don_ktx,
+        thue_phong, giuong, phong, ky_tuc_xa, thue_phong_tro, phong_tro,
+        ocr_quet, quan_ly_cong_ty, cong_nhan, cong_ty, users
+       RESTART IDENTITY CASCADE`,
     );
+
+    const [hashAdmin, hashQl, hashVender, hashKeToan, hashCtv] = await Promise.all([
+      bcrypt.hash(PASSWORDS.admin, 10),
+      bcrypt.hash(PASSWORDS.quan_ly, 10),
+      bcrypt.hash(PASSWORDS.vender, 10),
+      bcrypt.hash(PASSWORDS.ke_toan, 10),
+      bcrypt.hash(PASSWORDS.cong_tac_vien, 10),
+    ]);
+
+    const adminId = await createUser('admin', 'Admin WorkerOS', 'admin', hashAdmin, { so_dien_thoai: '0900000000' });
+    const keToanId = await createUser('ke_toan', 'Ke Toan Tong', 'ke_toan', hashKeToan, { so_dien_thoai: '0900000001' });
+    const managerIds = [];
+    const venderIds = [];
+    const ctvIds = [];
+
+    for (let i = 1; i <= 20; i += 1) {
+      managerIds.push(await createUser(`ql_${pad2(i)}`, `Quan Ly ${fullName(i)}`, 'quan_ly', hashQl, {
+        so_dien_thoai: phone(100 + i),
+        ngan_hang: pick(BANKS),
+        so_tai_khoan: accountNo(100 + i),
+        ten_chu_tk: `QUAN LY ${i}`,
+      }));
+    }
+    for (let i = 1; i <= 10; i += 1) {
+      venderIds.push(await createUser(`vender_${pad2(i)}`, `Vender ${fullName(i + 50)}`, 'vender', hashVender, {
+        so_dien_thoai: phone(200 + i),
+        ngan_hang: pick(BANKS),
+        so_tai_khoan: accountNo(200 + i),
+        ten_chu_tk: `VENDER ${i}`,
+      }));
+    }
+    for (let i = 1; i <= 5; i += 1) {
+      ctvIds.push(await createUser(`ctv_${pad2(i)}`, `Cong Tac Vien ${fullName(i + 80)}`, 'cong_tac_vien', hashCtv, {
+        so_dien_thoai: phone(300 + i),
+        tien_cong_moi_nguoi: 120000 + i * 10000,
+      }));
+    }
+
+    const companyRows = [];
+    for (let i = 1; i <= 20; i += 1) {
+      const r = await db.query(
+        `INSERT INTO cong_ty
+          (ten_cong_ty, dia_chi, so_dien_thoai, email, luong_co_ban, luong_theo_gio, he_so_ot, ngay_lam_chuan, luong_tc_ngay, luong_hc_dem, luong_tc_dem, luong_chu_nhat, luong_ngay_le, tien_dong_phuc, tien_phat_nghi, don_gia_theo_gio_vender, tro_cap, chuyen_can, ngay_chot_cong, mo_ta_cong_viec)
+         VALUES
+          ($1,$2,$3,$4,$5,$6,$7,26,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+         RETURNING id, luong_co_ban, luong_theo_gio`,
+        [
+          `Cong Ty Demo ${pad2(i)}`,
+          `${100 + i} Duong Demo, ${pick(PROVINCES)}`,
+          `028${String(1000000 + i).slice(-7)}`,
+          `demo${i}@company.vn`,
+          salaryBase(i),
+          32000 + i * 450,
+          1.5 + (i % 3) * 0.25,
+          42000 + i * 300,
+          28000 + i * 250,
+          52000 + i * 350,
+          65000 + i * 200,
+          90000 + i * 300,
+          250000 + i * 10000,
+          180000 + i * 12000,
+          20000 + i * 1500,
+          250000 + i * 12000,
+          300000 + i * 15000,
+          25,
+          `Mo ta cong viec cong ty ${i}`,
+        ],
+      );
+      companyRows.push(r.rows[0]);
+    }
+    const companyIds = companyRows.map((r) => r.id);
+
+    for (let i = 0; i < managerIds.length; i += 1) {
+      const c1 = companyIds[i % companyIds.length];
+      const c2 = companyIds[(i + 7) % companyIds.length];
+      await db.query(`INSERT INTO quan_ly_cong_ty (user_id, cong_ty_id) VALUES ($1,$2),($1,$3)`, [managerIds[i], c1, c2]);
+    }
+
+    const dmRes = await db.query(`SELECT id, ten FROM danh_muc_giao_dich`);
+    const dmMap = Object.fromEntries(dmRes.rows.map((r) => [r.ten, r.id]));
+
+    const workerRows = [];
+    const phanCongRows = [];
+    const recruiterPool = [adminId, ...managerIds, ...venderIds, ...ctvIds];
+    const statusPool = ['dang_lam', 'dang_lam', 'dang_lam', 'moi_vao', 'nghi_phep', 'nghi_viec'];
+
+    for (let i = 1; i <= 200; i += 1) {
+      const recruiterId = recruiterPool[i % recruiterPool.length];
+      const companyId = companyIds[(i * 3) % companyIds.length];
+      const status = statusPool[i % statusPool.length];
+      const ngayVao = toYmd(daysAgo(rand(5, 260)));
+      const ngaySinh = toYmd(new Date(rand(1988, 2004), rand(0, 11), rand(1, 28)));
+      const ngayCap = toYmd(new Date(rand(2018, 2024), rand(0, 11), rand(1, 28)));
+      const gioi_tinh = i % 2 ? 'Nam' : 'Nữ';
+      const r = await db.query(
+        `INSERT INTO cong_nhan
+          (ho_ten, cccd, ngay_sinh, gioi_tinh, que_quan, dia_chi_hien_tai, so_dien_thoai, ngay_cap_cccd, noi_cap_cccd, trang_thai, ngay_vao_lam, ghi_chu, nguoi_tuyen_id, cong_ty_id, da_tra_dong_phuc, da_viet_don_nghi, ngan_hang, so_tai_khoan, ten_chu_tk, cccd_da_tra, muon_xe, loai_xe, xe_da_tra)
+         VALUES
+          ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
+         RETURNING id, ngay_vao_lam, cong_ty_id, nguoi_tuyen_id, trang_thai`,
+        [
+          `Cong Nhan ${fullName(i)}`,
+          cccd(i),
+          ngaySinh,
+          gioi_tinh,
+          pick(PROVINCES),
+          `${rand(1, 999)} Khu pho ${rand(1, 20)}, ${pick(PROVINCES)}`,
+          phone(500 + i),
+          ngayCap,
+          'Cuc Canh Sat QLHC',
+          status,
+          ngayVao,
+          `Ghi chu demo cong nhan ${i}`,
+          recruiterId,
+          companyId,
+          chance(0.7),
+          chance(0.25),
+          pick(BANKS),
+          accountNo(500 + i),
+          `CONG NHAN ${i}`,
+          chance(0.35),
+          chance(0.4),
+          chance(0.4) ? pick(['xe_dap', 'xe_dien', 'xe_may']) : null,
+          chance(0.3),
+        ],
+      );
+      workerRows.push(r.rows[0]);
+
+      const pc = await db.query(
+        `INSERT INTO phan_cong (cong_nhan_id, cong_ty_id, ngay_bat_dau, ghi_chu)
+         VALUES ($1,$2,$3,$4)
+         RETURNING id, cong_nhan_id`,
+        [r.rows[0].id, companyId, ngayVao, 'Phan cong seed'],
+      );
+      phanCongRows.push(pc.rows[0]);
+    }
+
+    const activePc = phanCongRows.slice(0, 120);
+    for (const pc of activePc) {
+      for (let d = 2; d <= 24; d += 1) {
+        const day = daysAgo(d);
+        const weekDay = day.getDay();
+        if (weekDay === 0) continue;
+        if (weekDay === 6 && chance(0.5)) continue;
+        const ngay = toYmd(day);
+        await db.query(
+          `INSERT INTO cham_cong (phan_cong_id, ngay, so_gio, so_gio_ot, ca_lam, ghi_chu)
+           VALUES ($1,$2,$3,$4,$5,$6)`,
+          [pc.id, ngay, 8, chance(0.35) ? rand(1, 3) : 0, weekDay === 6 ? 'Ca B' : 'Ca A', 'Cham cong demo'],
+        );
+      }
+    }
+
+    const roomRows = [];
+    const bedRows = [];
+    for (let k = 1; k <= 5; k += 1) {
+      const ktx = await db.query(
+        `INSERT INTO ky_tuc_xa (ten, dia_chi, ghi_chu) VALUES ($1,$2,$3) RETURNING id`,
+        [`KTX ${pad2(k)}`, `${200 + k} Duong KTX, ${pick(PROVINCES)}`, `KTX demo ${k}`],
+      );
+      for (let r = 1; r <= 8; r += 1) {
+        const room = await db.query(
+          `INSERT INTO phong (ktx_id, ten_phong, tang, suc_chua, tien_phong, ghi_chu)
+           VALUES ($1,$2,$3,$4,$5,$6) RETURNING id, tien_phong`,
+          [ktx.rows[0].id, `P${k}${pad2(r)}`, 1 + Math.floor((r - 1) / 3), 6, 1500000 + r * 80000, 'Phong demo'],
+        );
+        roomRows.push(room.rows[0]);
+        for (let b = 1; b <= 6; b += 1) {
+          const bed = await db.query(
+            `INSERT INTO giuong (phong_id, so_thu_tu, ghi_chu) VALUES ($1,$2,$3) RETURNING id, phong_id`,
+            [room.rows[0].id, b, 'Giuong demo'],
+          );
+          bedRows.push(bed.rows[0]);
+        }
+      }
+    }
+
+    const activeWorkers = workerRows.filter((w) => w.trang_thai !== 'nghi_viec');
+    const ktxWorkers = activeWorkers.slice(0, 150);
+    for (let i = 0; i < ktxWorkers.length; i += 1) {
+      const w = ktxWorkers[i];
+      const bed = bedRows[i];
+      await db.query(
+        `INSERT INTO thue_phong (cong_nhan_id, giuong_id, ngay_vao, ghi_chu)
+         VALUES ($1,$2,$3,$4)`,
+        [w.id, bed.id, addDays(w.ngay_vao_lam, rand(0, 10)), 'Thue giuong demo'],
+      );
+    }
+
+    const m0 = monthInfo(0);
+    const m1 = monthInfo(1);
+    for (const room of roomRows) {
+      const baseDien = rand(1500, 2600);
+      const baseNuoc = rand(220, 420);
+      for (const m of [m1, m0]) {
+        const dienCu = baseDien + (m === m0 ? 80 : 0);
+        const nuocCu = baseNuoc + (m === m0 ? 15 : 0);
+        await db.query(
+          `INSERT INTO hoa_don_ktx
+            (phong_id, thang, nam, dien_cu, dien_moi, don_gia_dien, nuoc_cu, nuoc_moi, don_gia_nuoc, tien_phong, ghi_chu)
+           VALUES
+            ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+          [room.id, m.thang, m.nam, dienCu, dienCu + rand(35, 70), 3200, nuocCu, nuocCu + rand(8, 20), 17000, room.tien_phong, 'Hoa don demo'],
+        );
+      }
+    }
+
+    const phongTroIds = [];
+    for (let i = 1; i <= 15; i += 1) {
+      const pt = await db.query(
+        `INSERT INTO phong_tro (ten, dia_chi, map_url, chu_tro, sdt_chu_tro, so_phong, tien_phong, ghi_chu, ngan_hang, so_tai_khoan, ten_chu_tk)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
+        [
+          `Nha tro ${pad2(i)}`,
+          `${300 + i} Duong Tro, ${pick(PROVINCES)}`,
+          `https://maps.google.com/?q=nha+tro+${i}`,
+          `Chu tro ${i}`,
+          phone(700 + i),
+          rand(8, 24),
+          2300000 + i * 50000,
+          'Nha tro demo',
+          pick(BANKS),
+          accountNo(800 + i),
+          `CHU TRO ${i}`,
+        ],
+      );
+      phongTroIds.push(pt.rows[0].id);
+    }
+
+    const troWorkers = activeWorkers.slice(150);
+    for (let i = 0; i < troWorkers.length; i += 1) {
+      const w = troWorkers[i];
+      await db.query(
+        `INSERT INTO thue_phong_tro (cong_nhan_id, phong_tro_id, ngay_vao, ghi_chu)
+         VALUES ($1,$2,$3,$4)`,
+        [w.id, phongTroIds[i % phongTroIds.length], addDays(w.ngay_vao_lam, rand(5, 20)), 'Thue phong tro demo'],
+      );
+    }
+
+    for (const w of workerRows) {
+      const comp = companyRows.find((c) => c.id === w.cong_ty_id);
+      for (const m of [m1, m0]) {
+        await db.query(
+          `INSERT INTO giao_dich_tai_chinh
+            (cong_nhan_id, danh_muc_id, loai, so_tien, ngay, ghi_chu, created_by)
+           VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+          [w.id, dmMap.Lương, 'luong', Number(comp.luong_co_ban), `${m.nam}-${pad2(m.thang)}-25`, `Luong thang ${m.thang}/${m.nam}`, keToanId],
+        );
+        if (chance(0.35)) {
+          await db.query(
+            `INSERT INTO giao_dich_tai_chinh
+              (cong_nhan_id, danh_muc_id, loai, so_tien, ngay, ghi_chu, created_by)
+             VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+            [w.id, dmMap.Thưởng, 'thuong', rand(200000, 1200000), `${m.nam}-${pad2(m.thang)}-26`, 'Thuong hieu suat', keToanId],
+          );
+        }
+      }
+      if (chance(0.45)) {
+        await db.query(
+          `INSERT INTO giao_dich_tai_chinh
+            (cong_nhan_id, danh_muc_id, loai, so_tien, ngay, ghi_chu, created_by, da_hoan_tien)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+          [w.id, dmMap['Tạm ứng'], 'tam_ung', rand(300000, 2500000), toYmd(daysAgo(rand(3, 45))), 'Tam ung demo', w.nguoi_tuyen_id || adminId, chance(0.4)],
+        );
+      }
+      if (chance(0.25)) {
+        await db.query(
+          `INSERT INTO giao_dich_tai_chinh
+            (cong_nhan_id, danh_muc_id, loai, so_tien, ngay, ghi_chu, created_by)
+           VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+          [w.id, dmMap['Tiền phòng KTX'], 'tien_phong_ktx', rand(350000, 900000), toYmd(daysAgo(rand(5, 40))), 'Khau tru tien phong', keToanId],
+        );
+      }
+    }
+
+    for (let i = 0; i < 80; i += 1) {
+      const creatorPool = [adminId, ...managerIds, ...venderIds];
+      const creator = creatorPool[i % creatorPool.length];
+      const approved = chance(0.6);
+      const worker = workerRows[i % workerRows.length];
+      await db.query(
+        `INSERT INTO ocr_quet (loai, duong_dan_anh, ket_qua_json, trang_thai, created_by, cong_nhan_id, ghi_chu)
+         VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+        [
+          i % 3 === 0 ? 'danh_sach' : 'cccd',
+          `/uploads/ocr/demo_${i + 1}.jpg`,
+          JSON.stringify({ index: i + 1, ho_ten: worker.id }),
+          approved ? 'da_duyet' : 'cho_duyet',
+          creator,
+          approved ? worker.id : null,
+          approved ? 'Duyet tu dong seed' : 'Cho duyet demo',
+        ],
+      );
+    }
+
+    await db.query('COMMIT');
+
+    console.log('Seed done.');
+    console.log('Accounts:');
+    console.log(`- admin / ${PASSWORDS.admin}`);
+    console.log(`- ql_01..ql_20 / ${PASSWORDS.quan_ly}`);
+    console.log(`- vender_01..vender_10 / ${PASSWORDS.vender}`);
+    console.log(`- ke_toan / ${PASSWORDS.ke_toan}`);
+    console.log(`- ctv_01..ctv_05 / ${PASSWORDS.cong_tac_vien}`);
+    console.log('Data counts: 5 KTX, 20 cong ty, 20 quan ly, 10 vender, 200 cong nhan, 2 thang thu/chi.');
+  } catch (err) {
+    await db.query('ROLLBACK');
+    throw err;
+  } finally {
+    await db.end();
   }
-  console.log('✓ Phân công quản lý:');
-  console.log(`  tuan_ql (#${userIds.tuan_ql}) → ABC(#${ctyABC}) + XYZ(#${ctyXYZ})  ← 1 QL nhiều cty`);
-  console.log(`  minh_ql (#${userIds.minh_ql}) → XYZ(#${ctyXYZ}) + DEF(#${ctyDEF})  ← XYZ có 2 QL`);
-
-  // ── 5. Tạo công nhân ─────────────────────────────────────────────────────
-  // today = CURRENT_DATE trong SQL, dùng 'today' làm placeholder
-  const today = new Date().toISOString().split('T')[0];
-  const d = (offset) => {
-    const dt = new Date();
-    dt.setDate(dt.getDate() - offset);
-    return dt.toISOString().split('T')[0];
-  };
-
-  // [ho_ten, cccd, ngay_sinh, gioi_tinh, que_quan, sdt, trang_thai, ngay_vao_lam, nguoi_tuyen_id]
-  const congNhanData = [
-    // ── Tuyển bởi admin (5 người) ──
-    ['Nguyễn Văn An',       '034111222333', '1995-03-15', 'Nam', 'Hà Nội',      '0901234001', 'dang_lam',  d(90),  userIds.admin],
-    ['Trần Thị Bình',       '034222333444', '1997-07-22', 'Nữ',  'Nghệ An',     '0901234002', 'dang_lam',  d(60),  userIds.admin],
-    ['Lê Văn Cường',        '034333444555', '1993-11-08', 'Nam', 'Thanh Hóa',   '0901234003', 'moi_vao',   today,  userIds.admin],
-    ['Phạm Thị Dung',       '034444555666', '1999-05-30', 'Nữ',  'Hà Tĩnh',     '0901234004', 'dang_lam',  d(45),  userIds.admin],
-    ['Hoàng Văn Em',        '034555666777', '1996-09-14', 'Nam', 'Nam Định',    '0901234005', 'nghi_phep', d(120), userIds.admin],
-
-    // ── Tuyển bởi tuan_ql (6 người) ──
-    ['Vũ Thị Phương',       '034666777888', '1998-01-25', 'Nữ',  'Bắc Giang',   '0902234001', 'dang_lam',  d(75),  userIds.tuan_ql],
-    ['Đặng Văn Quang',      '034777888999', '1994-06-18', 'Nam', 'Bắc Ninh',    '0902234002', 'dang_lam',  d(50),  userIds.tuan_ql],
-    ['Bùi Thị Rin',         '034888999000', '2000-12-03', 'Nữ',  'Hải Dương',   '0902234003', 'moi_vao',   today,  userIds.tuan_ql],
-    ['Ngô Văn Sơn',         '035111222333', '1992-04-09', 'Nam', 'Hưng Yên',    '0902234004', 'dang_lam',  d(100), userIds.tuan_ql],
-    ['Đinh Thị Thu',        '035222333444', '1997-08-16', 'Nữ',  'Thái Bình',   '0902234005', 'dang_lam',  d(30),  userIds.tuan_ql],
-    ['Trịnh Văn Uy',        '035333444555', '1995-02-27', 'Nam', 'Ninh Bình',   '0902234006', 'nghi_viec', d(180), userIds.tuan_ql],
-
-    // ── Tuyển bởi minh_ql (5 người) ──
-    ['Lý Thị Vân',          '035444555666', '1999-10-11', 'Nữ',  'Quảng Bình',  '0903234001', 'dang_lam',  d(40),  userIds.minh_ql],
-    ['Phan Văn Xuyên',      '035555666777', '1993-07-04', 'Nam', 'Quảng Trị',   '0903234002', 'dang_lam',  d(55),  userIds.minh_ql],
-    ['Cao Thị Yến',         '035666777888', '2001-03-19', 'Nữ',  'Thừa Thiên Huế', '0903234003', 'moi_vao', d(3),  userIds.minh_ql],
-    ['Mai Văn Zung',        '035777888999', '1996-11-28', 'Nam', 'Đà Nẵng',     '0903234004', 'dang_lam',  d(70),  userIds.minh_ql],
-    ['Trương Thị Ánh',      '035888999000', '1998-06-07', 'Nữ',  'Quảng Nam',   '0903234005', 'dang_lam',  d(85),  userIds.minh_ql],
-
-    // ── Tuyển bởi hoa_vender (3 người) ──
-    ['Lương Văn Bảo',       '036111222333', '1994-09-22', 'Nam', 'Quảng Ngãi',  '0904234001', 'dang_lam',  d(35),  userIds.hoa_vender],
-    ['Đoàn Thị Chiều',      '036222333444', '2000-04-15', 'Nữ',  'Bình Định',   '0904234002', 'moi_vao',   today,  userIds.hoa_vender],
-    ['Tô Văn Danh',         '036333444555', '1997-12-30', 'Nam', 'Phú Yên',     '0904234003', 'dang_lam',  d(20),  userIds.hoa_vender],
-
-    // ── Tuyển bởi duc_vender (2 người) ──
-    ['Hà Thị Ếm',           '036444555666', '1999-08-05', 'Nữ',  'Khánh Hòa',   '0905234001', 'dang_lam',  d(25),  userIds.duc_vender],
-    ['Kiều Văn Phong',      '036555666777', '1995-01-17', 'Nam', 'Ninh Thuận',  '0905234002', 'nghi_phep', d(150), userIds.duc_vender],
-  ];
-
-  let cnCount = 0;
-  for (const [ho_ten, cccd, ngay_sinh, gioi_tinh, que_quan, sdt, trang_thai, ngay_vao_lam, tuyen_id] of congNhanData) {
-    await db.query(
-      `INSERT INTO cong_nhan
-         (ho_ten, cccd, ngay_sinh, gioi_tinh, que_quan, so_dien_thoai,
-          trang_thai, ngay_vao_lam, nguoi_tuyen_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-      [ho_ten, cccd, ngay_sinh, gioi_tinh, que_quan, sdt, trang_thai, ngay_vao_lam, tuyen_id],
-    );
-    cnCount++;
-  }
-  console.log(`\n✓ Đã tạo ${cnCount} công nhân`);
-
-  // ── 6. Tổng kết ──────────────────────────────────────────────────────────
-  console.log('\n══════════════════════════════════════════════════════');
-  console.log('  SEED HOÀN THÀNH — Tài khoản test:');
-  console.log('══════════════════════════════════════════════════════');
-  console.log('  ROLE          TÊN ĐĂNG NHẬP   MẬT KHẨU');
-  console.log('  ─────────────────────────────────────────────────');
-  console.log('  Admin         admin            Admin@123');
-  console.log('  Quản lý       tuan_ql          QL@123    (ABC + XYZ)');
-  console.log('  Quản lý       minh_ql          QL@123    (XYZ + DEF)');
-  console.log('  Vender        hoa_vender       VD@123    (tuyển 3 CN)');
-  console.log('  Vender        duc_vender       VD@123    (tuyển 2 CN)');
-  console.log('══════════════════════════════════════════════════════');
-  console.log('\n  Test cases phân quyền:');
-  console.log('  • tuan_ql quản lý 2 cty  → dropdown hiện ABC + XYZ');
-  console.log('  • minh_ql quản lý 2 cty  → dropdown hiện XYZ + DEF');
-  console.log('  • Cty XYZ có 2 QL        → cả tuan + minh đều thấy');
-  console.log('  • hoa_vender             → chỉ thấy 3 CN mình tuyển');
-  console.log('  • Hôm nay có 3 CN mới vào (An, Rin, Chiều)');
-  console.log('══════════════════════════════════════════════════════\n');
-
-  await db.end();
 }
 
 seed().catch((err) => {
-  console.error('\n✗ Seed thất bại:', err.message);
-  console.error(err.stack);
+  console.error('Seed failed:', err.message);
   process.exit(1);
 });

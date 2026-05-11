@@ -363,16 +363,18 @@ function PhongDetail({ phong, ktxId }) {
 }
 
 // ─── Main KTX page ────────────────────────────────────────
-export default function KTX() {
+export default function KTX({ forcePhongTro = false }) {
   const { isAdmin, isQuanLy, user } = useAuth();
-  const coQuyenXem = isAdmin || isQuanLy || user?.co_xem_ktx === true;
+  const canUseKtx = isAdmin && !forcePhongTro;
+  const canUsePhongTro = isAdmin || isQuanLy || user?.vai_tro === 'vender';
+  const coQuyenXem = canUseKtx || canUsePhongTro;
 
-  const { data: ktxRes, isLoading } = useKtxList();
+  const { data: ktxRes, isLoading } = useKtxList(canUseKtx);
   const ktxList = ktxRes?.data ?? [];
   const xoaKtx = useXoaKtx();
   const xoaPhong = useXoaPhong(null);
 
-  const [moduleTab,    setModuleTab]    = useState('ktx');  // 'ktx' | 'phong_tro'
+  const [moduleTab,    setModuleTab]    = useState(forcePhongTro ? 'phong_tro' : 'ktx');  // 'ktx' | 'phong_tro'
   const [selectedKtxId, setSelectedKtxId] = useState(null);
   const [selectedPhongId, setSelectedPhongId] = useState(null);
   const [addKtxModal, setAddKtxModal] = useState(false);
@@ -399,7 +401,15 @@ export default function KTX() {
     );
   }
 
-  if (isLoading) return <div style={{ padding: 40, color: 'var(--text2)' }}>Đang tải...</div>;
+  if (isLoading && canUseKtx) return <div style={{ padding: 40, color: 'var(--text2)' }}>Đang tải...</div>;
+
+  if (!canUseKtx && canUsePhongTro) {
+    return (
+      <div style={s.root}>
+        <PhongTroSection canDelete={isAdmin || isQuanLy} />
+      </div>
+    );
+  }
 
   return (
     <div style={s.root}>
@@ -420,7 +430,7 @@ export default function KTX() {
         ))}
       </div>
 
-      {moduleTab === 'phong_tro' ? <PhongTroSection /> : (
+      {moduleTab === 'phong_tro' ? <PhongTroSection canDelete={isAdmin || isQuanLy} /> : (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       {/* KTX tabs */}
       <div style={s.kanTabs}>
@@ -548,7 +558,7 @@ export default function KTX() {
 }
 
 // ─── Phòng trọ — section dùng API thật ────────────────────
-function PhongTroSection() {
+function PhongTroSection({ canDelete }) {
   const { data: ptRes, isLoading } = usePhongTroList();
   const list = ptRes?.data ?? [];
   const tao = useTaoPhongTro();
@@ -648,7 +658,9 @@ function PhongTroSection() {
                   <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text1)' }}>{p.ten}</div>
                   <div style={{ fontSize: 11, color: 'var(--text3)' }}>{p.dia_chi || '—'}</div>
                 </div>
-                <button onClick={() => handleXoa(p.id)} style={{ background: 'none', border: 'none', color: 'var(--red)', cursor: 'pointer', fontSize: 12 }}>✕</button>
+                {canDelete && (
+                  <button onClick={() => handleXoa(p.id)} style={{ background: 'none', border: 'none', color: 'var(--red)', cursor: 'pointer', fontSize: 12 }}>✕</button>
+                )}
               </div>
               <div style={{ fontSize: 12, color: 'var(--text2)' }}>
                 <div>👤 Chủ trọ: <b style={{ color: 'var(--text1)' }}>{p.chu_tro || '—'}</b></div>

@@ -41,18 +41,18 @@ const traSchema = z.object({
 });
 
 // ─── CRUD phong_tro ───────────────────────────────────────
-router.get('/', requireRole('admin', 'quan_ly'), asyncWrapper(async (req, res) => {
+router.get('/', requireRole('admin', 'quan_ly', 'vender'), asyncWrapper(async (req, res) => {
   const data = await model.findAll({ active: req.query.active });
   sendSuccess(res, data);
 }));
 
-router.get('/:id', requireRole('admin', 'quan_ly'), asyncWrapper(async (req, res) => {
+router.get('/:id', requireRole('admin', 'quan_ly', 'vender'), asyncWrapper(async (req, res) => {
   const data = await model.findById(parseInt(req.params.id, 10));
   if (!data) { const e = new Error('Không tìm thấy phòng trọ'); e.statusCode = 404; throw e; }
   sendSuccess(res, data);
 }));
 
-router.post('/', requireRole('admin'),
+router.post('/', requireRole('admin', 'quan_ly', 'vender'),
   validate(createSchema),
   asyncWrapper(async (req, res) => {
     const data = await model.create(req.validatedBody);
@@ -60,7 +60,7 @@ router.post('/', requireRole('admin'),
   }),
 );
 
-router.put('/:id', requireRole('admin'),
+router.put('/:id', requireRole('admin', 'quan_ly', 'vender'),
   validate(updateSchema),
   asyncWrapper(async (req, res) => {
     const data = await model.update(parseInt(req.params.id, 10), req.validatedBody);
@@ -69,19 +69,19 @@ router.put('/:id', requireRole('admin'),
   }),
 );
 
-router.delete('/:id', requireRole('admin'), asyncWrapper(async (req, res) => {
+router.delete('/:id', requireRole('admin', 'quan_ly'), asyncWrapper(async (req, res) => {
   const data = await model.remove(parseInt(req.params.id, 10));
   if (!data) { const e = new Error('Không tìm thấy phòng trọ'); e.statusCode = 404; throw e; }
   sendSuccess(res, null, 'Đã xoá phòng trọ');
 }));
 
 // ─── Thuê phòng trọ ───────────────────────────────────────
-router.get('/:id/thue', requireRole('admin', 'quan_ly'), asyncWrapper(async (req, res) => {
+router.get('/:id/thue', requireRole('admin', 'quan_ly', 'vender'), asyncWrapper(async (req, res) => {
   const data = await model.listThue(parseInt(req.params.id, 10));
   sendSuccess(res, data);
 }));
 
-router.post('/:id/thue', requireRole('admin', 'quan_ly'),
+router.post('/:id/thue', requireRole('admin', 'quan_ly', 'vender'),
   validate(ganSchema),
   asyncWrapper(async (req, res) => {
     const data = await model.ganCongNhan({
@@ -92,7 +92,7 @@ router.post('/:id/thue', requireRole('admin', 'quan_ly'),
   }),
 );
 
-router.put('/thue/:thueId/tra', requireRole('admin', 'quan_ly'),
+router.put('/thue/:thueId/tra', requireRole('admin', 'quan_ly', 'vender'),
   validate(traSchema),
   asyncWrapper(async (req, res) => {
     const data = await model.traPhong(

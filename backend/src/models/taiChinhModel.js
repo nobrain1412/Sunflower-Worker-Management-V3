@@ -43,7 +43,15 @@ async function updateDanhMuc(id, data) {
 }
 
 // ─── GIAO_DICH ────────────────────────────────────────────
-async function findAll({ page = 1, limit = 20, thang, nam, loai, cong_nhan_id }) {
+async function findAll({
+  page = 1,
+  limit = 20,
+  thang,
+  nam,
+  loai,
+  cong_nhan_id,
+  created_by,
+}) {
   const offset = (page - 1) * limit;
   const conditions = [];
   const params = [];
@@ -52,6 +60,7 @@ async function findAll({ page = 1, limit = 20, thang, nam, loai, cong_nhan_id })
   if (nam)          { params.push(nam);           conditions.push(`EXTRACT(YEAR FROM g.ngay)  = $${params.length}`); }
   if (loai)         { params.push(loai);          conditions.push(`g.loai = $${params.length}`); }
   if (cong_nhan_id) { params.push(cong_nhan_id);  conditions.push(`g.cong_nhan_id = $${params.length}`); }
+  if (created_by)   { params.push(created_by);    conditions.push(`g.created_by = $${params.length}`); }
 
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 

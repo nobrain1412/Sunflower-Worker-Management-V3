@@ -41,7 +41,7 @@ const NAV = [
   },
   {
     to: '/tai-chinh', label: 'Tài chính',
-    roles: ['admin','quan_ly'],
+    roles: ['admin','quan_ly','vender'],
     icon: (
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
         <line x1="12" y1="1" x2="12" y2="23" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
@@ -51,7 +51,17 @@ const NAV = [
   },
   {
     to: '/ktx', label: 'Phòng trọ',
-    roles: ['admin','quan_ly'],
+    roles: ['admin'],
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+        <polyline points="9 22 9 12 15 12 15 22" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    ),
+  },
+  {
+    to: '/phong-tro', label: 'Nhà trọ',
+    roles: ['quan_ly','vender'],
     icon: (
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
         <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -102,13 +112,14 @@ const ROLE_LABELS = {
   ke_toan:       'Kế toán',
 };
 
-export default function Sidebar() {
+export default function Sidebar({ onClose }) {
   const { user, logout, isQuanLy, selectedCongTyId, chonCongTy } = useAuth();
   const navigate = useNavigate();
   const vaiTro = user?.vai_tro ?? 'vender';
 
   async function handleLogout() {
     await logout();
+    if (onClose) onClose();
     navigate('/login');
   }
 
@@ -147,6 +158,7 @@ export default function Sidebar() {
             key={to}
             to={to}
             end={exact}
+            onClick={onClose}
             style={({ isActive }) => ({ ...s.link, ...(isActive ? s.linkActive : {}) })}
           >
             <span style={s.linkIcon}>{icon}</span>

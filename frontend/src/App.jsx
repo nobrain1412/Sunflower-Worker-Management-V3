@@ -63,18 +63,19 @@ export default function App() {
             <Route path="/ocr/cccd"      element={<PrivateRoute><ScanCCCD /></PrivateRoute>} />
             <Route path="/ocr/danh-sach" element={<PrivateRoute><BulkReview /></PrivateRoute>} />
 
-            {/* Chỉ admin và quan_ly */}
+            {/* Admin / quản lý / vender */}
             <Route path="/tai-chinh" element={
-              <RoleRoute allowedRoles={['admin','quan_ly']}><TaiChinh /></RoleRoute>
+              <RoleRoute allowedRoles={['admin','quan_ly','vender']}><TaiChinh /></RoleRoute>
             } />
-            <Route path="/ktx" element={
-              <RoleRoute allowedRoles={['admin','quan_ly']}><KTX /></RoleRoute>
-            } />
-            <Route path="/bao-cao" element={
-              <RoleRoute allowedRoles={['admin','quan_ly']}><BaoCao /></RoleRoute>
+            <Route path="/phong-tro" element={
+              <RoleRoute allowedRoles={['admin','quan_ly','vender']}><KTX forcePhongTro /></RoleRoute>
             } />
 
             {/* Chỉ admin */}
+            <Route path="/ktx" element={
+              <RoleRoute allowedRoles={['admin']}><KTX /></RoleRoute>
+            } />
+
             <Route path="/cong-ty" element={
               <RoleRoute allowedRoles={['admin']}><CongTy /></RoleRoute>
             } />
@@ -83,6 +84,9 @@ export default function App() {
             } />
             <Route path="/nhan-vien/:id" element={
               <RoleRoute allowedRoles={['admin']}><NhanVienDetail /></RoleRoute>
+            } />
+            <Route path="/bao-cao" element={
+              <RoleRoute allowedRoles={['admin','quan_ly']}><BaoCao /></RoleRoute>
             } />
 
             <Route path="*" element={<Navigate to="/" replace />} />

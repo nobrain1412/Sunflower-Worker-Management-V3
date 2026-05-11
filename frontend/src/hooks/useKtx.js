@@ -2,10 +2,11 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from './useApi';
 
 // ─── KY_TUC_XA ────────────────────────────────────────────
-export function useKtxList() {
+export function useKtxList(enabled = true) {
   return useQuery({
     queryKey: ['ktx'],
     queryFn:  () => api.get('/ktx'),
+    enabled,
     staleTime: 30_000,
   });
 }

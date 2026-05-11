@@ -19,27 +19,22 @@
 ---
 
 ## Danh sách lỗi
-- chữ ký túc xá ở side bar sửa thành Phòng trọ. những thứ bên trong không thay đổi
+- bỏ validate ở password, chỉ cần trên 6 ký tự
+- lỗi giao diện bị vỡ khi dùng trên điện thoại
 ## Tính năng mới
-- thêm cộng tác viên và kế toán
-- thêm danh sách user cho admin để quản lý role của các user
-- toàn bộ nhân viên, công nhân, chủ trọ đều sẽ thêm thông tin số tài khoản gồm ngân hàng, số tài khoản, tên chủ tài khoản
-- cấp quyền thêm sửa xoá user, công nhân, ký túc, phòng trọ, công ty cho admin
+
 # Dashboard
 - khi ấn vào tên vender, tên công nhân, tên phòng sẽ redirect sang thông tin chi tiết của vender, công nhân hoặc phòng đó
 # Công nhân
-- thêm lọc theo tỉnh
-- bỏ hệ thống lọc theo ngày hiện tại đi, chỉ lọc theo 1 ngày được chọn và định dạng là dd/mm/yyy
-- thêm trạng thái cccd và trạng thái mượn xe trong thông tin công nhân đã trả hay chưa, ở mượn xe sẽ thêm loại phương tiện như xe đạp,xe điện, xe máy nếu trạng thái mượn xe là có mượn
+- thêm chức năng thêm mới công nhân bằng cách đọc dữ liệu từ cccd hoặc chụp danh sách viết tay
+- tất cả các option lọc dữ liệu được thu vào trong 1 của sổ phụ, của sổ này sẽ hiện lên khi chọn nút lọc dữ liệu
 # Ký túc xá
-- ở phần hoá đơn giữ lại số điên nước cũ ở các phòng để nối tiếp cho tháng sau, người dùng chỉ nhập số nước tháng tới hệ thống sẽ tự tính ra
+- cho phép vender sử dụng chức năng nhà trọ
+- chức năng ký túc xá chỉ dành cho admin
 # công ty
-- thêm đơn giá theo giờ ở từng công ty, đây là tiền công trả cho vender dựa trên số giờ công nhân của vender đó làm việc tại công ty
-- thêm trợ cấp, chuyên cần, ngày chốt công
+
 # tài chính
-- xoá nút trạng thái hoàn ở các khoản tiêu
-- thêm nút xoá cho từng giao dịch, confirm trước khi xoá
+- cho phép vender sử dụng chức năng tài chính
 # nhân viên
-- danh sách nhân viên sẽ bao gồm tên,role, tổng lượng người đang làm, công ty đang quản lý nếu người đó có role quản lý. admin sẽ có thể thêm sửa xoá nhân viên, set role và công ty quản lý cho nhân viên
+
 # cộng tác viên
-- bao gồm danh sách cộng tác viên của của admin, thông tin của cộng tác viên sẽ bao gồm tên,số điện thoại, số lượng người tuyển được, tiền công mỗi người, tổng tiền 

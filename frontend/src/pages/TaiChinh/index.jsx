@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { useGiaoDichList, useTongThang, useTaoGiaoDich, useXoaGiaoDich, useDanhMuc, useTaoDanhMuc, useCapNhatDanhMuc } from '../../hooks/useTaiChinh';
 import { useTongTheoThang } from '../../hooks/useDashboard';
+import { useAuth } from '../../context/AuthContext';
 
 // Mới: chỉ còn 3 nhóm chính. Phân loại nhỏ chuyển sang `danh_muc_id`.
 const LOAI_MAIN = ['thu', 'chi', 'tieu'];
@@ -28,13 +29,13 @@ const LOAI_LABEL = {
 function fmt(n) { return Number(n || 0).toLocaleString('vi-VN') + 'đ'; }
 
 // ─── Modal thêm giao dịch ─────────────────────────────────
-function AddGiaoDichModal({ onClose }) {
+function AddGiaoDichModal({ onClose, isVender }) {
   const tao = useTaoGiaoDich();
   const { data: dmRes } = useDanhMuc();
   const dmList = dmRes?.data ?? [];
   const now = new Date();
   const [form, setForm] = useState({
-    loai: 'thu', so_tien: '', ngay: now.toISOString().split('T')[0],
+    loai: isVender ? 'tam_ung' : 'thu', so_tien: '', ngay: now.toISOString().split('T')[0],
     ghi_chu: '', danh_muc_id: '',
   });
   const [err, setErr] = useState('');
@@ -74,10 +75,16 @@ function AddGiaoDichModal({ onClose }) {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             <label className="form-label">Loại *</label>
-            <select className="form-input" name="loai" value={form.loai} onChange={handleChange}>
-              <option value="thu">↑ Thu</option>
-              <option value="chi">↓ Chi</option>
-              <option value="tieu">· Tiêu</option>
+            <select className="form-input" name="loai" value={form.loai} onChange={handleChange} disabled={isVender}>
+              {isVender ? (
+                <option value="tam_ung">↓ Tạm ứng</option>
+              ) : (
+                <>
+                  <option value="thu">↑ Thu</option>
+                  <option value="chi">↓ Chi</option>
+                  <option value="tieu">· Tiêu</option>
+                </>
+              )}
             </select>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -176,6 +183,8 @@ function DanhMucModal({ onClose }) {
 }
 
 export default function TaiChinh() {
+  const { user } = useAuth();
+  const isVender = user?.vai_tro === 'vender';
   const now = new Date();
   const [tab,           setTab]           = useState('giao-dich');
   const [addModal,      setAddModal]      = useState(false);
@@ -245,7 +254,7 @@ export default function TaiChinh() {
         {/* Tabs */}
         <div style={{ ...s.card, flex: 1, minWidth: 0 }}>
           <div style={s.tabs}>
-            {[['giao-dich','Giao dịch'],['danh-muc','Danh mục']].map(([v, label]) => (
+            {[['giao-dich','Giao dịch'], ...(!isVender ? [['danh-muc','Danh mục']] : [])].map(([v, label]) => (
               <button key={v} style={{ ...s.tab, ...(tab === v ? s.tabActive : {}) }} onClick={() => setTab(v)}>{label}</button>
             ))}
             <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center' }}>
@@ -263,6 +272,7 @@ export default function TaiChinh() {
                     <option value="thu">Thu</option>
                     <option value="chi">Chi</option>
                     <option value="tieu">Tiêu</option>
+                    <option value="tam_ung">Tạm ứng</option>
                   </select>
                 </>
               )}
@@ -295,17 +305,19 @@ export default function TaiChinh() {
                           <td style={s.td}><span style={{ fontSize: 12, color: 'var(--text2)' }}>{g.ngay ? new Date(g.ngay).toLocaleDateString('vi-VN') : '—'}</span></td>
                           <td style={s.td}><span style={{ fontSize: 12, color: 'var(--text2)' }}>{g.ghi_chu ?? '—'}</span></td>
                           <td style={s.td}>
-                            <button
-                              onClick={() => handleXoa(g)}
-                              title="Xoá giao dịch"
-                              style={{
-                                background: 'transparent',
-                                border: '1px solid var(--border)',
-                                borderRadius: 6, padding: '3px 8px', fontSize: 11,
-                                color: 'var(--red)', cursor: 'pointer',
-                                fontFamily: "'Be Vietnam Pro', sans-serif",
-                              }}
-                            >🗑 Xoá</button>
+                            {!isVender && (
+                              <button
+                                onClick={() => handleXoa(g)}
+                                title="Xoá giao dịch"
+                                style={{
+                                  background: 'transparent',
+                                  border: '1px solid var(--border)',
+                                  borderRadius: 6, padding: '3px 8px', fontSize: 11,
+                                  color: 'var(--red)', cursor: 'pointer',
+                                  fontFamily: "'Be Vietnam Pro', sans-serif",
+                                }}
+                              >🗑 Xoá</button>
+                            )}
                           </td>
                         </tr>
                       );
@@ -327,7 +339,7 @@ export default function TaiChinh() {
         </div>
       </div>
 
-      {addModal     && <AddGiaoDichModal onClose={() => setAddModal(false)} />}
+      {addModal     && <AddGiaoDichModal isVender={isVender} onClose={() => setAddModal(false)} />}
       {danhMucModal && <DanhMucModal onClose={() => setDanhMucModal(false)} />}
     </div>
   );

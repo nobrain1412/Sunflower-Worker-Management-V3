@@ -53,30 +53,75 @@ router.put('/danh-muc/:id', requireRole('admin'),
 );
 
 // ─── GIAO DỊCH ────────────────────────────────────────────
-router.get('/', requireRole('admin', 'quan_ly'), asyncWrapper(async (req, res) => {
+router.get('/', requireRole('admin', 'quan_ly', 'vender'), asyncWrapper(async (req, res) => {
   const page  = Math.max(1, parseInt(req.query.page  || '1',  10));
   const limit = Math.min(100, Math.max(1, parseInt(req.query.limit || '50', 10)));
+  const createdBy = req.user.vai_tro === 'vender' ? req.user.id : undefined;
   const { rows, total } = await model.findAll({
     page, limit,
     thang:       req.query.thang ? parseInt(req.query.thang, 10) : undefined,
     nam:         req.query.nam   ? parseInt(req.query.nam, 10)   : undefined,
     loai:        req.query.loai,
     cong_nhan_id: req.query.cong_nhan_id ? parseInt(req.query.cong_nhan_id, 10) : undefined,
+    created_by: createdBy,
   });
   sendSuccess(res, rows, 'Thành công', 200, {
     page, limit, total, total_pages: Math.ceil(total / limit),
   });
 }));
 
-router.get('/tong-theo-thang', requireRole('admin', 'quan_ly'), asyncWrapper(async (req, res) => {
+router.get('/tong-theo-thang', requireRole('admin', 'quan_ly', 'vender'), asyncWrapper(async (req, res) => {
   const soThang = Math.min(24, Math.max(1, parseInt(req.query.so_thang || '5', 10)));
+  if (req.user.vai_tro === 'vender') {
+    const now = new Date();
+    const data = [];
+    for (let i = soThang - 1; i >= 0; i -= 1) {
+      const current = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const thang = current.getMonth() + 1;
+      const nam = current.getFullYear();
+      const { rows } = await model.findAll({
+        page: 1,
+        limit: 1000,
+        thang,
+        nam,
+        created_by: req.user.id,
+      });
+      const thu = rows
+        .filter((g) => model.LOAI_THU.includes(g.loai))
+        .reduce((sum, g) => sum + Number(g.so_tien || 0), 0);
+      const chi = rows
+        .filter((g) => model.LOAI_CHI.includes(g.loai) && !g.da_hoan_tien)
+        .reduce((sum, g) => sum + Number(g.so_tien || 0), 0);
+      data.push({ thang, nam, thu, chi });
+    }
+    return sendSuccess(res, data);
+  }
   const data = await model.tongTheoThang(soThang);
   sendSuccess(res, data);
 }));
 
-router.get('/tong-thang', requireRole('admin', 'quan_ly'), asyncWrapper(async (req, res) => {
+router.get('/tong-thang', requireRole('admin', 'quan_ly', 'vender'), asyncWrapper(async (req, res) => {
   const thang = parseInt(req.query.thang || new Date().getMonth() + 1, 10);
   const nam   = parseInt(req.query.nam   || new Date().getFullYear(),  10);
+  if (req.user.vai_tro === 'vender') {
+    const { rows } = await model.findAll({
+      page: 1,
+      limit: 1000,
+      thang,
+      nam,
+      created_by: req.user.id,
+    });
+    const tong_thu = rows
+      .filter((g) => model.LOAI_THU.includes(g.loai))
+      .reduce((sum, g) => sum + Number(g.so_tien || 0), 0);
+    const tong_chi = rows
+      .filter((g) => model.LOAI_CHI.includes(g.loai) && !g.da_hoan_tien)
+      .reduce((sum, g) => sum + Number(g.so_tien || 0), 0);
+    const da_hoan = rows
+      .filter((g) => model.LOAI_CHI.includes(g.loai) && g.da_hoan_tien)
+      .reduce((sum, g) => sum + Number(g.so_tien || 0), 0);
+    return sendSuccess(res, { tong_thu, tong_chi, da_hoan });
+  }
   const data  = await model.tinhTongThang(thang, nam);
   sendSuccess(res, data);
 }));

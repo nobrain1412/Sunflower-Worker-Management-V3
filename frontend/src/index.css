@@ -159,6 +159,10 @@ body {
   /* Mobile sidebar drawer */
   .sidebar-overlay.open { display: block; }
   .sidebar-mobile.open  { display: block; }
+  .sidebar-mobile aside {
+    position: relative !important;
+    height: 100% !important;
+  }
 
   /* ---- Topbar ---- */
   .hamburger-btn  { display: flex !important; }
@@ -198,6 +202,9 @@ body {
 
   /* ---- Table helpers ---- */
   .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .layout-content {
+    overflow-x: hidden;
+  }
 }
 
 /* ========================================
