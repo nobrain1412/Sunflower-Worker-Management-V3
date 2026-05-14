@@ -1,9 +1,9 @@
 const { Router } = require('express');
 const { z } = require('zod');
-const path = require('path');
 const validate = require('../middleware/validate');
 const { authenticate, requireRole, scopeByRole } = require('../middleware/auth');
 const { uploadAnhCongNhan } = require('../middleware/upload');
+const { uploadBuffer } = require('../utils/cloudinary');
 const ctrl = require('../controllers/congNhanController');
 const asyncWrapper = require('../utils/asyncWrapper');
 const { sendSuccess } = require('../utils/response');
@@ -90,17 +90,26 @@ router.post('/:id/upload-anh',
   asyncWrapper(async (req, res) => {
     const id    = parseInt(req.params.id, 10);
     const files = req.files ?? {};
-    const UPLOAD_PATH = '/uploads/anh/'; // URL path served statically
 
-    const update = {};
-    if (files.cccd_mat_truoc?.[0]) update.anh_cccd_truoc = UPLOAD_PATH + files.cccd_mat_truoc[0].filename;
-    if (files.cccd_mat_sau?.[0])   update.anh_cccd_sau   = UPLOAD_PATH + files.cccd_mat_sau[0].filename;
-    if (files.anh_chan_dung?.[0])  update.anh_chan_dung   = UPLOAD_PATH + files.anh_chan_dung[0].filename;
+    const toUpload = [
+      { field: 'cccd_mat_truoc', key: 'anh_cccd_truoc' },
+      { field: 'cccd_mat_sau',   key: 'anh_cccd_sau' },
+      { field: 'anh_chan_dung',  key: 'anh_chan_dung' },
+    ].filter(({ field }) => files[field]?.[0]);
 
-    if (!Object.keys(update).length) {
+    if (!toUpload.length) {
       const err = new Error('Không có file nào được upload');
       err.statusCode = 400; throw err;
     }
+
+    const results = await Promise.all(
+      toUpload.map(({ field }) =>
+        uploadBuffer(files[field][0].buffer, { folder: 'workeros/anh-cong-nhan' }),
+      ),
+    );
+
+    const update = {};
+    toUpload.forEach(({ key }, i) => { update[key] = results[i].secure_url; });
 
     const cn = await congNhanModel.updateAnh(id, update);
     if (!cn) { const e = new Error('Không tìm thấy công nhân'); e.statusCode = 404; throw e; }
