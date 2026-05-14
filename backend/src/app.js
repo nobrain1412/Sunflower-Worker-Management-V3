@@ -19,6 +19,7 @@ const usersRoutes     = require('./routes/users');
 const ktxRoutes       = require('./routes/ktx');
 const phongTroRoutes  = require('./routes/phongTro');
 const taiChinhRoutes  = require('./routes/taiChinh');
+const ocrRoutes       = require('./routes/ocr');
 
 const app = express();
 
@@ -61,6 +62,7 @@ app.use('/api/users',     usersRoutes);
 app.use('/api/ktx',       ktxRoutes);
 app.use('/api/phong-tro', phongTroRoutes);
 app.use('/api/tai-chinh', taiChinhRoutes);
+app.use('/api/ocr',       ocrRoutes);
 
 // Health check
 app.get('/health', (_req, res) => res.json({ status: 'ok', ts: new Date().toISOString() }));
