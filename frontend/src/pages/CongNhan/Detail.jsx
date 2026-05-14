@@ -1,10 +1,11 @@
 import { useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useCongNhanDetail, useCapNhatCongNhan, useNoiOCongNhan, useTongUngCongNhan } from '../../hooks/useCongNhan';
-import { useGiaoDichCongNhan, useTaoGiaoDich } from '../../hooks/useTaiChinh';
+import { useGiaoDichCongNhan } from '../../hooks/useTaiChinh';
 import { useLichSuPhong } from '../../hooks/useKtx';
 import { useAuth } from '../../context/AuthContext';
 import ProvinceSelect from '../../components/ProvinceSelect';
+import ChuyenKhoanModal from '../../components/ChuyenKhoanModal';
 import api from '../../hooks/useApi';
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -49,53 +50,6 @@ const fs = {
   label: { fontSize: 10, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em' },
   value: { fontSize: 13, color: 'var(--text1)', fontWeight: 500, lineHeight: 1.45, overflowWrap: 'anywhere' },
 };
-
-// ─── Modal tạm ứng ────────────────────────────────────────
-function TamUngModal({ cn, onClose }) {
-  const tao = useTaoGiaoDich();
-  const [form, setForm] = useState({ so_tien: '', ghi_chu: '', ngay: new Date().toISOString().split('T')[0] });
-  const [err, setErr] = useState('');
-
-  async function handle() {
-    setErr('');
-    if (!form.so_tien || parseFloat(form.so_tien) <= 0) { setErr('Nhập số tiền hợp lệ'); return; }
-    try {
-      await tao.mutateAsync({
-        cong_nhan_id: cn.id,
-        loai: 'tam_ung',
-        so_tien: parseFloat(form.so_tien),
-        ngay: form.ngay,
-        ghi_chu: form.ghi_chu || undefined,
-      });
-      onClose();
-    } catch (e) { setErr(e?.response?.data?.error?.message ?? 'Lỗi'); }
-  }
-
-  return (
-    <div style={M.overlay} onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div style={M.modal}>
-        <div style={M.title}>Cho ứng — {cn.ho_ten}</div>
-        <div style={{ marginBottom: 10 }}>
-          <label className="form-label">Số tiền *</label>
-          <input className="form-input" type="number" placeholder="500000" value={form.so_tien} onChange={(e) => setForm((f) => ({ ...f, so_tien: e.target.value }))} />
-        </div>
-        <div style={{ marginBottom: 10 }}>
-          <label className="form-label">Ngày</label>
-          <input className="form-input" type="date" value={form.ngay} onChange={(e) => setForm((f) => ({ ...f, ngay: e.target.value }))} />
-        </div>
-        <div style={{ marginBottom: 10 }}>
-          <label className="form-label">Nội dung</label>
-          <input className="form-input" placeholder="Ứng tiền ăn, đi lại..." value={form.ghi_chu} onChange={(e) => setForm((f) => ({ ...f, ghi_chu: e.target.value }))} />
-        </div>
-        {err && <div style={M.err}>{err}</div>}
-        <div style={M.actions}>
-          <button className="btn-ghost" onClick={onClose}>Hủy</button>
-          <button className="btn-primary" onClick={handle} disabled={tao.isPending}>{tao.isPending ? 'Đang lưu...' : 'Xác nhận ứng'}</button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 // ─── Modal upload ảnh ─────────────────────────────────────
 function UploadAnhModal({ cn, onClose }) {
@@ -335,9 +289,9 @@ export default function CongNhanDetail() {
   const phongTroNow = noiO?.phong_tro ?? null;
   const tongUng     = tongUngRes?.data ?? { tong_ung: 0, con_no: 0 };
 
-  const [editModal,   setEditModal]   = useState(false);
-  const [tamUngModal, setTamUngModal] = useState(false);
-  const [anhModal,    setAnhModal]    = useState(false);
+  const [editModal,        setEditModal]        = useState(false);
+  const [chuyenKhoanModal, setChuyenKhoanModal] = useState(false);
+  const [anhModal,         setAnhModal]         = useState(false);
 
   if (isLoading) return <div style={s.center}>Đang tải...</div>;
   if (isError || !cn) return (
@@ -404,7 +358,7 @@ export default function CongNhanDetail() {
           {canEdit && (
             <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => setAnhModal(true)}>📷 Ảnh</button>
           )}
-          <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => setTamUngModal(true)}>💰 Cho ứng</button>
+          <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => setChuyenKhoanModal(true)}>💳 Chuyển khoản</button>
           {canEdit && (
             <button className="btn-ghost" onClick={() => setEditModal(true)}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
@@ -614,9 +568,9 @@ export default function CongNhanDetail() {
         </div>
       </div>
 
-      {editModal   && <EditModal    cn={cn} onClose={() => setEditModal(false)} />}
-      {tamUngModal && <TamUngModal  cn={cn} onClose={() => setTamUngModal(false)} />}
-      {anhModal    && <UploadAnhModal cn={cn} onClose={() => setAnhModal(false)} />}
+      {editModal        && <EditModal          cn={cn} onClose={() => setEditModal(false)} />}
+      {chuyenKhoanModal && <ChuyenKhoanModal   cn={cn} onClose={() => setChuyenKhoanModal(false)} />}
+      {anhModal         && <UploadAnhModal      cn={cn} onClose={() => setAnhModal(false)} />}
     </div>
   );
 }
