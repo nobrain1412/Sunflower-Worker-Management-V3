@@ -27,8 +27,9 @@ async function postScan(req, res) {
       : await scanDanhSach(file.path, file.mimetype);
   } catch (err) {
     if (err.statusCode) throw err;
-    logger.error({ err }, 'OCR scan failed');
-    const e = new Error('Không thể xử lý OCR, thử lại sau'); e.statusCode = 502; throw e;
+    // Log message gốc luôn để debug trên Railway
+    logger.error({ originalMessage: err.message, originalCode: err.code, stack: err.stack }, 'OCR scan failed');
+    const e = new Error(`OCR lỗi: ${err.message}`); e.statusCode = 502; throw e;
   }
 
   const { rows } = await db.query(
