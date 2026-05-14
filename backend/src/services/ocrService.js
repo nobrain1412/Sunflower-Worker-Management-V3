@@ -7,7 +7,20 @@ function getClient() {
   // 1. GOOGLE_APPLICATION_CREDENTIALS = đường dẫn tới file JSON key
   // 2. GOOGLE_CLOUD_KEY_JSON = nội dung JSON (dùng trên Railway/cloud)
   if (process.env.GOOGLE_CLOUD_KEY_JSON) {
-    const credentials = JSON.parse(process.env.GOOGLE_CLOUD_KEY_JSON);
+    let credentials;
+    try {
+      credentials = JSON.parse(process.env.GOOGLE_CLOUD_KEY_JSON);
+    } catch (e) {
+      throw Object.assign(
+        new Error(`GOOGLE_CLOUD_KEY_JSON không phải JSON hợp lệ: ${e.message}`),
+        { statusCode: 503 },
+      );
+    }
+    // Railway đôi khi chuyển \n thành ký tự newline thật trong private_key
+    // Cần đảm bảo private_key có đúng ký tự newline (không phải chuỗi \n)
+    if (credentials.private_key) {
+      credentials.private_key = credentials.private_key.replace(/\\n/g, '\n');
+    }
     return new vision.ImageAnnotatorClient({ credentials });
   }
   if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
