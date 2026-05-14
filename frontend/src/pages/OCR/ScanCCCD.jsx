@@ -32,8 +32,11 @@ export default function ScanCCCD() {
       form.append('anh', file);
       form.append('loai', 'cccd');
 
-      // Không set Content-Type thủ công — axios tự thêm boundary cho FormData
-      const res = await api.post('/ocr/scan', form);
+      // Content-Type: undefined xoá default 'application/json' của axios instance
+      // để browser tự set multipart/form-data với boundary đúng
+      const res = await api.post('/ocr/scan', form, {
+        headers: { 'Content-Type': undefined },
+      });
 
       setOcrId(res.data.ocr_id);
       setEdited(res.data.ket_qua ?? {});
