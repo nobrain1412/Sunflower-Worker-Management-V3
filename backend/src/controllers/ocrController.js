@@ -1,7 +1,7 @@
-const path   = require('path');
 const db     = require('../utils/db');
 const { scanCCCD, scanDanhSach } = require('../services/ocrService');
-const { sendSuccess } = require('../utils/response');
+const { uploadBuffer }           = require('../utils/cloudinary');
+const { sendSuccess }            = require('../utils/response');
 const logger = require('../utils/logger');
 
 async function postScan(req, res) {
@@ -15,20 +15,21 @@ async function postScan(req, res) {
     const e = new Error('Loại OCR không hợp lệ (cccd | danh_sach)'); e.statusCode = 400; throw e;
   }
 
-  // Đường dẫn URL tĩnh để lưu vào DB
-  const ocrBase = path.join(__dirname, '../../uploads/ocr');
-  const relPath = path.relative(ocrBase, file.path).replace(/\\/g, '/');
-  const duongDanAnh = `/uploads/ocr/${relPath}`;
+  const now    = new Date();
+  const folder = `workeros/ocr/${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}`;
 
-  let ketQua;
+  // Chạy song song: OCR + upload ảnh lên Cloudinary
+  let ketQua, duongDanAnh;
   try {
-    ketQua = loai === 'cccd'
-      ? await scanCCCD(file.path)
-      : await scanDanhSach(file.path);
+    [ketQua, { secure_url: duongDanAnh }] = await Promise.all([
+      loai === 'cccd'
+        ? scanCCCD(file.buffer)
+        : scanDanhSach(file.buffer),
+      uploadBuffer(file.buffer, { folder }),
+    ]);
   } catch (err) {
     if (err.statusCode) throw err;
-    // Log message gốc luôn để debug trên Railway
-    logger.error({ originalMessage: err.message, originalCode: err.code, stack: err.stack }, 'OCR scan failed');
+    logger.error({ originalMessage: err.message, originalCode: err.code, stack: err.stack }, 'OCR scan/upload failed');
     const e = new Error(`OCR lỗi: ${err.message}`); e.statusCode = 502; throw e;
   }
 

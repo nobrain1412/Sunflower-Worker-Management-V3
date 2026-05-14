@@ -1,21 +1,16 @@
 const { createWorker } = require('tesseract.js');
-const fs     = require('fs');
 const logger = require('../utils/logger');
 
-async function recognize(imagePath) {
-  // Đọc file thành Buffer trước — tránh worker thread không truy cập được path
-  const imageBuffer = fs.readFileSync(imagePath);
-
+// Nhận Buffer trực tiếp — không cần đọc từ disk
+async function recognize(imageBuffer) {
   const worker = await createWorker(['vie', 'eng'], 1, {
     logger: () => {},
   });
   try {
     const { data } = await worker.recognize(imageBuffer);
-    // Log raw text để debug — giúp biết Tesseract đọc được gì
     logger.info({
-      filePath: imagePath,
       textLength: data.text?.length ?? 0,
-      rawText: data.text?.slice(0, 500), // 500 ký tự đầu
+      rawText:    data.text?.slice(0, 500),
       confidence: data.confidence,
     }, 'OCR raw result');
     return data;
@@ -34,17 +29,15 @@ function parseCCCD(fullText) {
     que_quan: '', dia_chi: '', ngay_cap: '', noi_cap: '',
   };
 
-  // Số CCCD: 12 chữ số liên tiếp
   const cccdMatch = fullText.match(/\b(\d{12})\b/);
   if (cccdMatch) result.cccd = cccdMatch[1];
 
-  // Tất cả ngày DD/MM/YYYY trong ảnh
   const allDates = (fullText.match(/\d{2}[\/\-.]\d{2}[\/\-.]\d{4}/g) ?? [])
     .map((d) => d.replace(/[\-.]/g, '/'));
 
   for (let i = 0; i < lines.length; i++) {
-    const lo  = lines[i].toLowerCase();
-    const nxt = lines[i + 1] ?? '';
+    const lo   = lines[i].toLowerCase();
+    const nxt  = lines[i + 1] ?? '';
     const nxt2 = lines[i + 2] ?? '';
 
     if (/h[oọ]\s*(v[aà]\s*)?t[eêế]n|full\s*name/i.test(lo)) {
@@ -130,16 +123,14 @@ function parseDanhSach(textLines) {
 
 // ─── Public API ──────────────────────────────────────────────────────────────
 
-async function scanCCCD(filePath) {
-  const data = await recognize(filePath);
-  // Kể cả khi text rỗng vẫn trả về object rỗng — user tự nhập tay trên UI
+async function scanCCCD(imageBuffer) {
+  const data = await recognize(imageBuffer);
   return parseCCCD(data.text ?? '');
 }
 
-async function scanDanhSach(filePath) {
-  const data = await recognize(filePath);
+async function scanDanhSach(imageBuffer) {
+  const data = await recognize(imageBuffer);
   const lines = (data.lines ?? []).map((l) => l.text.trim()).filter(Boolean);
-  // Kể cả khi không có dòng nào vẫn trả về mảng rỗng
   return parseDanhSach(lines);
 }
 
