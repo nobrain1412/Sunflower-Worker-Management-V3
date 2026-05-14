@@ -1,31 +1,47 @@
 import { useState, useRef } from 'react';
-
-const MOCK_LIST = [
-  { id: 1, ho_ten: 'Nguyễn Văn An',  cccd: '012345678901', ngay_sinh: '01/01/1995', gioi_tinh: 'Nam', que_quan: 'Nghệ An',     status: 'ok' },
-  { id: 2, ho_ten: 'Trần Thị Bình',  cccd: '034567890123', ngay_sinh: '15/03/1998', gioi_tinh: 'Nữ', que_quan: 'Hà Nội',      status: 'ok' },
-  { id: 3, ho_ten: 'Lê Văn Cường',   cccd: '',             ngay_sinh: '20/07/1993', gioi_tinh: 'Nam', que_quan: 'Thanh Hóa',   status: 'warn' },
-  { id: 4, ho_ten: 'Phạm Thị Dung',  cccd: '056789012345', ngay_sinh: '05/11/2000', gioi_tinh: 'Nữ', que_quan: 'Hà Tĩnh',    status: 'ok' },
-  { id: 5, ho_ten: 'Hoàng Văn Em',   cccd: '078901234567', ngay_sinh: '30/09/1997', gioi_tinh: 'Nam', que_quan: 'Quảng Bình',  status: 'ok' },
-];
+import api from '../../hooks/useApi';
 
 export default function BulkReview() {
-  const [stage, setStage]     = useState('upload');
-  const [preview, setPreview] = useState(null);
-  const [rows, setRows]       = useState([]);
+  const [stage, setStage]       = useState('upload');
+  const [preview, setPreview]   = useState(null);
+  const [rows, setRows]         = useState([]);
   const [selected, setSelected] = useState(new Set());
-  const [editRow, setEditRow] = useState(null);
+  const [editRow, setEditRow]   = useState(null);
+  const [ocrId, setOcrId]       = useState(null);
+  const [error, setError]       = useState(null);
   const fileRef = useRef();
 
-  function handleFile(e) {
+  async function handleFile(e) {
     const file = e.target.files?.[0];
     if (!file) return;
+    setError(null);
     setPreview(URL.createObjectURL(file));
     setStage('processing');
-    setTimeout(() => {
-      setRows(MOCK_LIST.map((r) => ({ ...r })));
-      setSelected(new Set(MOCK_LIST.filter((r) => r.status === 'ok').map((r) => r.id)));
+
+    try {
+      const form = new FormData();
+      form.append('anh', file);
+      form.append('loai', 'danh_sach');
+
+      // Không set Content-Type thủ công — axios tự thêm boundary cho FormData
+      const res = await api.post('/ocr/scan', form);
+
+      setOcrId(res.data.ocr_id);
+
+      // Gắn id tạm và đánh trạng thái warn/ok
+      const list = (res.data.ket_qua ?? []).map((r, i) => ({
+        ...r,
+        id: i + 1,
+        status: r.ho_ten && r.cccd ? 'ok' : 'warn',
+      }));
+
+      setRows(list);
+      setSelected(new Set(list.filter((r) => r.status === 'ok').map((r) => r.id)));
       setStage('review');
-    }, 2200);
+    } catch (err) {
+      setError(err?.message ?? 'Lỗi OCR, thử lại');
+      setStage('upload');
+    }
   }
 
   function toggleSelect(id) {
@@ -33,7 +49,28 @@ export default function BulkReview() {
   }
 
   function handleEdit(id, key, val) {
-    setRows((r) => r.map((row) => row.id === id ? { ...row, [key]: val } : row));
+    setRows((r) => r.map((row) => {
+      if (row.id !== id) return row;
+      const updated = { ...row, [key]: val };
+      updated.status = updated.ho_ten && updated.cccd ? 'ok' : 'warn';
+      return updated;
+    }));
+  }
+
+  async function handleApprove() {
+    try {
+      if (ocrId) await api.post(`/ocr/${ocrId}/approve`);
+    } catch { /* bỏ qua */ }
+    setStage('done');
+  }
+
+  async function handleCancel() {
+    try {
+      if (ocrId) await api.post(`/ocr/${ocrId}/reject`);
+    } catch { /* bỏ qua */ }
+    setStage('upload');
+    setRows([]);
+    setSelected(new Set());
   }
 
   const okCount   = rows.filter((r) => r.status === 'ok').length;
@@ -44,12 +81,13 @@ export default function BulkReview() {
       <div style={s.header}>
         <div>
           <h2 style={s.title}>Quét danh sách viết tay</h2>
-          <p style={s.sub}>Tải ảnh bảng danh sách để nhận diện nhiều người cùng lúc</p>
+          <p style={s.sub}>Tải ảnh bảng danh sách để AI nhận diện nhiều người cùng lúc</p>
         </div>
       </div>
 
       {stage === 'upload' && (
         <div style={s.uploadCard}>
+          {error && <div style={s.errorBox}>{error}</div>}
           <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFile} />
           <div style={s.dropzone} onClick={() => fileRef.current?.click()}>
             <div style={{ fontSize: 48, marginBottom: 12 }}>📋</div>
@@ -70,14 +108,13 @@ export default function BulkReview() {
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, background: 'var(--bg1)', border: '1px solid var(--border)', borderRadius: 14, padding: 32 }}>
             <div style={s.spinner} />
             <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text1)' }}>Đang phân tích danh sách...</div>
-            <div style={{ fontSize: 12, color: 'var(--text2)' }}>OCR đang nhận diện từng dòng thông tin</div>
+            <div style={{ fontSize: 12, color: 'var(--text2)' }}>AI đang nhận diện từng dòng thông tin</div>
           </div>
         </div>
       )}
 
       {stage === 'review' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          {/* Summary */}
           <div style={s.summaryRow}>
             <div style={s.summaryItem}>
               <span style={{ fontSize: 20, fontWeight: 700, color: 'var(--text1)', fontFamily: "'JetBrains Mono', monospace" }}>{rows.length}</span>
@@ -97,7 +134,6 @@ export default function BulkReview() {
             </div>
           </div>
 
-          {/* Table */}
           <div style={{ background: 'var(--bg1)', border: '1px solid var(--border)', borderRadius: 14, overflow: 'hidden' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 18px', borderBottom: '1px solid var(--border)' }}>
               <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text1)' }}>Danh sách trích xuất</div>
@@ -115,6 +151,9 @@ export default function BulkReview() {
                 </tr>
               </thead>
               <tbody>
+                {rows.length === 0 && (
+                  <tr><td colSpan={8} style={{ padding: '24px', textAlign: 'center', fontSize: 13, color: 'var(--text3)' }}>Không phát hiện được dòng nào. Thử ảnh khác.</td></tr>
+                )}
                 {rows.map((row) => (
                   editRow === row.id ? (
                     <tr key={row.id} style={{ background: 'rgba(79,124,255,0.06)', borderBottom: '1px solid var(--border)' }}>
@@ -134,11 +173,11 @@ export default function BulkReview() {
                       <td style={{ padding: '10px 14px' }}>
                         <input type="checkbox" checked={selected.has(row.id)} onChange={() => toggleSelect(row.id)} style={{ accentColor: 'var(--accent)', width: 14, height: 14, cursor: 'pointer' }} />
                       </td>
-                      <td style={{ padding: '10px 10px', fontSize: 13, fontWeight: 600, color: 'var(--text1)' }}>{row.ho_ten}</td>
+                      <td style={{ padding: '10px 10px', fontSize: 13, fontWeight: 600, color: 'var(--text1)' }}>{row.ho_ten || <span style={{ color: 'var(--text3)' }}>—</span>}</td>
                       <td style={{ padding: '10px 10px', fontSize: 12, color: 'var(--text2)', fontFamily: "'JetBrains Mono', monospace" }}>{row.cccd || <span style={{ color: 'var(--amber)' }}>—</span>}</td>
-                      <td style={{ padding: '10px 10px', fontSize: 12, color: 'var(--text2)' }}>{row.ngay_sinh}</td>
-                      <td style={{ padding: '10px 10px', fontSize: 12, color: 'var(--text2)' }}>{row.gioi_tinh}</td>
-                      <td style={{ padding: '10px 10px', fontSize: 12, color: 'var(--text2)' }}>{row.que_quan}</td>
+                      <td style={{ padding: '10px 10px', fontSize: 12, color: 'var(--text2)' }}>{row.ngay_sinh || '—'}</td>
+                      <td style={{ padding: '10px 10px', fontSize: 12, color: 'var(--text2)' }}>{row.gioi_tinh || '—'}</td>
+                      <td style={{ padding: '10px 10px', fontSize: 12, color: 'var(--text2)' }}>{row.que_quan || '—'}</td>
                       <td style={{ padding: '10px 10px' }}>
                         <span className={`pill ${row.status === 'ok' ? 'pill-green' : 'pill-amber'}`}>
                           {row.status === 'ok' ? 'OK' : 'Thiếu'}
@@ -156,10 +195,9 @@ export default function BulkReview() {
             </table>
           </div>
 
-          {/* Actions */}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
-            <button className="btn-ghost" style={{ color: 'var(--red)' }} onClick={() => { setStage('upload'); setRows([]); }}>Huỷ tất cả</button>
-            <button className="btn-primary" disabled={selected.size === 0} onClick={() => setStage('done')}>
+            <button className="btn-ghost" style={{ color: 'var(--red)' }} onClick={handleCancel}>Huỷ tất cả</button>
+            <button className="btn-primary" disabled={selected.size === 0} onClick={handleApprove}>
               ✓ Duyệt {selected.size} công nhân
             </button>
           </div>
@@ -188,7 +226,8 @@ const s = {
   header: { display: 'flex', justifyContent: 'space-between' },
   title: { fontSize: 15, fontWeight: 700, color: 'var(--text1)' },
   sub: { fontSize: 12, color: 'var(--text2)', marginTop: 3 },
-  uploadCard: {},
+  errorBox: { background: 'rgba(255,95,114,0.12)', border: '1px solid var(--red)', borderRadius: 10, padding: '10px 14px', fontSize: 12, color: 'var(--red)' },
+  uploadCard: { display: 'flex', flexDirection: 'column', gap: 16 },
   dropzone: { background: 'var(--bg1)', border: '2px dashed var(--border2)', borderRadius: 14, padding: '48px 24px', display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: 'pointer', textAlign: 'center' },
   uploadTitle: { fontSize: 15, fontWeight: 600, color: 'var(--text1)' },
   uploadSub: { fontSize: 12, color: 'var(--text2)', marginTop: 4 },

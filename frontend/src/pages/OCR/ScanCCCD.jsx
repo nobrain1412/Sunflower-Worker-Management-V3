@@ -1,64 +1,90 @@
 import { useState, useRef } from 'react';
+import api from '../../hooks/useApi';
 
-const MOCK_RESULT = {
-  ho_ten: 'NGUYỄN VĂN AN', cccd: '012345678901',
-  ngay_sinh: '01/01/1995', gioi_tinh: 'Nam',
-  que_quan: 'Nghệ An', ngay_cap: '15/03/2021',
-  noi_cap: 'Cục CS QLHC về TTXH',
-};
+const FIELDS = [
+  ['ho_ten',    'Họ và tên'],
+  ['cccd',      'Số CCCD'],
+  ['ngay_sinh', 'Ngày sinh'],
+  ['gioi_tinh', 'Giới tính'],
+  ['que_quan',  'Quê quán'],
+  ['dia_chi',   'Địa chỉ thường trú'],
+  ['ngay_cap',  'Ngày cấp'],
+  ['noi_cap',   'Nơi cấp'],
+];
 
 export default function ScanCCCD() {
-  const [stage, setStage]     = useState('upload'); // upload | processing | review | done
+  const [stage, setStage]   = useState('upload'); // upload | processing | review | done
   const [preview, setPreview] = useState(null);
-  const [result, setResult]   = useState(null);
   const [edited, setEdited]   = useState({});
+  const [ocrId, setOcrId]     = useState(null);
+  const [error, setError]     = useState(null);
   const fileRef = useRef();
 
-  function handleFile(e) {
+  async function handleFile(e) {
     const file = e.target.files?.[0];
     if (!file) return;
+    setError(null);
     setPreview(URL.createObjectURL(file));
     setStage('processing');
-    // Giả lập OCR xử lý
-    setTimeout(() => {
-      setResult(MOCK_RESULT);
-      setEdited(MOCK_RESULT);
+
+    try {
+      const form = new FormData();
+      form.append('anh', file);
+      form.append('loai', 'cccd');
+
+      // Không set Content-Type thủ công — axios tự thêm boundary cho FormData
+      const res = await api.post('/ocr/scan', form);
+
+      setOcrId(res.data.ocr_id);
+      setEdited(res.data.ket_qua ?? {});
       setStage('review');
-    }, 2000);
+    } catch (err) {
+      setError(err?.message ?? 'Lỗi OCR, thử lại');
+      setStage('upload');
+    }
   }
 
   function handleEdit(k, v) { setEdited((r) => ({ ...r, [k]: v })); }
 
-  function handleApprove() { setStage('done'); }
+  async function handleApprove() {
+    try {
+      if (ocrId) await api.post(`/ocr/${ocrId}/approve`);
+      setStage('done');
+    } catch {
+      setStage('done'); // vẫn cho qua nếu approve fail
+    }
+  }
 
-  const FIELDS = [
-    ['ho_ten', 'Họ và tên'],
-    ['cccd', 'Số CCCD'],
-    ['ngay_sinh', 'Ngày sinh'],
-    ['gioi_tinh', 'Giới tính'],
-    ['que_quan', 'Quê quán'],
-    ['ngay_cap', 'Ngày cấp'],
-    ['noi_cap', 'Nơi cấp'],
-  ];
+  async function handleReject() {
+    try {
+      if (ocrId) await api.post(`/ocr/${ocrId}/reject`);
+    } catch { /* bỏ qua */ }
+    setStage('upload');
+    setPreview(null);
+  }
 
   return (
     <div style={s.root}>
-      {/* Header */}
       <div style={s.header}>
         <div>
           <h2 style={s.title}>Quét CCCD</h2>
-          <p style={s.sub}>Tải ảnh CCCD 2 mặt để trích xuất thông tin tự động</p>
+          <p style={s.sub}>Tải ảnh CCCD để trích xuất thông tin tự động bằng AI</p>
         </div>
       </div>
 
       {stage === 'upload' && (
         <div style={s.uploadCard}>
+          {error && <div style={s.errorBox}>{error}</div>}
           <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFile} />
           <div
             style={s.dropzone}
             onClick={() => fileRef.current?.click()}
             onDragOver={(e) => e.preventDefault()}
-            onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) { fileRef.current.files = e.dataTransfer.files; handleFile({ target: { files: [f] } }); } }}
+            onDrop={(e) => {
+              e.preventDefault();
+              const f = e.dataTransfer.files[0];
+              if (f) handleFile({ target: { files: [f] } });
+            }}
           >
             <div style={s.uploadIcon}>🪪</div>
             <div style={s.uploadTitle}>Kéo thả hoặc click để tải ảnh</div>
@@ -84,21 +110,19 @@ export default function ScanCCCD() {
           <div style={s.processingInfo}>
             <div style={s.spinner} />
             <div style={s.processingTitle}>Đang xử lý OCR...</div>
-            <div style={s.processingSub}>Hệ thống đang trích xuất thông tin từ ảnh CCCD</div>
+            <div style={s.processingSub}>AI đang trích xuất thông tin từ ảnh CCCD</div>
           </div>
         </div>
       )}
 
       {stage === 'review' && (
         <div style={s.reviewGrid}>
-          {/* Ảnh preview */}
           <div style={s.card}>
             <div style={s.cardTitle}>Ảnh gốc</div>
             <img src={preview} alt="CCCD" style={{ width: '100%', borderRadius: 8, marginTop: 8 }} />
             <div style={s.ocrBadge}>OCR hoàn tất</div>
           </div>
 
-          {/* Kết quả chỉnh sửa */}
           <div style={s.card}>
             <div style={s.cardTitle}>Thông tin trích xuất</div>
             <div style={s.cardSub}>Kiểm tra và chỉnh sửa nếu cần trước khi duyệt</div>
@@ -115,7 +139,7 @@ export default function ScanCCCD() {
               ))}
             </div>
             <div style={s.reviewActions}>
-              <button className="btn-ghost" style={{ color: 'var(--red)' }} onClick={() => { setStage('upload'); setPreview(null); }}>
+              <button className="btn-ghost" style={{ color: 'var(--red)' }} onClick={handleReject}>
                 Từ chối
               </button>
               <button className="btn-primary" onClick={handleApprove}>
@@ -132,7 +156,7 @@ export default function ScanCCCD() {
           <div style={s.doneTitle}>Thêm thành công!</div>
           <div style={s.doneSub}>Công nhân <b>{edited.ho_ten}</b> đã được thêm vào hệ thống</div>
           <div style={s.doneActions}>
-            <button className="btn-ghost" onClick={() => { setStage('upload'); setPreview(null); setResult(null); }}>Quét tiếp</button>
+            <button className="btn-ghost" onClick={() => { setStage('upload'); setPreview(null); setEdited({}); }}>Quét tiếp</button>
             <a href="/cong-nhan" className="btn-primary" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 8, padding: '7px 14px', fontSize: 12, fontWeight: 600, borderRadius: 8, background: 'linear-gradient(135deg, var(--accent), var(--accent2))', color: '#fff' }}>
               Xem danh sách công nhân
             </a>
@@ -148,6 +172,7 @@ const s = {
   header: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' },
   title: { fontSize: 15, fontWeight: 700, color: 'var(--text1)' },
   sub:   { fontSize: 12, color: 'var(--text2)', marginTop: 3 },
+  errorBox: { background: 'rgba(255,95,114,0.12)', border: '1px solid var(--red)', borderRadius: 10, padding: '10px 14px', fontSize: 12, color: 'var(--red)' },
   uploadCard: { display: 'flex', flexDirection: 'column', gap: 16 },
   dropzone: { background: 'var(--bg1)', border: '2px dashed var(--border2)', borderRadius: 14, padding: '48px 24px', display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: 'pointer', transition: 'border-color 0.15s', textAlign: 'center' },
   uploadIcon:  { fontSize: 48, marginBottom: 12 },
