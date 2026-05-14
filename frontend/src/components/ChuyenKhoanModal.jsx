@@ -233,20 +233,6 @@ export default function ChuyenKhoanModal({ cn, onClose }) {
               </div>
             )}
 
-            {/* Copy nhanh */}
-            <div style={qr.copyRow}>
-              {parseFloat(form.so_tien) > 0 && (
-                <button style={qr.copyBtn2} onClick={() => copyText(String(parseFloat(form.so_tien)), 'số tiền')}>
-                  Sao chép số tiền
-                </button>
-              )}
-              {noiDung && (
-                <button style={qr.copyBtn2} onClick={() => copyText(noiDung, 'nội dung')}>
-                  Sao chép nội dung
-                </button>
-              )}
-            </div>
-
             {/* Mở app ngân hàng */}
             <div style={{ position: 'relative', marginBottom: 16 }}>
               <button
@@ -330,9 +316,7 @@ const qr = {
   stk:      { fontFamily: "'JetBrains Mono', monospace", fontSize: 16, fontWeight: 700, color: 'var(--text1)', flex: 1 },
   tenTK:    { fontSize: 12, color: 'var(--text2)', marginTop: 4 },
   copyBtn:  { fontSize: 11, padding: '5px 10px', background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 6, color: 'var(--accent)', cursor: 'pointer', fontFamily: "'Be Vietnam Pro', sans-serif", whiteSpace: 'nowrap' },
-  copyRow:  { display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 },
-  copyBtn2: { flex: 1, fontSize: 12, padding: '8px 10px', background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text2)', cursor: 'pointer', fontFamily: "'Be Vietnam Pro', sans-serif", textAlign: 'center' },
-  openAppBtn: { width: '100%', padding: '10px', background: 'var(--bg3)', border: '1px solid var(--border2)', borderRadius: 8, color: 'var(--text1)', fontSize: 13, cursor: 'pointer', fontFamily: "'Be Vietnam Pro', sans-serif", fontWeight: 600 },
+  openAppBtn: { width: '100%', padding: '10px', background: 'var(--bg3)', border: '1px solid var(--border2)', borderRadius: 8, color: 'var(--text1)', fontSize: 13, cursor: 'pointer', fontFamily: "'Be Vietnam Pro', sans-serif", fontWeight: 600, marginTop: 4 },
   bankMenu:   { position: 'absolute', top: '100%', left: 0, right: 0, background: 'var(--bg1)', border: '1px solid var(--border2)', borderRadius: 10, zIndex: 10, maxHeight: 240, overflowY: 'auto', boxShadow: '0 8px 24px rgba(0,0,0,0.4)', marginTop: 4 },
   bankMenuItem: { display: 'block', width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: '1px solid var(--border)', color: 'var(--text1)', fontSize: 13, cursor: 'pointer', textAlign: 'left', fontFamily: "'Be Vietnam Pro', sans-serif", transition: 'background 0.1s' },
 };
