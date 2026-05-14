@@ -46,7 +46,7 @@ app.use('/api/', rateLimit({
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // --- Parser ---
-app.use(express.json({ limit: '2mb' }));
+app.use(express.json({ limit: '2mb', strict: false }));
 app.use(cookieParser());
 app.use(compression());
 
