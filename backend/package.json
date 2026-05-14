@@ -10,7 +10,6 @@
     "seed": "node src/utils/seed.js"
   },
   "dependencies": {
-    "@google-cloud/vision": "^5.3.6",
     "bcryptjs": "^2.4.3",
     "compression": "^1.7.4",
     "cookie-parser": "^1.4.7",
@@ -24,6 +23,7 @@
     "pg": "^8.12.0",
     "pino": "^9.1.0",
     "pino-pretty": "^11.0.0",
+    "tesseract.js": "^7.0.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
