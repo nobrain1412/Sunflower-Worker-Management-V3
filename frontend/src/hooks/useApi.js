@@ -47,7 +47,7 @@ api.interceptors.request.use((config) => {
 });
 
 async function refreshAccessToken() {
-  const res = await api.post('/auth/refresh', null, { skipAuthRefresh: true });
+  const res = await api.post('/auth/refresh', undefined, { skipAuthRefresh: true });
   const token = res?.data?.access_token;
   if (!token) {
     throw {
