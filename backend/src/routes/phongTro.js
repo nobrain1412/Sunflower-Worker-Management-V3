@@ -31,6 +31,7 @@ const createSchema = z.object({
   so_phong:    z.number().int().nonnegative().optional(),
   tien_phong:  z.number().nonnegative().optional(),
   ghi_chu:     z.string().max(1000).optional(),
+  media_urls:  z.array(z.string().url()).max(50).optional(),
   // Tài khoản ngân hàng chủ trọ
   ngan_hang:    z.string().max(100).optional(),
   so_tai_khoan: z.string().max(50).optional(),

@@ -1,10 +1,20 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useKtxList, useTaoKtx, useXoaKtx, usePhongList, useTaoPhong, useCapNhatPhong, useXoaPhong, useGiuongList, useXepGiuong, useTraPhong, useHoaDonList, useTaoHoaDon, useHoaDonThangTruoc, useUngVienXepPhong } from '../../hooks/useKtx';
-import { usePhongTroList, useTaoPhongTro, useXoaPhongTro } from '../../hooks/usePhongTro';
+import { useKtxList, useTaoKtx, useCapNhatKtx, useXoaKtx, usePhongList, useTaoPhong, useCapNhatPhong, useXoaPhong, useGiuongList, useXepGiuong, useTraPhong, useHoaDonList, useTaoHoaDon, useHoaDonThangTruoc, useUngVienXepPhong } from '../../hooks/useKtx';
+import { usePhongTroList, useTaoPhongTro, useCapNhatPhongTro, useXoaPhongTro, usePhongTroThue, useTraPhongTro } from '../../hooks/usePhongTro';
 import { useAuth } from '../../context/AuthContext';
+import { isEmbeddableMapUrl, normalizeMapUrl } from '../../constants/mapUrl';
 
 function fmt(n) { return Number(n || 0).toLocaleString('vi-VN') + 'đ'; }
+function parseMediaText(text) {
+  return String(text || '')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+function mediaToText(arr) {
+  return Array.isArray(arr) ? arr.join('\n') : '';
+}
 
 function occupancy(soGiuong, soDangO, sucChua) {
   const used = Number(soGiuong ?? 0);
@@ -411,14 +421,21 @@ export default function KTX({ forcePhongTro = false }) {
   const [selectedPhongId, setSelectedPhongId] = useState(null);
   const [addKtxModal, setAddKtxModal] = useState(false);
   const [addPhongModal, setAddPhongModal] = useState(false);
+  const [editingKtxMedia, setEditingKtxMedia] = useState(false);
+  const [ktxMediaInput, setKtxMediaInput] = useState('');
 
   const selectedKtx  = ktxList.find((k) => k.id === selectedKtxId) ?? ktxList[0] ?? null;
   const activeKtxId  = selectedKtx?.id ?? null;
+  const capNhatKtx = useCapNhatKtx(activeKtxId);
 
   const { data: phongRes } = usePhongList(activeKtxId);
   const phongList = phongRes?.data ?? [];
 
   const selectedPhong = phongList.find((p) => p.id === selectedPhongId) ?? null;
+
+  useEffect(() => {
+    setKtxMediaInput(mediaToText(selectedKtx?.media_urls));
+  }, [selectedKtx?.id]);
 
   // Group by floor
   const floors = [...new Set(phongList.map((p) => p.tang))].sort((a, b) => b - a);
@@ -500,6 +517,47 @@ export default function KTX({ forcePhongTro = false }) {
         </div>
       ) : (
         <div className="ktx-main">
+          <div style={s.card}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+              <div style={s.cardTitle}>Chi tiết khu KTX</div>
+              {isAdmin && (
+                <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => setEditingKtxMedia((v) => !v)}>
+                  {editingKtxMedia ? 'Đóng sửa ảnh' : 'Sửa ảnh KTX'}
+                </button>
+              )}
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--text2)', marginBottom: 8 }}>
+              📍 {selectedKtx?.dia_chi || 'Chưa cập nhật địa chỉ'}
+            </div>
+            {selectedKtx?.ghi_chu && <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 10 }}>{selectedKtx.ghi_chu}</div>}
+            {Array.isArray(selectedKtx?.media_urls) && selectedKtx.media_urls.length > 0 && (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(160px,1fr))', gap: 10, marginBottom: 10 }}>
+                {selectedKtx.media_urls.map((url, idx) => (
+                  <img key={`${selectedKtx.id}-${idx}`} src={url} alt={`KTX ${idx + 1}`} style={{ width: '100%', height: 120, objectFit: 'cover', borderRadius: 10, border: '1px solid var(--border)' }} />
+                ))}
+              </div>
+            )}
+            {isAdmin && editingKtxMedia && (
+              <div>
+                <label className="form-label">Ảnh KTX (mỗi dòng 1 URL)</label>
+                <textarea className="form-input" rows={3} value={ktxMediaInput} onChange={(e) => setKtxMediaInput(e.target.value)} />
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
+                  <button
+                    className="btn-primary"
+                    style={{ fontSize: 12, padding: '6px 12px' }}
+                    onClick={async () => {
+                      await capNhatKtx.mutateAsync({ media_urls: parseMediaText(ktxMediaInput) });
+                      setEditingKtxMedia(false);
+                    }}
+                    disabled={capNhatKtx.isPending}
+                  >
+                    {capNhatKtx.isPending ? 'Đang lưu...' : 'Lưu ảnh KTX'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Sơ đồ phòng */}
           <div style={s.card}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
@@ -594,10 +652,16 @@ function PhongTroSection({ canDelete }) {
   const { data: ptRes, isLoading } = usePhongTroList();
   const list = ptRes?.data ?? [];
   const tao = useTaoPhongTro();
+  const capNhat = useCapNhatPhongTro();
   const xoa = useXoaPhongTro();
+  const traPhongTro = useTraPhongTro();
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ ten: '', dia_chi: '', map_url: '', chu_tro: '', sdt_chu_tro: '', so_phong: 0, ghi_chu: '' });
+  const [form, setForm] = useState({ ten: '', dia_chi: '', map_url: '', chu_tro: '', sdt_chu_tro: '', so_phong: 0, ghi_chu: '', media_urls: '' });
+  const [editing, setEditing] = useState(null);
+  const [selectedPhongTro, setSelectedPhongTro] = useState(null);
   const [err, setErr] = useState('');
+  const { data: thueRes } = usePhongTroThue(selectedPhongTro?.id);
+  const thueList = thueRes?.data ?? [];
 
   async function handleAdd() {
     setErr('');
@@ -606,15 +670,37 @@ function PhongTroSection({ canDelete }) {
       await tao.mutateAsync({
         ten: form.ten.trim(),
         dia_chi: form.dia_chi || undefined,
-        map_url: form.map_url || undefined,
+        map_url: form.map_url ? normalizeMapUrl(form.map_url) : undefined,
         chu_tro: form.chu_tro || undefined,
         sdt_chu_tro: form.sdt_chu_tro || undefined,
         so_phong: parseInt(form.so_phong, 10) || 0,
         ghi_chu: form.ghi_chu || undefined,
+        media_urls: parseMediaText(form.media_urls),
       });
-      setForm({ ten: '', dia_chi: '', map_url: '', chu_tro: '', sdt_chu_tro: '', so_phong: 0, ghi_chu: '' });
+      setForm({ ten: '', dia_chi: '', map_url: '', chu_tro: '', sdt_chu_tro: '', so_phong: 0, ghi_chu: '', media_urls: '' });
       setShowForm(false);
     } catch (e) { setErr(e?.response?.data?.error?.message ?? 'Lỗi'); }
+  }
+
+  async function handleSaveEdit() {
+    setErr('');
+    if (!editing?.ten?.trim()) { setErr('Vui lòng nhập tên phòng trọ'); return; }
+    try {
+      await capNhat.mutateAsync({
+        id: editing.id,
+        ten: editing.ten.trim(),
+        dia_chi: editing.dia_chi || undefined,
+        map_url: editing.map_url ? normalizeMapUrl(editing.map_url) : undefined,
+        chu_tro: editing.chu_tro || undefined,
+        sdt_chu_tro: editing.sdt_chu_tro || undefined,
+        so_phong: parseInt(editing.so_phong, 10) || 0,
+        ghi_chu: editing.ghi_chu || undefined,
+        media_urls: parseMediaText(editing.media_urls),
+      });
+      setEditing(null);
+    } catch (e) {
+      setErr(e?.response?.data?.error?.message ?? 'Không thể cập nhật phòng trọ');
+    }
   }
 
   async function handleXoa(id) {
@@ -630,7 +716,7 @@ function PhongTroSection({ canDelete }) {
           <div style={s.cardTitle}>Phòng trọ</div>
           <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>Quản lý các phòng trọ thuê ngoài để gán công nhân thay vì KTX</div>
         </div>
-        <button className="btn-primary" style={{ padding: '6px 12px', fontSize: 12 }} onClick={() => setShowForm((s) => !s)}>
+        <button className="btn-primary" style={{ padding: '6px 12px', fontSize: 12 }} onClick={() => { setEditing(null); setShowForm((s) => !s); }}>
           {showForm ? 'Đóng' : '+ Thêm phòng trọ'}
         </button>
       </div>
@@ -666,11 +752,49 @@ function PhongTroSection({ canDelete }) {
               <label className="form-label">Ghi chú</label>
               <input className="form-input" value={form.ghi_chu} onChange={(e) => setForm((f) => ({ ...f, ghi_chu: e.target.value }))} />
             </div>
+            <div style={{ gridColumn: 'span 2', display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <label className="form-label">Ảnh phòng trọ (mỗi dòng 1 URL)</label>
+              <textarea className="form-input" rows={2} value={form.media_urls} onChange={(e) => setForm((f) => ({ ...f, media_urls: e.target.value }))} />
+            </div>
           </div>
           {err && <div style={{ color: 'var(--red)', fontSize: 12, marginTop: 8 }}>{err}</div>}
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10, gap: 8 }}>
             <button className="btn-ghost" onClick={() => setShowForm(false)}>Hủy</button>
             <button className="btn-primary" onClick={handleAdd} disabled={tao.isPending}>{tao.isPending ? 'Đang lưu...' : 'Lưu'}</button>
+          </div>
+        </div>
+      )}
+
+      {editing && (
+        <div style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 12, padding: 14, marginBottom: 14 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text1)', marginBottom: 10 }}>Sửa phòng trọ — {editing.ten}</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            {[['ten', 'Tên phòng trọ *'], ['so_phong', 'Số phòng'], ['chu_tro', 'Tên chủ trọ'], ['sdt_chu_tro', 'SĐT chủ trọ']].map(([k, lb]) => (
+              <div key={k} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <label className="form-label">{lb}</label>
+                <input className="form-input" value={editing[k] ?? ''} onChange={(e) => setEditing((f) => ({ ...f, [k]: e.target.value }))} />
+              </div>
+            ))}
+            <div style={{ gridColumn: 'span 2', display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <label className="form-label">Địa chỉ</label>
+              <input className="form-input" value={editing.dia_chi ?? ''} onChange={(e) => setEditing((f) => ({ ...f, dia_chi: e.target.value }))} />
+            </div>
+            <div style={{ gridColumn: 'span 2', display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <label className="form-label">Google Maps URL</label>
+              <input className="form-input" value={editing.map_url ?? ''} onChange={(e) => setEditing((f) => ({ ...f, map_url: e.target.value }))} />
+            </div>
+            <div style={{ gridColumn: 'span 2', display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <label className="form-label">Ghi chú</label>
+              <input className="form-input" value={editing.ghi_chu ?? ''} onChange={(e) => setEditing((f) => ({ ...f, ghi_chu: e.target.value }))} />
+            </div>
+            <div style={{ gridColumn: 'span 2', display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <label className="form-label">Ảnh phòng trọ (mỗi dòng 1 URL)</label>
+              <textarea className="form-input" rows={2} value={editing.media_urls ?? ''} onChange={(e) => setEditing((f) => ({ ...f, media_urls: e.target.value }))} />
+            </div>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10, gap: 8 }}>
+            <button className="btn-ghost" onClick={() => setEditing(null)}>Hủy</button>
+            <button className="btn-primary" onClick={handleSaveEdit} disabled={capNhat.isPending}>{capNhat.isPending ? 'Đang lưu...' : 'Lưu thay đổi'}</button>
           </div>
         </div>
       )}
@@ -700,19 +824,96 @@ function PhongTroSection({ canDelete }) {
                 <div>🛏️ Số phòng: {p.so_phong || 0}</div>
               </div>
               {p.map_url && (
-                <div style={{ borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border)' }}>
-                  <iframe
-                    src={p.map_url}
-                    width="100%" height="160"
-                    style={{ border: 0 }}
-                    loading="lazy"
-                    title={`map-${p.id}`}
-                  />
+                isEmbeddableMapUrl(p.map_url) ? (
+                  <div style={{ borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border)' }}>
+                    <iframe
+                      src={normalizeMapUrl(p.map_url)}
+                      width="100%" height="160"
+                      style={{ border: 0 }}
+                      loading="lazy"
+                      title={`map-${p.id}`}
+                    />
+                  </div>
+                ) : (
+                  <a href={p.map_url} target="_blank" rel="noreferrer" className="btn-ghost">
+                    Mở vị trí trên Google Maps
+                  </a>
+                )
+              )}
+              {Array.isArray(p.media_urls) && p.media_urls.length > 0 && (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
+                  {p.media_urls.slice(0, 3).map((url, idx) => (
+                    <img key={`${p.id}-thumb-${idx}`} src={url} alt={`Ảnh phòng trọ ${idx + 1}`} style={{ width: '100%', height: 66, objectFit: 'cover', borderRadius: 8, border: '1px solid var(--border)' }} />
+                  ))}
                 </div>
               )}
               {p.ghi_chu && <div style={{ fontSize: 11, color: 'var(--text3)', fontStyle: 'italic' }}>{p.ghi_chu}</div>}
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginTop: 4 }}>
+                <button className="btn-ghost" style={{ fontSize: 11, padding: '4px 8px' }} onClick={() => setSelectedPhongTro(p)}>
+                  Xem chi tiết
+                </button>
+                <button
+                  className="btn-ghost"
+                  style={{ fontSize: 11, padding: '4px 8px' }}
+                  onClick={() => {
+                    setShowForm(false);
+                    setEditing({
+                      ...p,
+                      media_urls: mediaToText(p.media_urls),
+                    });
+                  }}
+                >
+                  Sửa
+                </button>
+              </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {selectedPhongTro && (
+        <div style={M.overlay} onClick={(e) => e.target === e.currentTarget && setSelectedPhongTro(null)}>
+          <div style={{ ...M.modal, maxWidth: 700 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+              <div style={M.title}>Chi tiết phòng trọ — {selectedPhongTro.ten}</div>
+              <button className="btn-ghost" onClick={() => setSelectedPhongTro(null)}>Đóng</button>
+            </div>
+            {Array.isArray(selectedPhongTro.media_urls) && selectedPhongTro.media_urls.length > 0 && (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(180px,1fr))', gap: 8, marginBottom: 12 }}>
+                {selectedPhongTro.media_urls.map((url, idx) => (
+                  <img key={`${selectedPhongTro.id}-media-${idx}`} src={url} alt={`media-${idx + 1}`} style={{ width: '100%', height: 120, objectFit: 'cover', borderRadius: 8, border: '1px solid var(--border)' }} />
+                ))}
+              </div>
+            )}
+            <div style={{ fontSize: 12, color: 'var(--text1)', marginBottom: 8, fontWeight: 600 }}>Danh sách công nhân đang ở ({thueList.filter((t) => !t.ngay_ra).length})</div>
+            <div style={{ maxHeight: 280, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 10 }}>
+              {thueList.length === 0 ? (
+                <div style={{ padding: '12px 14px', color: 'var(--text3)', fontSize: 12 }}>Chưa có công nhân nào trong phòng trọ này.</div>
+              ) : thueList.map((t) => (
+                <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', borderBottom: '1px solid var(--border)' }}>
+                  <div>
+                    <div style={{ fontSize: 13, color: 'var(--text1)', fontWeight: 600 }}>{t.cong_nhan_ten}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text3)' }}>
+                      Vào: {t.ngay_vao ? new Date(t.ngay_vao).toLocaleDateString('vi-VN') : '—'} · {t.so_dien_thoai || 'Không SĐT'}
+                    </div>
+                  </div>
+                  {!t.ngay_ra ? (
+                    <button
+                      className="btn-ghost"
+                      style={{ fontSize: 11, color: 'var(--red)' }}
+                      onClick={async () => {
+                        await traPhongTro.mutateAsync({ thueId: t.id, ngay_ra: new Date().toISOString().split('T')[0] });
+                      }}
+                    >
+                      Trả phòng
+                    </button>
+                  ) : (
+                    <span style={{ fontSize: 11, color: 'var(--text3)' }}>Đã rời</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       )}
     </div>

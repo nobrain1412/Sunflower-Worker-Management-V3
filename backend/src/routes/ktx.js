@@ -29,7 +29,12 @@ router.get('/', requireRole('admin'), asyncWrapper(async (_req, res) => {
 }));
 
 router.post('/', requireRole('admin'),
-  validate(z.object({ ten: z.string().min(1).max(100), dia_chi: z.string().max(500).optional(), ghi_chu: z.string().optional() })),
+  validate(z.object({
+    ten: z.string().min(1).max(100),
+    dia_chi: z.string().max(500).optional(),
+    ghi_chu: z.string().optional(),
+    media_urls: z.array(z.string().url()).max(50).optional(),
+  })),
   asyncWrapper(async (req, res) => {
     const data = await ktxModel.createKtx(req.validatedBody);
     sendCreated(res, data, 'Tạo khu KTX thành công');
@@ -44,7 +49,13 @@ router.delete('/:id', requireRole('admin'), asyncWrapper(async (req, res) => {
 }));
 
 router.put('/:id', requireRole('admin'),
-  validate(z.object({ ten: z.string().min(1).max(100).optional(), dia_chi: z.string().max(500).optional(), ghi_chu: z.string().optional(), active: z.boolean().optional() })),
+  validate(z.object({
+    ten: z.string().min(1).max(100).optional(),
+    dia_chi: z.string().max(500).optional(),
+    ghi_chu: z.string().optional(),
+    media_urls: z.array(z.string().url()).max(50).optional(),
+    active: z.boolean().optional(),
+  })),
   asyncWrapper(async (req, res) => {
     const data = await ktxModel.updateKtx(toPositiveInt(req.params.id, 'ID KTX'), req.validatedBody);
     if (!data) { const e = new Error('Không tìm thấy KTX'); e.statusCode = 404; throw e; }

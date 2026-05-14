@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../hooks/useApi';
 import { useAuth } from '../../context/AuthContext';
+import { isEmbeddableMapUrl, normalizeMapUrl } from '../../constants/mapUrl';
 
 function fmt(n) { return Number(n || 0).toLocaleString('vi-VN') + 'đ'; }
 
@@ -144,6 +145,8 @@ export default function CongTy() {
   const [errMsg,     setErrMsg]     = useState('');
 
   const selected = list.find((c) => c.id === selectedId) ?? list[0] ?? null;
+  const selectedMapUrl = normalizeMapUrl(selected?.map_url ?? '');
+  const canEmbedSelectedMap = isEmbeddableMapUrl(selected?.map_url ?? '');
 
   function openEdit() {
     if (!selected) return;
@@ -192,6 +195,8 @@ export default function CongTy() {
     }
     if (!payload.map_url?.trim()) {
       delete payload.map_url;
+    } else {
+      payload.map_url = normalizeMapUrl(payload.map_url);
     }
     return payload;
   }
@@ -347,16 +352,22 @@ export default function CongTy() {
             {selected.map_url && (
               <div style={s.card}>
                 <div style={s.cardTitle}>Vị trí công ty</div>
-                <div style={{ borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border)' }}>
-                  <iframe
-                    src={selected.map_url}
-                    width="100%"
-                    height="320"
-                    style={{ border: 0 }}
-                    loading="lazy"
-                    title={`map-cong-ty-${selected.id}`}
-                  />
-                </div>
+                {canEmbedSelectedMap ? (
+                  <div style={{ borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border)' }}>
+                    <iframe
+                      src={selectedMapUrl}
+                      width="100%"
+                      height="320"
+                      style={{ border: 0 }}
+                      loading="lazy"
+                      title={`map-cong-ty-${selected.id}`}
+                    />
+                  </div>
+                ) : (
+                  <a href={selected.map_url} target="_blank" rel="noreferrer" className="btn-ghost">
+                    Mở vị trí trên Google Maps
+                  </a>
+                )}
               </div>
             )}
           </div>

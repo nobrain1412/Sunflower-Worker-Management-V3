@@ -1,8 +1,8 @@
 import { useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useCongNhanDetail, useCapNhatCongNhan, useNoiOCongNhan, useTongUngCongNhan } from '../../hooks/useCongNhan';
+import { useCongNhanDetail, useCapNhatCongNhan, useNoiOCongNhan, useTongUngCongNhan, useNoiOTruyCap } from '../../hooks/useCongNhan';
 import { useGiaoDichCongNhan } from '../../hooks/useTaiChinh';
-import { useLichSuPhong } from '../../hooks/useKtx';
+import { useLichSuPhong, usePhongList, useGiuongList } from '../../hooks/useKtx';
 import { useAuth } from '../../context/AuthContext';
 import ProvinceSelect from '../../components/ProvinceSelect';
 import ChuyenKhoanModal from '../../components/ChuyenKhoanModal';
@@ -143,8 +143,9 @@ const up = {
 };
 
 // ─── Modal chỉnh sửa ──────────────────────────────────────
-function EditModal({ cn, onClose }) {
+function EditModal({ cn, onClose, noiOHienTai, isAdmin }) {
   const capNhat = useCapNhatCongNhan(cn.id);
+  const noiOTruyCap = useNoiOTruyCap().data?.data ?? { ktx: [], phong_tro: [] };
 
   function toInputDate(s) { return s ? s.split('T')[0] : ''; }
 
@@ -169,14 +170,35 @@ function EditModal({ cn, onClose }) {
     loai_xe:          cn.loai_xe ?? '',
     xe_da_tra:        cn.xe_da_tra ?? false,
     ngay_muon_xe:     toInputDate(cn.ngay_muon_xe),
+    ktx_id:           noiOHienTai?.ktx?.ktx_id ? String(noiOHienTai.ktx.ktx_id) : '',
+    phong_id:         noiOHienTai?.ktx?.phong_id ? String(noiOHienTai.ktx.phong_id) : '',
+    giuong_id:        noiOHienTai?.ktx?.giuong_id ? String(noiOHienTai.ktx.giuong_id) : '',
+    phong_tro_id:     noiOHienTai?.phong_tro?.phong_tro_id ? String(noiOHienTai.phong_tro.phong_tro_id) : '',
   });
-  const [showProvinceSelect, setShowProvinceSelect] = useState(false);
+  const { data: phongRes } = usePhongList(form.ktx_id ? parseInt(form.ktx_id, 10) : null);
+  const phongList = phongRes?.data ?? [];
+  const { data: giuongRes } = useGiuongList(form.phong_id ? parseInt(form.phong_id, 10) : null);
+  const giuongList = (giuongRes?.data ?? []).filter((g) => !g.cong_nhan_id || g.cong_nhan_id === cn.id);
   const [err, setErr] = useState('');
   const [saving, setSaving] = useState(false);
 
   function handleChange(e) {
     const { name, value, type, checked } = e.target;
-    setForm((f) => ({ ...f, [name]: type === 'checkbox' ? checked : value }));
+    setForm((f) => {
+      const next = { ...f, [name]: type === 'checkbox' ? checked : value };
+      if (name === 'trang_thai_noi_o') {
+        next.ktx_id = '';
+        next.phong_id = '';
+        next.giuong_id = '';
+        next.phong_tro_id = '';
+      }
+      if (name === 'ktx_id') {
+        next.phong_id = '';
+        next.giuong_id = '';
+      }
+      if (name === 'phong_id') next.giuong_id = '';
+      return next;
+    });
   }
 
   async function handleSave() {
@@ -185,12 +207,54 @@ function EditModal({ cn, onClose }) {
     try {
       const payload = {};
       for (const [k, v] of Object.entries(form)) {
+        if (['ktx_id', 'phong_id', 'giuong_id', 'phong_tro_id'].includes(k)) continue;
         payload[k] = v === '' ? null : v;
       }
+      const today = new Date().toISOString().split('T')[0];
+      const targetNoiO = form.trang_thai_noi_o;
+      const hadKtx = !!noiOHienTai?.ktx?.thue_phong_id;
+      const hadPhongTro = !!noiOHienTai?.phong_tro?.thue_id;
+
+      if (targetNoiO === 'ktx' || targetNoiO === 'phong_tro') {
+        delete payload.trang_thai_noi_o;
+      }
+
       await capNhat.mutateAsync(payload);
+
+      if (hadKtx && targetNoiO !== 'ktx') {
+        await api.put(`/ktx/thue-phong/${noiOHienTai.ktx.thue_phong_id}/tra`, { ngay_ra: today });
+      }
+      if (hadPhongTro && targetNoiO !== 'phong_tro') {
+        await api.put(`/phong-tro/thue/${noiOHienTai.phong_tro.thue_id}/tra`, { ngay_ra: today });
+      }
+
+      if (targetNoiO === 'ktx') {
+        if (!form.giuong_id) throw new Error('Vui lòng chọn cụ thể KTX / phòng / giường');
+        const isSameBed = noiOHienTai?.ktx?.giuong_id && String(noiOHienTai.ktx.giuong_id) === String(form.giuong_id);
+        if (!isSameBed) {
+          if (hadKtx) {
+            await api.put(`/ktx/thue-phong/${noiOHienTai.ktx.thue_phong_id}/tra`, { ngay_ra: today });
+          }
+          await api.post(`/ktx/giuong/${parseInt(form.giuong_id, 10)}/xep`, { cong_nhan_id: cn.id, ngay_vao: today });
+        }
+      }
+      if (targetNoiO === 'phong_tro') {
+        if (!form.phong_tro_id) throw new Error('Vui lòng chọn phòng trọ cụ thể');
+        const isSamePhongTro = noiOHienTai?.phong_tro?.phong_tro_id && String(noiOHienTai.phong_tro.phong_tro_id) === String(form.phong_tro_id);
+        if (!isSamePhongTro) {
+          if (hadPhongTro) {
+            await api.put(`/phong-tro/thue/${noiOHienTai.phong_tro.thue_id}/tra`, { ngay_ra: today });
+          }
+          await api.post(`/phong-tro/${parseInt(form.phong_tro_id, 10)}/thue`, { cong_nhan_id: cn.id, ngay_vao: today });
+        }
+      }
+
+      if (targetNoiO === 'tu_tuc' || targetNoiO === 'chua_co_phong') {
+        await capNhat.mutateAsync({ trang_thai_noi_o: targetNoiO });
+      }
       onClose();
     } catch (e) {
-      setErr(e?.response?.data?.error?.message ?? 'Lỗi không xác định');
+      setErr(e?.response?.data?.error?.message ?? e?.message ?? 'Lỗi không xác định');
     } finally { setSaving(false); }
   }
 
@@ -222,20 +286,10 @@ function EditModal({ cn, onClose }) {
               {Object.entries(TRANG_THAI_PILL).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
             </select>
           </div>
-          {/* Quê quán với province select */}
           <div style={{ gridColumn: 'span 2', display: 'flex', flexDirection: 'column', gap: 4 }}>
             <label className="form-label">Quê quán</label>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <input className="form-input" style={{ flex: 1 }} value={form.que_quan} onChange={handleChange} name="que_quan" placeholder="Nhập thủ công hoặc chọn bên phải" />
-              <button type="button" className="btn-ghost" style={{ whiteSpace: 'nowrap', fontSize: 12, padding: '6px 10px' }} onClick={() => setShowProvinceSelect(!showProvinceSelect)}>
-                {showProvinceSelect ? '✕' : '🗺 Chọn'}
-              </button>
-            </div>
-            {showProvinceSelect && (
-              <div style={{ marginTop: 6 }}>
-                <ProvinceSelect onChange={(val) => { setForm((f) => ({ ...f, que_quan: val })); setShowProvinceSelect(false); }} />
-              </div>
-            )}
+            <ProvinceSelect onChange={(val) => setForm((f) => ({ ...f, que_quan: val }))} />
+            {form.que_quan && <div style={{ fontSize: 11, color: 'var(--accent)' }}>Đã chọn: {form.que_quan}</div>}
           </div>
           <div style={{ gridColumn: 'span 2', display: 'flex', flexDirection: 'column', gap: 4 }}>
             <label className="form-label">Địa chỉ hiện tại</label>
@@ -313,6 +367,40 @@ function EditModal({ cn, onClose }) {
               <option value="phong_tro">Ở nhà trọ</option>
             </select>
           </div>
+          {form.trang_thai_noi_o === 'ktx' && (
+            <>
+              <div style={m.fieldWrap}>
+                <label className="form-label">KTX cụ thể</label>
+                <select className="form-input" name="ktx_id" value={form.ktx_id} onChange={handleChange} disabled={!isAdmin}>
+                  <option value="">— Chọn KTX —</option>
+                  {(noiOTruyCap.ktx ?? []).map((k) => <option key={k.id} value={k.id}>{k.ten}</option>)}
+                </select>
+              </div>
+              <div style={m.fieldWrap}>
+                <label className="form-label">Phòng</label>
+                <select className="form-input" name="phong_id" value={form.phong_id} onChange={handleChange} disabled={!form.ktx_id || !isAdmin}>
+                  <option value="">— Chọn phòng —</option>
+                  {phongList.map((p) => <option key={p.id} value={p.id}>{p.ten_phong} (Tầng {p.tang})</option>)}
+                </select>
+              </div>
+              <div style={{ ...m.fieldWrap, gridColumn: 'span 2' }}>
+                <label className="form-label">Giường</label>
+                <select className="form-input" name="giuong_id" value={form.giuong_id} onChange={handleChange} disabled={!form.phong_id || !isAdmin}>
+                  <option value="">— Chọn giường —</option>
+                  {giuongList.map((g) => <option key={g.id} value={g.id}>Giường {g.so_thu_tu}</option>)}
+                </select>
+              </div>
+            </>
+          )}
+          {form.trang_thai_noi_o === 'phong_tro' && (
+            <div style={{ ...m.fieldWrap, gridColumn: 'span 2' }}>
+              <label className="form-label">Phòng trọ cụ thể</label>
+              <select className="form-input" name="phong_tro_id" value={form.phong_tro_id} onChange={handleChange}>
+                <option value="">— Chọn phòng trọ —</option>
+                {(noiOTruyCap.phong_tro ?? []).map((p) => <option key={p.id} value={p.id}>{p.ten}</option>)}
+              </select>
+            </div>
+          )}
         </div>
 
         {err && <div style={{ color: 'var(--red)', fontSize: 12, marginTop: 10 }}>{err}</div>}
@@ -370,9 +458,9 @@ export default function CongNhanDetail() {
   const pill = TRANG_THAI_PILL[cn.trang_thai] ?? TRANG_THAI_PILL.moi_vao;
   const canEdit = isAdmin || isQuanLy;
 
-  // Tính khấu trừ tự động
-  const khauTruDongPhuc = !cn.da_tra_dong_phuc ? Number(cn.tien_dong_phuc ?? 0) : 0;
-  const khauTruPhat     = !cn.da_viet_don_nghi  ? Number(cn.tien_phat_nghi ?? 0) : 0;
+  const daNghi = cn.trang_thai === 'nghi_viec' || !!cn.ngay_nghi_viec;
+  const khauTruDongPhuc = daNghi && !cn.da_tra_dong_phuc ? Number(cn.tien_dong_phuc ?? 0) : 0;
+  const khauTruPhat     = daNghi && !cn.da_viet_don_nghi  ? Number(cn.tien_phat_nghi ?? 0) : 0;
   const tongKhauTru     = khauTruDongPhuc + khauTruPhat;
 
   return (
@@ -511,8 +599,8 @@ export default function CongNhanDetail() {
                   onChange={(e) => toggleXeDaTra(e.target.checked)}
                   style={{ accentColor: 'var(--accent)', width: 14, height: 14 }}
                 />
-                <span style={{ fontSize: 13, color: cn.xe_da_tra ? 'var(--green)' : 'var(--amber)', fontWeight: 600 }}>
-                  {cn.xe_da_tra ? 'Đã trả xe' : 'Chưa trả xe'}
+                <span style={{ fontSize: 13, color: !cn.muon_xe ? 'var(--text3)' : (cn.xe_da_tra ? 'var(--green)' : 'var(--amber)'), fontWeight: 600 }}>
+                  {!cn.muon_xe ? '—' : (cn.xe_da_tra ? 'Đã trả xe' : 'Chưa trả xe')}
                 </span>
               </label>
             </Field>
@@ -521,7 +609,7 @@ export default function CongNhanDetail() {
 
         {/* Khấu trừ */}
         <div className="cn-detail-card" style={s.card}>
-          <div style={s.cardTitle}>Khấu trừ tự động</div>
+          <div style={s.cardTitle}>Khấu trừ tự động (chỉ áp dụng khi đã nghỉ)</div>
           <div className="cn-detail-fields" style={s.fields}>
             <Field label="Đồng phục">
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -536,6 +624,11 @@ export default function CongNhanDetail() {
               </span>
             </Field>
           </div>
+          {!daNghi && (
+            <div style={{ marginTop: 12, fontSize: 12, color: 'var(--text3)' }}>
+              Công nhân chưa nghỉ việc nên chưa áp dụng khấu trừ.
+            </div>
+          )}
           {tongKhauTru > 0 && (
             <div style={{ marginTop: 12, padding: '8px 12px', background: 'rgba(255,95,114,0.08)', borderRadius: 8, border: '1px solid rgba(255,95,114,0.2)', fontSize: 13, color: 'var(--red)', fontWeight: 700, fontFamily: "'JetBrains Mono', monospace" }}>
               Tổng khấu trừ: -{fmt(tongKhauTru)}
@@ -660,7 +753,7 @@ export default function CongNhanDetail() {
         </div>
       </div>
 
-      {editModal        && <EditModal          cn={cn} onClose={() => setEditModal(false)} />}
+      {editModal        && <EditModal          cn={cn} noiOHienTai={noiO} isAdmin={isAdmin} onClose={() => setEditModal(false)} />}
       {chuyenKhoanModal && <ChuyenKhoanModal   cn={cn} onClose={() => setChuyenKhoanModal(false)} />}
       {anhModal         && <UploadAnhModal      cn={cn} onClose={() => setAnhModal(false)} />}
       {previewImage && (

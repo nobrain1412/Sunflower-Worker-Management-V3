@@ -1,7 +1,9 @@
 import { useState, useMemo } from 'react';
 import { useTaoMoiCongNhan, useCongTyList, useVenders, useNoiOTruyCap } from '../../hooks/useCongNhan';
+import { usePhongList, useGiuongList } from '../../hooks/useKtx';
 import { useAuth } from '../../context/AuthContext';
 import ProvinceSelect from '../../components/ProvinceSelect';
+import api from '../../hooks/useApi';
 
 function todayDMY() {
   const d = new Date();
@@ -20,6 +22,10 @@ const INIT = {
   // Trạng thái CCCD & mượn xe
   cccd_da_tra: false,
   trang_thai_noi_o: 'chua_co_phong',
+  ktx_id: '',
+  phong_id: '',
+  giuong_id: '',
+  phong_tro_id: '',
   muon_xe: false, loai_xe: '',
 };
 
@@ -50,6 +56,10 @@ export default function AddCongNhanModal({ onClose }) {
   const congTyArr = useCongTyList().data?.data ?? [];
   const venderArr = useVenders().data?.data ?? [];
   const noiOTruyCap = useNoiOTruyCap().data?.data ?? { ktx: [], phong_tro: [] };
+  const { data: phongRes } = usePhongList(form.ktx_id ? parseInt(form.ktx_id, 10) : null);
+  const phongList = phongRes?.data ?? [];
+  const { data: giuongRes } = useGiuongList(form.phong_id ? parseInt(form.phong_id, 10) : null);
+  const giuongList = (giuongRes?.data ?? []).filter((g) => !g.cong_nhan_id);
   const canPickVender = isAdmin || isQuanLy;
 
   // Quản lý chỉ thấy công ty mình quản lý
@@ -63,7 +73,21 @@ export default function AddCongNhanModal({ onClose }) {
 
   function handleChange(e) {
     const { name, value } = e.target;
-    setForm((f) => ({ ...f, [name]: value }));
+    setForm((f) => {
+      const next = { ...f, [name]: value };
+      if (name === 'trang_thai_noi_o') {
+        next.ktx_id = '';
+        next.phong_id = '';
+        next.giuong_id = '';
+        next.phong_tro_id = '';
+      }
+      if (name === 'ktx_id') {
+        next.phong_id = '';
+        next.giuong_id = '';
+      }
+      if (name === 'phong_id') next.giuong_id = '';
+      return next;
+    });
     if (errors[name]) setErrors((er) => ({ ...er, [name]: '' }));
   }
 
@@ -108,8 +132,31 @@ export default function AddCongNhanModal({ onClose }) {
       payload.nguoi_tuyen_id = parseInt(form.nguoi_tuyen_id, 10);
     }
 
+    if (form.trang_thai_noi_o === 'ktx' && !form.giuong_id) {
+      setErrors({ submit: 'Vui lòng chọn cụ thể KTX / phòng / giường' });
+      return;
+    }
+    if (form.trang_thai_noi_o === 'phong_tro' && !form.phong_tro_id) {
+      setErrors({ submit: 'Vui lòng chọn phòng trọ cụ thể' });
+      return;
+    }
+
     try {
-      await mutation.mutateAsync(payload);
+      const created = await mutation.mutateAsync(payload);
+      const congNhanId = created?.data?.data?.id;
+      const ngayVao = payload.ngay_vao_lam || new Date().toISOString().split('T')[0];
+      if (congNhanId && form.trang_thai_noi_o === 'ktx' && form.giuong_id) {
+        await api.post(`/ktx/giuong/${parseInt(form.giuong_id, 10)}/xep`, {
+          cong_nhan_id: congNhanId,
+          ngay_vao: ngayVao,
+        });
+      }
+      if (congNhanId && form.trang_thai_noi_o === 'phong_tro' && form.phong_tro_id) {
+        await api.post(`/phong-tro/${parseInt(form.phong_tro_id, 10)}/thue`, {
+          cong_nhan_id: congNhanId,
+          ngay_vao: ngayVao,
+        });
+      }
       setDone(true);
     } catch (err) {
       setErrors({ submit: err.message || 'Có lỗi xảy ra' });
@@ -218,8 +265,40 @@ export default function AddCongNhanModal({ onClose }) {
               <select className="form-input" name="trang_thai_noi_o" value={form.trang_thai_noi_o} onChange={handleChange}>
                 <option value="chua_co_phong">Chưa có phòng</option>
                 <option value="tu_tuc">Tự túc chỗ ở</option>
+                {noiOTruyCap.ktx?.length > 0 && <option value="ktx">Ở KTX</option>}
+                <option value="phong_tro">Ở nhà trọ</option>
               </select>
             </FormField>
+            {form.trang_thai_noi_o === 'ktx' && (
+              <>
+                <FormField label="KTX cụ thể">
+                  <select className="form-input" name="ktx_id" value={form.ktx_id} onChange={handleChange}>
+                    <option value="">— Chọn KTX —</option>
+                    {(noiOTruyCap.ktx ?? []).map((k) => <option key={k.id} value={k.id}>{k.ten}</option>)}
+                  </select>
+                </FormField>
+                <FormField label="Phòng">
+                  <select className="form-input" name="phong_id" value={form.phong_id} onChange={handleChange} disabled={!form.ktx_id}>
+                    <option value="">— Chọn phòng —</option>
+                    {phongList.map((p) => <option key={p.id} value={p.id}>{p.ten_phong} (Tầng {p.tang})</option>)}
+                  </select>
+                </FormField>
+                <FormField label="Giường" style={{ gridColumn: 'span 2' }}>
+                  <select className="form-input" name="giuong_id" value={form.giuong_id} onChange={handleChange} disabled={!form.phong_id}>
+                    <option value="">— Chọn giường trống —</option>
+                    {giuongList.map((g) => <option key={g.id} value={g.id}>Giường {g.so_thu_tu}</option>)}
+                  </select>
+                </FormField>
+              </>
+            )}
+            {form.trang_thai_noi_o === 'phong_tro' && (
+              <FormField label="Phòng trọ cụ thể" style={{ gridColumn: 'span 2' }}>
+                <select className="form-input" name="phong_tro_id" value={form.phong_tro_id} onChange={handleChange}>
+                  <option value="">— Chọn phòng trọ —</option>
+                  {(noiOTruyCap.phong_tro ?? []).map((p) => <option key={p.id} value={p.id}>{p.ten}</option>)}
+                </select>
+              </FormField>
+            )}
             <FormField label="Ngày vào làm" error={errors.ngay_vao_lam}>
               <input className="form-input" name="ngay_vao_lam" value={form.ngay_vao_lam} onChange={handleDateChange('ngay_vao_lam')} placeholder="dd/mm/yyyy" maxLength={10} />
             </FormField>

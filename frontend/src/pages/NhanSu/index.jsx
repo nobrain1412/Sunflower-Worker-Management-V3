@@ -5,6 +5,7 @@
  *   - Cộng tác viên — kèm số người tuyển + tiền công
  */
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useUserList, useCongTacVien, useTaoUser, useCapNhatUser, useXoaUser, useThanhToanCongTacVien } from '../../hooks/useUsers';
 import { useCongTyList } from '../../hooks/useCongNhan';
 import useIsMobile from '../../hooks/useIsMobile';
@@ -194,6 +195,7 @@ function UserModal({ user, onClose }) {
 }
 
 export default function NhanSu() {
+  const navigate = useNavigate();
   const { isAdmin, isQuanLy } = useAuth();
   const defaultTab = isAdmin ? 'user' : 'ctv';
   const [tab, setTab] = useState(defaultTab);
@@ -262,7 +264,7 @@ export default function NhanSu() {
               {users.length === 0 ? (
                 <div style={s.empty}>Chưa có user</div>
               ) : users.map((u) => (
-                <div key={u.id} style={m.card}>
+                <div key={u.id} style={m.card} onClick={() => isAdmin && navigate(`/nhan-vien/${u.id}`)}>
                   <div style={m.head}>
                     <b style={{ color: 'var(--text1)', fontSize: 14 }}>{u.ho_ten}</b>
                     <span className={`pill ${ROLE_PILL[u.vai_tro] ?? 'pill-blue'}`}>{ROLE_LABEL[u.vai_tro] ?? u.vai_tro}</span>
@@ -275,8 +277,8 @@ export default function NhanSu() {
                     </div>
                   </div>
                   <div style={m.actions}>
-                    <button className="btn-ghost" style={{ fontSize: 11, padding: '4px 8px' }} onClick={() => { setEditing(u); setShowAdd(true); }}>Sửa</button>
-                    <button style={{ ...s.delBtn, marginLeft: 4 }} onClick={() => handleXoa(u)}>🗑</button>
+                    <button className="btn-ghost" style={{ fontSize: 11, padding: '4px 8px' }} onClick={(e) => { e.stopPropagation(); setEditing(u); setShowAdd(true); }}>Sửa</button>
+                    <button style={{ ...s.delBtn, marginLeft: 4 }} onClick={(e) => { e.stopPropagation(); handleXoa(u); }}>🗑</button>
                   </div>
                 </div>
               ))}
@@ -287,7 +289,7 @@ export default function NhanSu() {
               <tbody>
                 {users.length === 0 ? <tr><td colSpan={6} style={s.empty}>Chưa có user</td></tr> :
                   users.map((u) => (
-                    <tr key={u.id} style={s.tr}>
+                    <tr key={u.id} style={{ ...s.tr, cursor: isAdmin ? 'pointer' : 'default' }} onClick={() => isAdmin && navigate(`/nhan-vien/${u.id}`)}>
                       <td style={s.td}><b style={{ color: 'var(--text1)' }}>{u.ho_ten}</b></td>
                       <td style={s.td}><span style={s.mono}>{u.ten_dang_nhap}</span></td>
                       <td style={s.td}><span className={`pill ${ROLE_PILL[u.vai_tro] ?? 'pill-blue'}`}>{ROLE_LABEL[u.vai_tro] ?? u.vai_tro}</span></td>
@@ -299,8 +301,8 @@ export default function NhanSu() {
                       </td>
                       <td style={s.td}>
                         <button className="btn-ghost" style={{ fontSize: 11, padding: '4px 8px' }}
-                          onClick={() => { setEditing(u); setShowAdd(true); }}>Sửa</button>
-                        <button style={{ ...s.delBtn, marginLeft: 4 }} onClick={() => handleXoa(u)}>🗑</button>
+                          onClick={(e) => { e.stopPropagation(); setEditing(u); setShowAdd(true); }}>Sửa</button>
+                        <button style={{ ...s.delBtn, marginLeft: 4 }} onClick={(e) => { e.stopPropagation(); handleXoa(u); }}>🗑</button>
                       </td>
                     </tr>
                   ))}
@@ -315,7 +317,7 @@ export default function NhanSu() {
               {nhanVien.length === 0 ? (
                 <div style={s.empty}>Chưa có nhân viên</div>
               ) : nhanVien.map((u) => (
-                <div key={u.id} style={m.card}>
+                <div key={u.id} style={m.card} onClick={() => isAdmin && navigate(`/nhan-vien/${u.id}`)}>
                   <div style={m.head}>
                     <b style={{ color: 'var(--text1)', fontSize: 14 }}>{u.ho_ten}</b>
                     <span className={`pill ${ROLE_PILL[u.vai_tro] ?? 'pill-blue'}`}>{ROLE_LABEL[u.vai_tro]}</span>
@@ -331,7 +333,7 @@ export default function NhanSu() {
                     </div>
                   </div>
                   <div style={m.actions}>
-                    <button className="btn-ghost" style={{ fontSize: 11, padding: '4px 8px' }} onClick={() => { setEditing(u); setShowAdd(true); }}>Sửa</button>
+                    <button className="btn-ghost" style={{ fontSize: 11, padding: '4px 8px' }} onClick={(e) => { e.stopPropagation(); setEditing(u); setShowAdd(true); }}>Sửa</button>
                   </div>
                 </div>
               ))}
@@ -342,7 +344,7 @@ export default function NhanSu() {
               <tbody>
                 {nhanVien.length === 0 ? <tr><td colSpan={5} style={s.empty}>Chưa có nhân viên</td></tr> :
                   nhanVien.map((u) => (
-                    <tr key={u.id} style={s.tr}>
+                    <tr key={u.id} style={{ ...s.tr, cursor: isAdmin ? 'pointer' : 'default' }} onClick={() => isAdmin && navigate(`/nhan-vien/${u.id}`)}>
                       <td style={s.td}><b style={{ color: 'var(--text1)' }}>{u.ho_ten}</b></td>
                       <td style={s.td}><span className={`pill ${ROLE_PILL[u.vai_tro] ?? 'pill-blue'}`}>{ROLE_LABEL[u.vai_tro]}</span></td>
                       <td style={s.td}>
@@ -353,7 +355,7 @@ export default function NhanSu() {
                       <td style={s.td}><span style={s.sub}>{u.cong_ty_quan_ly_ten || '—'}</span></td>
                       <td style={s.td}>
                         <button className="btn-ghost" style={{ fontSize: 11, padding: '4px 8px' }}
-                          onClick={() => { setEditing(u); setShowAdd(true); }}>Sửa</button>
+                          onClick={(e) => { e.stopPropagation(); setEditing(u); setShowAdd(true); }}>Sửa</button>
                       </td>
                     </tr>
                   ))}

@@ -31,6 +31,13 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+      'connect-src': ["'self'", 'https://provinces.open-api.vn'],
+      'frame-src': [
+        "'self'",
+        'https://www.google.com',
+        'https://maps.google.com',
+        'https://maps.app.goo.gl',
+      ],
       'img-src': ["'self'", 'data:', 'blob:', 'https://res.cloudinary.com'],
     },
   },

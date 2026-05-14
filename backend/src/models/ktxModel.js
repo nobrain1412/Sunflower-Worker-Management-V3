@@ -26,18 +26,21 @@ async function findKtxById(id) {
 
 async function createKtx(data) {
   const result = await db.query(
-    `INSERT INTO ky_tuc_xa (ten, dia_chi, ghi_chu)
-     VALUES ($1, $2, $3) RETURNING *`,
-    [data.ten, data.dia_chi ?? null, data.ghi_chu ?? null],
+    `INSERT INTO ky_tuc_xa (ten, dia_chi, ghi_chu, media_urls)
+     VALUES ($1, $2, $3, $4) RETURNING *`,
+    [data.ten, data.dia_chi ?? null, data.ghi_chu ?? null, JSON.stringify(data.media_urls ?? [])],
   );
   return result.rows[0];
 }
 
 async function updateKtx(id, data) {
-  const allowed = ['ten', 'dia_chi', 'ghi_chu', 'active'];
+  const allowed = ['ten', 'dia_chi', 'ghi_chu', 'media_urls', 'active'];
   const fields = [], params = [];
   for (const f of allowed) {
-    if (f in data) { params.push(data[f]); fields.push(`${f} = $${params.length}`); }
+    if (f in data) {
+      params.push(f === 'media_urls' ? JSON.stringify(data[f] ?? []) : data[f]);
+      fields.push(`${f} = $${params.length}`);
+    }
   }
   if (!fields.length) return null;
   params.push(id);

@@ -145,7 +145,7 @@ router.get('/:id/noi-o', asyncWrapper(async (req, res) => {
   const [ktxRow, ptRow] = await Promise.all([
     db.query(
       `SELECT tp.id AS thue_phong_id, tp.ngay_vao, tp.ngay_ra,
-              g.so_thu_tu, p.ten_phong, p.tang, k.ten AS ktx_ten
+              g.id AS giuong_id, g.so_thu_tu, p.id AS phong_id, p.ten_phong, p.tang, k.id AS ktx_id, k.ten AS ktx_ten
        FROM thue_phong tp
        JOIN giuong g    ON g.id = tp.giuong_id
        JOIN phong p     ON p.id = g.phong_id

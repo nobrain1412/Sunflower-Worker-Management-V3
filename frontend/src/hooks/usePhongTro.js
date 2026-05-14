@@ -57,6 +57,9 @@ export function useTraPhongTro() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ thueId, ngay_ra }) => api.put(`/phong-tro/thue/${thueId}/tra`, { ngay_ra }),
-    onSuccess:  () => qc.invalidateQueries({ queryKey: ['phong-tro'] }),
+    onSuccess:  () => {
+      qc.invalidateQueries({ queryKey: ['phong-tro'] });
+      qc.invalidateQueries({ queryKey: ['cong-nhan'] });
+    },
   });
 }
