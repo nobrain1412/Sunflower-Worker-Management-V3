@@ -1,11 +1,12 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from './useApi';
 
-export function useUserList(params = {}) {
+export function useUserList(params = {}, options = {}) {
   return useQuery({
     queryKey: ['users', params],
     queryFn:  () => api.get('/users', { params }),
     staleTime: 30_000,
+    ...options,
   });
 }
 
@@ -45,6 +46,14 @@ export function useXoaUser() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id) => api.delete(`/users/${id}`),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: ['users'] }),
+  });
+}
+
+export function useThanhToanCongTacVien() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...data }) => api.post(`/users/cong-tac-vien/${id}/thanh-toan`, data),
     onSuccess:  () => qc.invalidateQueries({ queryKey: ['users'] }),
   });
 }

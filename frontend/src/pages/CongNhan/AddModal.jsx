@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { useTaoMoiCongNhan, useCongTyList, useVenders } from '../../hooks/useCongNhan';
+import { useTaoMoiCongNhan, useCongTyList, useVenders, useNoiOTruyCap } from '../../hooks/useCongNhan';
 import { useAuth } from '../../context/AuthContext';
 import ProvinceSelect from '../../components/ProvinceSelect';
 
@@ -19,6 +19,7 @@ const INIT = {
   ngan_hang: '', so_tai_khoan: '', ten_chu_tk: '',
   // Trạng thái CCCD & mượn xe
   cccd_da_tra: false,
+  trang_thai_noi_o: 'chua_co_phong',
   muon_xe: false, loai_xe: '',
 };
 
@@ -48,6 +49,7 @@ export default function AddCongNhanModal({ onClose }) {
   const { user, isAdmin, isQuanLy } = useAuth();
   const congTyArr = useCongTyList().data?.data ?? [];
   const venderArr = useVenders().data?.data ?? [];
+  const noiOTruyCap = useNoiOTruyCap().data?.data ?? { ktx: [], phong_tro: [] };
   const canPickVender = isAdmin || isQuanLy;
 
   // Quản lý chỉ thấy công ty mình quản lý
@@ -94,6 +96,7 @@ export default function AddCongNhanModal({ onClose }) {
      'ngan_hang','so_tai_khoan','ten_chu_tk']
       .forEach((k) => { if (form[k]) payload[k] = form[k]; });
     payload.cccd_da_tra = !!form.cccd_da_tra;
+    payload.trang_thai_noi_o = form.trang_thai_noi_o;
     payload.muon_xe     = !!form.muon_xe;
     if (form.muon_xe && form.loai_xe) payload.loai_xe = form.loai_xe;
     ['ngay_sinh','ngay_cap_cccd','ngay_vao_lam'].forEach((k) => {
@@ -211,6 +214,12 @@ export default function AddCongNhanModal({ onClose }) {
                 <option value="dang_lam">Đang làm</option>
               </select>
             </FormField>
+            <FormField label="Trạng thái phòng">
+              <select className="form-input" name="trang_thai_noi_o" value={form.trang_thai_noi_o} onChange={handleChange}>
+                <option value="chua_co_phong">Chưa có phòng</option>
+                <option value="tu_tuc">Tự túc chỗ ở</option>
+              </select>
+            </FormField>
             <FormField label="Ngày vào làm" error={errors.ngay_vao_lam}>
               <input className="form-input" name="ngay_vao_lam" value={form.ngay_vao_lam} onChange={handleDateChange('ngay_vao_lam')} placeholder="dd/mm/yyyy" maxLength={10} />
             </FormField>
@@ -236,6 +245,12 @@ export default function AddCongNhanModal({ onClose }) {
             <div style={{ gridColumn: 'span 2', fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
               CCCD & mượn xe
             </div>
+            <FormField label="Nơi ở user có quyền truy cập" style={{ gridColumn: 'span 2' }}>
+              <div style={{ fontSize: 12, color: 'var(--text2)', lineHeight: 1.6 }}>
+                <div><b style={{ color: 'var(--text1)' }}>KTX:</b> {noiOTruyCap.ktx?.length ? noiOTruyCap.ktx.map((k) => k.ten).join(', ') : 'Không có'}</div>
+                <div><b style={{ color: 'var(--text1)' }}>Nhà trọ:</b> {noiOTruyCap.phong_tro?.length ? noiOTruyCap.phong_tro.map((p) => p.ten).join(', ') : 'Không có'}</div>
+              </div>
+            </FormField>
             <FormField label="Trạng thái CCCD">
               <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13, color: 'var(--text2)', cursor: 'pointer' }}>
                 <input type="checkbox" checked={form.cccd_da_tra}

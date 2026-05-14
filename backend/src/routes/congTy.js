@@ -6,9 +6,21 @@ const ctrl = require('../controllers/congTyController');
 
 const router = Router();
 
+function toPositiveInt(value, fieldName) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    const e = new Error(`${fieldName} không hợp lệ`);
+    e.statusCode = 400;
+    e.code = 'VALIDATION_ERROR';
+    throw e;
+  }
+  return parsed;
+}
+
 const taoMoiSchema = z.object({
   ten_cong_ty:    z.string().min(2).max(200),
   dia_chi:        z.string().max(500).optional(),
+  map_url:        z.string().url('Link Google Maps không hợp lệ').optional(),
   so_dien_thoai:  z.string().max(20).optional(),
   email:          z.string().email('Email không hợp lệ').optional(),
   luong_co_ban:   z.number().nonnegative().optional(),
@@ -55,7 +67,7 @@ const asyncWrapper = require('../utils/asyncWrapper');
 const { sendSuccess } = require('../utils/response');
 const congTyModel = require('../models/congTyModel');
 router.delete('/:id', requireRole('admin'), asyncWrapper(async (req, res) => {
-  const data = await congTyModel.update(parseInt(req.params.id, 10), { active: false });
+  const data = await congTyModel.update(toPositiveInt(req.params.id, 'ID công ty'), { active: false });
   if (!data) { const e = new Error('Không tìm thấy công ty'); e.statusCode = 404; throw e; }
   sendSuccess(res, null, 'Đã vô hiệu hoá công ty');
 }));

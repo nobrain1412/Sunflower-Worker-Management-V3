@@ -11,6 +11,17 @@ const model = require('../models/taiChinhModel');
 
 const router = Router();
 
+function toPositiveInt(value, fieldName) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    const e = new Error(`${fieldName} không hợp lệ`);
+    e.statusCode = 400;
+    e.code = 'VALIDATION_ERROR';
+    throw e;
+  }
+  return parsed;
+}
+
 const LOAI_VALUES = [
   // Mới: 3 nhóm chính
   'thu','chi','tieu',
@@ -46,7 +57,7 @@ router.put('/danh-muc/:id', requireRole('admin'),
     active: z.boolean().optional(),
   })),
   asyncWrapper(async (req, res) => {
-    const data = await model.updateDanhMuc(parseInt(req.params.id, 10), req.validatedBody);
+    const data = await model.updateDanhMuc(toPositiveInt(req.params.id, 'ID danh mục'), req.validatedBody);
     if (!data) { const e = new Error('Không tìm thấy danh mục'); e.statusCode = 404; throw e; }
     sendSuccess(res, data, 'Cập nhật thành công');
   }),
@@ -54,15 +65,15 @@ router.put('/danh-muc/:id', requireRole('admin'),
 
 // ─── GIAO DỊCH ────────────────────────────────────────────
 router.get('/', requireRole('admin', 'quan_ly', 'vender'), asyncWrapper(async (req, res) => {
-  const page  = Math.max(1, parseInt(req.query.page  || '1',  10));
-  const limit = Math.min(100, Math.max(1, parseInt(req.query.limit || '50', 10)));
+  const page  = Math.max(1, toPositiveInt(req.query.page || '1', 'Trang'));
+  const limit = Math.min(100, Math.max(1, toPositiveInt(req.query.limit || '50', 'Giới hạn')));
   const createdBy = req.user.vai_tro === 'vender' ? req.user.id : undefined;
   const { rows, total } = await model.findAll({
     page, limit,
-    thang:       req.query.thang ? parseInt(req.query.thang, 10) : undefined,
-    nam:         req.query.nam   ? parseInt(req.query.nam, 10)   : undefined,
+    thang:       req.query.thang ? toPositiveInt(req.query.thang, 'Tháng') : undefined,
+    nam:         req.query.nam   ? toPositiveInt(req.query.nam, 'Năm')   : undefined,
     loai:        req.query.loai,
-    cong_nhan_id: req.query.cong_nhan_id ? parseInt(req.query.cong_nhan_id, 10) : undefined,
+    cong_nhan_id: req.query.cong_nhan_id ? toPositiveInt(req.query.cong_nhan_id, 'ID công nhân') : undefined,
     created_by: createdBy,
   });
   sendSuccess(res, rows, 'Thành công', 200, {
@@ -71,7 +82,7 @@ router.get('/', requireRole('admin', 'quan_ly', 'vender'), asyncWrapper(async (r
 }));
 
 router.get('/tong-theo-thang', requireRole('admin', 'quan_ly', 'vender'), asyncWrapper(async (req, res) => {
-  const soThang = Math.min(24, Math.max(1, parseInt(req.query.so_thang || '5', 10)));
+  const soThang = Math.min(24, Math.max(1, toPositiveInt(req.query.so_thang || '5', 'Số tháng')));
   if (req.user.vai_tro === 'vender') {
     const now = new Date();
     const data = [];
@@ -101,8 +112,14 @@ router.get('/tong-theo-thang', requireRole('admin', 'quan_ly', 'vender'), asyncW
 }));
 
 router.get('/tong-thang', requireRole('admin', 'quan_ly', 'vender'), asyncWrapper(async (req, res) => {
-  const thang = parseInt(req.query.thang || new Date().getMonth() + 1, 10);
-  const nam   = parseInt(req.query.nam   || new Date().getFullYear(),  10);
+  const thang = toPositiveInt(req.query.thang || String(new Date().getMonth() + 1), 'Tháng');
+  const nam   = toPositiveInt(req.query.nam   || String(new Date().getFullYear()),  'Năm');
+  if (thang < 1 || thang > 12) {
+    const e = new Error('Tháng không hợp lệ');
+    e.statusCode = 400;
+    e.code = 'VALIDATION_ERROR';
+    throw e;
+  }
   if (req.user.vai_tro === 'vender') {
     const { rows } = await model.findAll({
       page: 1,
@@ -170,7 +187,7 @@ router.post('/', requireRole('admin', 'quan_ly', 'vender'),
 
 // Xem giao dịch của 1 CN (vender chỉ được xem CN mình tuyển)
 router.get('/cong-nhan/:congNhanId', requireRole('admin', 'quan_ly', 'vender'), asyncWrapper(async (req, res) => {
-  const cnId   = parseInt(req.params.congNhanId, 10);
+  const cnId   = toPositiveInt(req.params.congNhanId, 'ID công nhân');
   const { vai_tro, id: userId } = req.user;
 
   if (vai_tro === 'vender') {
@@ -193,7 +210,7 @@ router.patch('/:id/hoan-tien', requireRole('admin', 'quan_ly'),
   validate(z.object({ da_hoan_tien: z.boolean() })),
   asyncWrapper(async (req, res) => {
     const data = await model.toggleHoanTien(
-      parseInt(req.params.id, 10),
+      toPositiveInt(req.params.id, 'ID giao dịch'),
       req.validatedBody.da_hoan_tien,
     );
     if (!data) {
@@ -207,7 +224,7 @@ router.patch('/:id/hoan-tien', requireRole('admin', 'quan_ly'),
 // Xoá giao dịch (admin/quan_ly)
 router.delete('/:id', requireRole('admin', 'quan_ly'),
   asyncWrapper(async (req, res) => {
-    const data = await model.deleteOne(parseInt(req.params.id, 10));
+    const data = await model.deleteOne(toPositiveInt(req.params.id, 'ID giao dịch'));
     if (!data) {
       const e = new Error('Không tìm thấy giao dịch'); e.statusCode = 404; throw e;
     }

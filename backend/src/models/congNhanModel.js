@@ -7,7 +7,7 @@ const db = require('../utils/db');
 
 // scope: { type: 'all' } | { type: 'vender', userId } | { type: 'cong_ty', ids: [] }
 // Scope 'cong_ty' yêu cầu bảng phan_cong (sẽ implement ở migration tiếp theo)
-async function findAll({ page = 1, limit = 20, sort = 'ho_ten', order = 'asc', trang_thai, search, vender_id, cong_ty_id, tinh, ngay, scope }) {
+async function findAll({ page = 1, limit = 20, sort = 'ho_ten', order = 'asc', trang_thai, trang_thai_noi_o, search, vender_id, cong_ty_id, tinh, ngay, scope }) {
   const offset = (page - 1) * limit;
   const allowedSort = ['ho_ten', 'ngay_sinh', 'created_at', 'trang_thai'];
   const safeSort = allowedSort.includes(sort) ? sort : 'ho_ten';
@@ -38,6 +38,10 @@ async function findAll({ page = 1, limit = 20, sort = 'ho_ten', order = 'asc', t
     params.push(trang_thai);
     conditions.push(`cn.trang_thai = $${params.length}`);
   }
+  if (trang_thai_noi_o) {
+    params.push(trang_thai_noi_o);
+    conditions.push(`cn.trang_thai_noi_o = $${params.length}`);
+  }
 
   if (search) {
     params.push(`%${search}%`);
@@ -66,6 +70,8 @@ async function findAll({ page = 1, limit = 20, sort = 'ho_ten', order = 'asc', t
   const rows = await db.query(
     `SELECT cn.id, cn.ho_ten, cn.ngay_sinh, cn.gioi_tinh,
             cn.so_dien_thoai, cn.trang_thai, cn.ngay_vao_lam, cn.created_at,
+            cn.trang_thai_noi_o,
+            cn.anh_chan_dung,
             cn.nguoi_tuyen_id, cn.cong_ty_id,
             u.ho_ten   AS nguoi_tuyen_ho_ten,
             u.vai_tro  AS nguoi_tuyen_vai_tro,
@@ -117,7 +123,7 @@ async function create(data) {
     noi_cap_cccd, trang_thai, ngay_vao_lam, ghi_chu,
     nguoi_tuyen_id, cong_ty_id,
     ngan_hang, so_tai_khoan, ten_chu_tk,
-    cccd_da_tra, muon_xe, loai_xe,
+    cccd_da_tra, trang_thai_noi_o, muon_xe, loai_xe,
   } = data;
 
   const result = await db.query(
@@ -126,15 +132,15 @@ async function create(data) {
         dia_chi_hien_tai, so_dien_thoai, ngay_cap_cccd,
         noi_cap_cccd, trang_thai, ngay_vao_lam, ghi_chu, nguoi_tuyen_id, cong_ty_id,
         ngan_hang, so_tai_khoan, ten_chu_tk,
-        cccd_da_tra, muon_xe, loai_xe)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
+        cccd_da_tra, trang_thai_noi_o, muon_xe, loai_xe)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
      RETURNING *`,
     [ho_ten, cccd ?? null, ngay_sinh ?? null, gioi_tinh ?? null, que_quan ?? null,
      dia_chi_hien_tai ?? null, so_dien_thoai ?? null, ngay_cap_cccd ?? null,
      noi_cap_cccd ?? null, trang_thai ?? 'moi_vao', ngay_vao_lam ?? null, ghi_chu ?? null,
      nguoi_tuyen_id ?? null, cong_ty_id ?? null,
      ngan_hang ?? null, so_tai_khoan ?? null, ten_chu_tk ?? null,
-     cccd_da_tra ?? false, muon_xe ?? false, loai_xe ?? null],
+     cccd_da_tra ?? false, trang_thai_noi_o ?? 'chua_co_phong', muon_xe ?? false, loai_xe ?? null],
   );
 
   return result.rows[0];
@@ -150,7 +156,7 @@ async function update(id, data) {
     'noi_cap_cccd', 'trang_thai', 'ngay_vao_lam', 'ngay_nghi_viec', 'ghi_chu',
     'cong_ty_id', 'da_tra_dong_phuc', 'da_viet_don_nghi',
     'ngan_hang', 'so_tai_khoan', 'ten_chu_tk',
-    'cccd_da_tra', 'muon_xe', 'loai_xe', 'xe_da_tra',
+    'cccd_da_tra', 'trang_thai_noi_o', 'muon_xe', 'loai_xe', 'xe_da_tra', 'ngay_muon_xe',
   ];
 
   for (const field of allowedFields) {
@@ -174,8 +180,8 @@ async function update(id, data) {
 
 // Cập nhật đường dẫn ảnh
 async function updateAnh(id, fields) {
-  // fields: { anh_cccd_truoc?, anh_cccd_sau?, anh_chan_dung? }
-  const allowed = ['anh_cccd_truoc', 'anh_cccd_sau', 'anh_chan_dung'];
+  // fields: { anh_cccd_truoc?, anh_cccd_sau?, anh_chan_dung?, anh_xe? }
+  const allowed = ['anh_cccd_truoc', 'anh_cccd_sau', 'anh_chan_dung', 'anh_xe'];
   const setClauses = [], params = [];
   for (const f of allowed) {
     if (f in fields) { params.push(fields[f]); setClauses.push(`${f} = $${params.length}`); }

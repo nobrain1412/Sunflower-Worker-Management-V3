@@ -8,9 +8,22 @@ const ctrl = require('../controllers/congNhanController');
 const asyncWrapper = require('../utils/asyncWrapper');
 const { sendSuccess } = require('../utils/response');
 const congNhanModel = require('../models/congNhanModel');
+const ktxModel = require('../models/ktxModel');
+const phongTroModel = require('../models/phongTroModel');
 const db = require('../utils/db');
 
 const router = Router();
+
+function toPositiveInt(value, fieldName) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    const e = new Error(`${fieldName} không hợp lệ`);
+    e.statusCode = 400;
+    e.code = 'VALIDATION_ERROR';
+    throw e;
+  }
+  return parsed;
+}
 
 // --- Zod Schemas ---
 
@@ -44,9 +57,11 @@ const taoMoiSchema = z.object({
   ten_chu_tk:       z.string().max(100).optional(),
   // Mới: trạng thái CCCD đã trả & mượn xe
   cccd_da_tra:      z.boolean().optional(),
+  trang_thai_noi_o: z.enum(['chua_co_phong', 'tu_tuc', 'ktx', 'phong_tro']).optional(),
   muon_xe:          z.boolean().optional(),
   loai_xe:          z.enum(['xe_dap', 'xe_dien', 'xe_may']).optional().or(z.literal('').transform(() => undefined)),
   xe_da_tra:        z.boolean().optional(),
+  ngay_muon_xe:     z.string().date('Ngày mượn xe không hợp lệ (YYYY-MM-DD)').optional(),
 });
 
 // PUT cho phép partial update (mọi trường optional)
@@ -59,6 +74,12 @@ router.use(authenticate, scopeByRole);
 
 // Xem: tất cả role (dữ liệu được lọc theo scope)
 router.get('/',    ctrl.getDanhSach);
+router.get('/noi-o/truy-cap', asyncWrapper(async (req, res) => {
+  const vaiTro = req.user?.vai_tro;
+  const ktx = vaiTro === 'admin' ? await ktxModel.findAllKtx() : [];
+  const phongTro = await phongTroModel.findAll({ active: true });
+  sendSuccess(res, { ktx, phong_tro: phongTro });
+}));
 router.get('/:id', ctrl.getChiTiet);
 
 // Tuyển CN: tất cả role đều được (nguoi_tuyen_id tự động = người đăng nhập)
@@ -83,18 +104,19 @@ router.delete('/:id',
 
 // ─── Upload ảnh CCCD + chân dung ─────────────────────────────────────────────
 // POST /api/cong-nhan/:id/upload-anh
-// Form-data fields: cccd_mat_truoc, cccd_mat_sau, anh_chan_dung (optional)
+// Form-data fields: cccd_mat_truoc, cccd_mat_sau, anh_chan_dung, anh_xe (optional)
 router.post('/:id/upload-anh',
   requireRole('admin', 'quan_ly'),
   uploadAnhCongNhan,
   asyncWrapper(async (req, res) => {
-    const id    = parseInt(req.params.id, 10);
+    const id    = toPositiveInt(req.params.id, 'ID công nhân');
     const files = req.files ?? {};
 
     const toUpload = [
       { field: 'cccd_mat_truoc', key: 'anh_cccd_truoc' },
       { field: 'cccd_mat_sau',   key: 'anh_cccd_sau' },
       { field: 'anh_chan_dung',  key: 'anh_chan_dung' },
+      { field: 'anh_xe',         key: 'anh_xe' },
     ].filter(({ field }) => files[field]?.[0]);
 
     if (!toUpload.length) {
@@ -119,7 +141,7 @@ router.post('/:id/upload-anh',
 
 // ─── Tổng hợp cho trang chi tiết: nơi ở (KTX + phòng trọ) + tổng tạm ứng ────
 router.get('/:id/noi-o', asyncWrapper(async (req, res) => {
-  const id = parseInt(req.params.id, 10);
+  const id = toPositiveInt(req.params.id, 'ID công nhân');
   const [ktxRow, ptRow] = await Promise.all([
     db.query(
       `SELECT tp.id AS thue_phong_id, tp.ngay_vao, tp.ngay_ra,
@@ -149,7 +171,7 @@ router.get('/:id/noi-o', asyncWrapper(async (req, res) => {
 }));
 
 router.get('/:id/tong-ung', asyncWrapper(async (req, res) => {
-  const id = parseInt(req.params.id, 10);
+  const id = toPositiveInt(req.params.id, 'ID công nhân');
   const taiChinhModel = require('../models/taiChinhModel');
   const data = await taiChinhModel.tinhTongDaUng(id);
   sendSuccess(res, data);

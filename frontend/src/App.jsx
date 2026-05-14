@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Layout from './components/Layout';
+import AppErrorBoundary from './components/AppErrorBoundary';
 
 // Pages
 import Login          from './pages/Login';
@@ -47,11 +48,12 @@ function LoginRoute() {
 
 export default function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <BrowserRouter>
-          <Routes>
-            <Route path="/login" element={<LoginRoute />} />
+    <AppErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>
+          <BrowserRouter>
+            <Routes>
+              <Route path="/login" element={<LoginRoute />} />
 
             {/* Tất cả role */}
             <Route path="/"              element={<PrivateRoute><Dashboard /></PrivateRoute>} />
@@ -80,7 +82,7 @@ export default function App() {
               <RoleRoute allowedRoles={['admin']}><CongTy /></RoleRoute>
             } />
             <Route path="/nhan-su" element={
-              <RoleRoute allowedRoles={['admin']}><NhanSu /></RoleRoute>
+              <RoleRoute allowedRoles={['admin','quan_ly']}><NhanSu /></RoleRoute>
             } />
             <Route path="/nhan-vien/:id" element={
               <RoleRoute allowedRoles={['admin']}><NhanVienDetail /></RoleRoute>
@@ -89,10 +91,11 @@ export default function App() {
               <RoleRoute allowedRoles={['admin','quan_ly']}><BaoCao /></RoleRoute>
             } />
 
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </BrowserRouter>
-      </AuthProvider>
-    </QueryClientProvider>
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </BrowserRouter>
+        </AuthProvider>
+      </QueryClientProvider>
+    </AppErrorBoundary>
   );
 }

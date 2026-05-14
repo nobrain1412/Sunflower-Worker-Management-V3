@@ -29,6 +29,17 @@ const LOAI_LABEL = {
   phat_nghi:{ label: 'Phạt nghỉ', color: 'var(--red)'    },
   khac:     { label: 'Khác',       color: 'var(--text2)'  },
 };
+const LOAI_XE_LABEL = {
+  xe_may: 'Xe máy',
+  xe_dap: 'Xe đạp',
+  xe_dien: 'Xe đạp điện',
+};
+const TRANG_THAI_NOI_O_LABEL = {
+  chua_co_phong: 'Chưa có phòng',
+  tu_tuc: 'Tự túc chỗ ở',
+  ktx: 'Ở KTX',
+  phong_tro: 'Ở nhà trọ',
+};
 
 function fmt(n) { return Number(n || 0).toLocaleString('vi-VN') + 'đ'; }
 function mediaUrl(path) {
@@ -54,16 +65,17 @@ const fs = {
 // ─── Modal upload ảnh ─────────────────────────────────────
 function UploadAnhModal({ cn, onClose }) {
   const qc = useQueryClient();
-  const [files, setFiles] = useState({ cccd_mat_truoc: null, cccd_mat_sau: null, anh_chan_dung: null });
+  const [files, setFiles] = useState({ cccd_mat_truoc: null, cccd_mat_sau: null, anh_chan_dung: null, anh_xe: null });
   const [previews, setPreviews] = useState({});
   const [uploading, setUploading] = useState(false);
   const [err, setErr] = useState('');
 
-  const labels = {
-    cccd_mat_truoc: 'CCCD mặt trước',
-    cccd_mat_sau:   'CCCD mặt sau',
-    anh_chan_dung:  'Ảnh chân dung',
-  };
+  const imageFields = [
+    { uploadField: 'cccd_mat_truoc', dataField: 'anh_cccd_truoc', label: 'CCCD mặt trước' },
+    { uploadField: 'cccd_mat_sau', dataField: 'anh_cccd_sau', label: 'CCCD mặt sau' },
+    { uploadField: 'anh_chan_dung', dataField: 'anh_chan_dung', label: 'Ảnh chân dung' },
+    { uploadField: 'anh_xe', dataField: 'anh_xe', label: 'Ảnh xe mượn' },
+  ];
 
   function handleFile(field, file) {
     if (!file) return;
@@ -96,20 +108,20 @@ function UploadAnhModal({ cn, onClose }) {
       <div style={{ ...M.modal, maxWidth: 540 }}>
         <div style={M.title}>Upload ảnh — {cn.ho_ten}</div>
         <div className="cn-upload-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 14 }}>
-          {Object.keys(labels).map((field) => (
-            <label key={field} style={up.card}>
-              {previews[field] ? (
-                <img src={previews[field]} alt={labels[field]} style={up.preview} />
-              ) : cn[field] ? (
-                <img src={mediaUrl(cn[field])} alt={labels[field]} style={up.preview} />
+          {imageFields.map(({ uploadField, dataField, label }) => (
+            <label key={uploadField} style={up.card}>
+              {previews[uploadField] ? (
+                <img src={previews[uploadField]} alt={label} style={up.preview} />
+              ) : cn[dataField] ? (
+                <img src={mediaUrl(cn[dataField])} alt={label} style={up.preview} />
               ) : (
                 <div style={up.placeholder}>
                   <div style={{ fontSize: 24 }}>📷</div>
                   <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 4 }}>Chọn ảnh</div>
                 </div>
               )}
-              <div style={up.fieldLabel}>{labels[field]}</div>
-              <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => handleFile(field, e.target.files[0])} />
+              <div style={up.fieldLabel}>{label}</div>
+              <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => handleFile(uploadField, e.target.files[0])} />
             </label>
           ))}
         </div>
@@ -152,6 +164,11 @@ function EditModal({ cn, onClose }) {
     ghi_chu:          cn.ghi_chu ?? '',
     da_tra_dong_phuc: cn.da_tra_dong_phuc ?? false,
     da_viet_don_nghi: cn.da_viet_don_nghi ?? false,
+    trang_thai_noi_o: cn.trang_thai_noi_o ?? 'chua_co_phong',
+    muon_xe:          cn.muon_xe ?? false,
+    loai_xe:          cn.loai_xe ?? '',
+    xe_da_tra:        cn.xe_da_tra ?? false,
+    ngay_muon_xe:     toInputDate(cn.ngay_muon_xe),
   });
   const [showProvinceSelect, setShowProvinceSelect] = useState(false);
   const [err, setErr] = useState('');
@@ -260,6 +277,44 @@ function EditModal({ cn, onClose }) {
           ))}
         </div>
 
+        <div style={{ ...m.section, marginTop: 14 }}>Trạng thái mượn xe</div>
+        <div className="cn-edit-grid" style={m.grid}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--text1)', cursor: 'pointer' }}>
+            <input type="checkbox" name="muon_xe" checked={form.muon_xe} onChange={handleChange} style={{ accentColor: 'var(--accent)', width: 14, height: 14 }} />
+            Có mượn xe
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--text1)', cursor: 'pointer' }}>
+            <input type="checkbox" name="xe_da_tra" checked={form.xe_da_tra} onChange={handleChange} style={{ accentColor: 'var(--accent)', width: 14, height: 14 }} disabled={!form.muon_xe} />
+            Đã trả xe
+          </label>
+          <div style={m.fieldWrap}>
+            <label className="form-label">Loại xe</label>
+            <select className="form-input" name="loai_xe" value={form.loai_xe} onChange={handleChange} disabled={!form.muon_xe}>
+              <option value="">Không mượn xe</option>
+              <option value="xe_may">Xe máy</option>
+              <option value="xe_dap">Xe đạp</option>
+              <option value="xe_dien">Xe đạp điện</option>
+            </select>
+          </div>
+          <div style={m.fieldWrap}>
+            <label className="form-label">Ngày mượn xe</label>
+            <input className="form-input" type="date" name="ngay_muon_xe" value={form.ngay_muon_xe} onChange={handleChange} disabled={!form.muon_xe} />
+          </div>
+        </div>
+
+        <div style={{ ...m.section, marginTop: 14 }}>Trạng thái phòng</div>
+        <div className="cn-edit-grid" style={m.grid}>
+          <div style={m.fieldWrap}>
+            <label className="form-label">Tình trạng nơi ở</label>
+            <select className="form-input" name="trang_thai_noi_o" value={form.trang_thai_noi_o} onChange={handleChange}>
+              <option value="chua_co_phong">Chưa có phòng</option>
+              <option value="tu_tuc">Tự túc chỗ ở</option>
+              <option value="ktx">Ở KTX</option>
+              <option value="phong_tro">Ở nhà trọ</option>
+            </select>
+          </div>
+        </div>
+
         {err && <div style={{ color: 'var(--red)', fontSize: 12, marginTop: 10 }}>{err}</div>}
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
           <button className="btn-ghost" onClick={onClose}>Hủy</button>
@@ -292,6 +347,16 @@ export default function CongNhanDetail() {
   const [editModal,        setEditModal]        = useState(false);
   const [chuyenKhoanModal, setChuyenKhoanModal] = useState(false);
   const [anhModal,         setAnhModal]         = useState(false);
+  const [previewImage, setPreviewImage] = useState(null);
+  const capNhatXe = useCapNhatCongNhan(cn?.id);
+
+  async function toggleXeDaTra(nextValue) {
+    try {
+      await capNhatXe.mutateAsync({ xe_da_tra: nextValue });
+    } catch (e) {
+      alert(e?.response?.data?.error?.message ?? 'Không thể cập nhật trạng thái xe');
+    }
+  }
 
   if (isLoading) return <div style={s.center}>Đang tải...</div>;
   if (isError || !cn) return (
@@ -331,7 +396,7 @@ export default function CongNhanDetail() {
           {cn.anh_chan_dung ? (
             <img src={mediaUrl(cn.anh_chan_dung)} alt="avatar" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 12 }} />
           ) : (
-            <span>{cn.ho_ten[0]}</span>
+            <span>{cn.ho_ten?.[0] ?? '?'}</span>
           )}
         </div>
         <div className="cn-profile-info" style={s.profileInfo}>
@@ -372,17 +437,18 @@ export default function CongNhanDetail() {
       </div>
 
       {/* Ảnh CCCD */}
-      {(cn.anh_cccd_truoc || cn.anh_cccd_sau || cn.anh_chan_dung) && (
+      {(cn.anh_cccd_truoc || cn.anh_cccd_sau || cn.anh_chan_dung || cn.anh_xe) && (
         <div style={s.card}>
           <div style={s.cardTitle}>Ảnh đính kèm</div>
           <div className="cn-attachment-grid" style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-            {[['anh_cccd_truoc','CCCD mặt trước'],['anh_cccd_sau','CCCD mặt sau'],['anh_chan_dung','Ảnh chân dung']].map(([field, label]) =>
+            {[['anh_cccd_truoc','CCCD mặt trước'],['anh_cccd_sau','CCCD mặt sau'],['anh_chan_dung','Ảnh chân dung'],['anh_xe','Ảnh xe mượn']].map(([field, label]) =>
               cn[field] ? (
                 <div key={field} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   <img
                     src={mediaUrl(cn[field])}
                     alt={label}
-                    style={{ width: 140, height: 100, objectFit: 'cover', borderRadius: 8, border: '1px solid var(--border)' }}
+                    style={{ width: 140, height: 100, objectFit: 'cover', borderRadius: 8, border: '1px solid var(--border)', cursor: 'zoom-in' }}
+                    onClick={() => setPreviewImage({ src: mediaUrl(cn[field]), label })}
                   />
                   <div style={{ fontSize: 10, color: 'var(--text3)', textAlign: 'center' }}>{label}</div>
                 </div>
@@ -430,6 +496,29 @@ export default function CongNhanDetail() {
           </div>
         </div>
 
+        <div className="cn-detail-card" style={s.card}>
+          <div style={s.cardTitle}>Mượn xe</div>
+          <div className="cn-detail-fields" style={s.fields}>
+            <Field label="Trạng thái mượn xe" value={cn.muon_xe ? 'Đang mượn' : 'Không mượn xe'} />
+            <Field label="Loại xe" value={cn.muon_xe ? (LOAI_XE_LABEL[cn.loai_xe] ?? '—') : '—'} />
+            <Field label="Ngày mượn xe" value={cn.ngay_muon_xe ? new Date(cn.ngay_muon_xe).toLocaleDateString('vi-VN') : '—'} />
+            <Field label="Trả xe">
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, cursor: canEdit ? 'pointer' : 'default' }}>
+                <input
+                  type="checkbox"
+                  checked={!!cn.xe_da_tra}
+                  disabled={!canEdit || !cn.muon_xe || capNhatXe.isPending}
+                  onChange={(e) => toggleXeDaTra(e.target.checked)}
+                  style={{ accentColor: 'var(--accent)', width: 14, height: 14 }}
+                />
+                <span style={{ fontSize: 13, color: cn.xe_da_tra ? 'var(--green)' : 'var(--amber)', fontWeight: 600 }}>
+                  {cn.xe_da_tra ? 'Đã trả xe' : 'Chưa trả xe'}
+                </span>
+              </label>
+            </Field>
+          </div>
+        </div>
+
         {/* Khấu trừ */}
         <div className="cn-detail-card" style={s.card}>
           <div style={s.cardTitle}>Khấu trừ tự động</div>
@@ -457,6 +546,9 @@ export default function CongNhanDetail() {
         {/* Nơi ở: KTX hoặc Phòng trọ */}
         <div className="cn-detail-card" style={s.card}>
           <div style={s.cardTitle}>Nơi ở hiện tại</div>
+          <div style={{ marginBottom: 10 }}>
+            <span className="pill pill-blue">{TRANG_THAI_NOI_O_LABEL[cn.trang_thai_noi_o] ?? 'Chưa có phòng'}</span>
+          </div>
           {currentRoom ? (
             <div className="cn-detail-fields" style={s.fields}>
               <Field label="Loại" value="🏠 Ký túc xá" />
@@ -571,6 +663,27 @@ export default function CongNhanDetail() {
       {editModal        && <EditModal          cn={cn} onClose={() => setEditModal(false)} />}
       {chuyenKhoanModal && <ChuyenKhoanModal   cn={cn} onClose={() => setChuyenKhoanModal(false)} />}
       {anhModal         && <UploadAnhModal      cn={cn} onClose={() => setAnhModal(false)} />}
+      {previewImage && (
+        <ImageViewer
+          src={previewImage.src}
+          label={previewImage.label}
+          onClose={() => setPreviewImage(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+function ImageViewer({ src, label, onClose }) {
+  return (
+    <div style={M.overlay} onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div style={{ ...M.modal, maxWidth: 860, padding: 16 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text1)' }}>{label}</div>
+          <button className="btn-ghost" style={{ padding: '4px 10px', fontSize: 11 }} onClick={onClose}>Đóng</button>
+        </div>
+        <img src={src} alt={label} style={{ width: '100%', maxHeight: '75vh', objectFit: 'contain', borderRadius: 10, border: '1px solid var(--border)' }} />
+      </div>
     </div>
   );
 }

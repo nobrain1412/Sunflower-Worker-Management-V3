@@ -1,6 +1,6 @@
 /**
  * Multer middleware cho upload ảnh công nhân
- * Hỗ trợ: cccd_mat_truoc, cccd_mat_sau, anh_chan_dung
+ * Hỗ trợ: cccd_mat_truoc, cccd_mat_sau, anh_chan_dung, anh_xe
  * Dùng memoryStorage — file được upload lên Cloudinary trong route handler
  */
 const multer = require('multer');
@@ -20,11 +20,12 @@ const upload = multer({
   limits: { fileSize: MAX_SIZE },
 });
 
-// Fields: cccd_mat_truoc, cccd_mat_sau, anh_chan_dung — mỗi field tối đa 1 file
+// Fields: cccd_mat_truoc, cccd_mat_sau, anh_chan_dung, anh_xe — mỗi field tối đa 1 file
 const uploadAnhCongNhan = upload.fields([
   { name: 'cccd_mat_truoc', maxCount: 1 },
   { name: 'cccd_mat_sau',   maxCount: 1 },
   { name: 'anh_chan_dung',  maxCount: 1 },
+  { name: 'anh_xe',         maxCount: 1 },
 ]);
 
 module.exports = { uploadAnhCongNhan };

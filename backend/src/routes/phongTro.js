@@ -11,6 +11,17 @@ const model = require('../models/phongTroModel');
 
 const router = Router();
 
+function toPositiveInt(value, fieldName) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    const e = new Error(`${fieldName} không hợp lệ`);
+    e.statusCode = 400;
+    e.code = 'VALIDATION_ERROR';
+    throw e;
+  }
+  return parsed;
+}
+
 const createSchema = z.object({
   ten:         z.string().min(1).max(200),
   dia_chi:     z.string().max(1000).optional(),
@@ -47,7 +58,7 @@ router.get('/', requireRole('admin', 'quan_ly', 'vender'), asyncWrapper(async (r
 }));
 
 router.get('/:id', requireRole('admin', 'quan_ly', 'vender'), asyncWrapper(async (req, res) => {
-  const data = await model.findById(parseInt(req.params.id, 10));
+  const data = await model.findById(toPositiveInt(req.params.id, 'ID phòng trọ'));
   if (!data) { const e = new Error('Không tìm thấy phòng trọ'); e.statusCode = 404; throw e; }
   sendSuccess(res, data);
 }));
@@ -63,21 +74,21 @@ router.post('/', requireRole('admin', 'quan_ly', 'vender'),
 router.put('/:id', requireRole('admin', 'quan_ly', 'vender'),
   validate(updateSchema),
   asyncWrapper(async (req, res) => {
-    const data = await model.update(parseInt(req.params.id, 10), req.validatedBody);
+    const data = await model.update(toPositiveInt(req.params.id, 'ID phòng trọ'), req.validatedBody);
     if (!data) { const e = new Error('Không tìm thấy phòng trọ'); e.statusCode = 404; throw e; }
     sendSuccess(res, data, 'Cập nhật thành công');
   }),
 );
 
 router.delete('/:id', requireRole('admin', 'quan_ly'), asyncWrapper(async (req, res) => {
-  const data = await model.remove(parseInt(req.params.id, 10));
+  const data = await model.remove(toPositiveInt(req.params.id, 'ID phòng trọ'));
   if (!data) { const e = new Error('Không tìm thấy phòng trọ'); e.statusCode = 404; throw e; }
   sendSuccess(res, null, 'Đã xoá phòng trọ');
 }));
 
 // ─── Thuê phòng trọ ───────────────────────────────────────
 router.get('/:id/thue', requireRole('admin', 'quan_ly', 'vender'), asyncWrapper(async (req, res) => {
-  const data = await model.listThue(parseInt(req.params.id, 10));
+  const data = await model.listThue(toPositiveInt(req.params.id, 'ID phòng trọ'));
   sendSuccess(res, data);
 }));
 
@@ -86,7 +97,7 @@ router.post('/:id/thue', requireRole('admin', 'quan_ly', 'vender'),
   asyncWrapper(async (req, res) => {
     const data = await model.ganCongNhan({
       ...req.validatedBody,
-      phong_tro_id: parseInt(req.params.id, 10),
+      phong_tro_id: toPositiveInt(req.params.id, 'ID phòng trọ'),
     });
     sendCreated(res, data, 'Đã gán công nhân vào phòng trọ');
   }),
@@ -96,7 +107,7 @@ router.put('/thue/:thueId/tra', requireRole('admin', 'quan_ly', 'vender'),
   validate(traSchema),
   asyncWrapper(async (req, res) => {
     const data = await model.traPhong(
-      parseInt(req.params.thueId, 10),
+      toPositiveInt(req.params.thueId, 'ID thuê phòng trọ'),
       req.validatedBody.ngay_ra,
     );
     if (!data) { const e = new Error('Không tìm thấy bản ghi thuê đang active'); e.statusCode = 404; throw e; }

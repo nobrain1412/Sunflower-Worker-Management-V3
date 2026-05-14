@@ -12,6 +12,7 @@ async function danhSach(query, scope) {
     sort:       query.sort,
     order:      query.order,
     trang_thai: query.trang_thai,
+    trang_thai_noi_o: query.trang_thai_noi_o,
     search:     query.search,
     vender_id:  query.vender_id ? parseInt(query.vender_id, 10) : undefined,
     cong_ty_id: query.cong_ty_id ? parseInt(query.cong_ty_id, 10) : undefined,

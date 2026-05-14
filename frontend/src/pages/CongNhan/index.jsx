@@ -21,6 +21,19 @@ const STATUS_OPTIONS = [
   { value: 'nghi_phep', label: 'Nghỉ phép' },
   { value: 'nghi_viec', label: 'Nghỉ việc' },
 ];
+const NOI_O_OPTIONS = [
+  { value: '', label: 'Tất cả nơi ở' },
+  { value: 'chua_co_phong', label: 'Chưa có phòng' },
+  { value: 'tu_tuc', label: 'Tự túc chỗ ở' },
+  { value: 'ktx', label: 'Ở KTX' },
+  { value: 'phong_tro', label: 'Ở nhà trọ' },
+];
+const NOI_O_LABEL = {
+  chua_co_phong: 'Chưa có phòng',
+  tu_tuc: 'Tự túc',
+  ktx: 'KTX',
+  phong_tro: 'Nhà trọ',
+};
 
 function fmtDate(s) {
   if (!s) return '—';
@@ -31,13 +44,23 @@ function fmtDate(s) {
   return `${dd}/${mm}/${d.getFullYear()}`;
 }
 
+function mediaUrl(path) {
+  if (!path) return '';
+  if (/^https?:\/\//i.test(path)) return path;
+  return path;
+}
+
 function MobileCongNhanCard({ cn, isAdmin, onOpen, onDelete }) {
   const pill = TRANG_THAI_PILL[cn.trang_thai] ?? TRANG_THAI_PILL.moi_vao;
 
   return (
     <div style={m.card} onClick={onOpen}>
       <div style={m.head}>
-        <div style={m.avatar}>{cn.ho_ten?.[0] ?? '?'}</div>
+        <div style={m.avatar}>
+          {cn.anh_chan_dung
+            ? <img src={mediaUrl(cn.anh_chan_dung)} alt={cn.ho_ten} style={m.avatarImg} />
+            : (cn.ho_ten?.[0] ?? '?')}
+        </div>
         <div style={{ minWidth: 0 }}>
           <div style={m.name}>{cn.ho_ten}</div>
           <div style={m.company}>{cn.ten_cong_ty ?? 'Chưa phân công công ty'}</div>
@@ -50,6 +73,7 @@ function MobileCongNhanCard({ cn, isAdmin, onOpen, onDelete }) {
         <div style={m.item}><span style={m.label}>SĐT</span><span style={m.value}>{cn.so_dien_thoai ?? '—'}</span></div>
         <div style={m.item}><span style={m.label}>Ngày vào</span><span style={m.value}>{fmtDate(cn.ngay_vao_lam)}</span></div>
         <div style={m.item}><span style={m.label}>CCCD</span><span style={m.value}>{cn.cccd ?? '—'}</span></div>
+        <div style={m.item}><span style={m.label}>Nơi ở</span><span style={m.value}>{NOI_O_LABEL[cn.trang_thai_noi_o] ?? '—'}</span></div>
       </div>
 
       {isAdmin && (
@@ -82,6 +106,7 @@ export default function CongNhan() {
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch]           = useState('');
   const [trangThai, setTrangThai]     = useState('');
+  const [trangThaiNoiO, setTrangThaiNoiO] = useState('');
   const [venderId, setVenderId]       = useState('');
   const [congTyId, setCongTyId]       = useState('');
   const [tinh,     setTinh]           = useState('');
@@ -112,6 +137,7 @@ export default function CongNhan() {
 
   const { data, isLoading, isError } = useCongNhanList({
     page, limit: 20, search, trang_thai: trangThai,
+    trang_thai_noi_o: trangThaiNoiO || undefined,
     vender_id: venderId || undefined,
     cong_ty_id: congTyId || undefined,
     tinh: tinh || undefined,
@@ -150,12 +176,13 @@ export default function CongNhan() {
             <span>⚙</span>
             Bộ lọc
           </button>
-          {(trangThai || venderId || congTyId || tinh || ngay) && (
+          {(trangThai || trangThaiNoiO || venderId || congTyId || tinh || ngay) && (
             <button
               className="btn-ghost"
               style={{ fontSize: 12, padding: '6px 10px' }}
               onClick={() => {
                 setTrangThai('');
+                setTrangThaiNoiO('');
                 setVenderId('');
                 setCongTyId('');
                 setTinh('');
@@ -182,7 +209,7 @@ export default function CongNhan() {
           <b style={{ color: 'var(--text1)', fontFamily: "'JetBrains Mono', monospace" }}>{meta.total}</b> công nhân
           {trangThai && ` · ${STATUS_OPTIONS.find(o => o.value === trangThai)?.label}`}
         </span>
-        {(venderId || congTyId || tinh || ngay) && (
+        {(trangThaiNoiO || venderId || congTyId || tinh || ngay) && (
           <span style={s.filterHint}>Đang áp dụng bộ lọc nâng cao</span>
         )}
       </div>
@@ -222,6 +249,7 @@ export default function CongNhan() {
                   ['vender',        'Vender'],
                   ['so_dien_thoai', 'Số điện thoại'],
                   ['ngay_vao_lam',  'Ngày vào làm'],
+                  ['trang_thai_noi_o', 'Nơi ở'],
                   ['trang_thai',    'Trạng thái'],
                 ].map(([field, label]) => (
                   <th key={field} style={{ ...s.th, cursor: 'pointer', userSelect: 'none' }}
@@ -239,13 +267,18 @@ export default function CongNhan() {
                 return (
                   <tr key={cn.id} style={s.tr} onClick={() => navigate(`/cong-nhan/${cn.id}`)}>
                     <td className="cn-name-cell" style={s.td}>
-                      <div style={s.avatar}>{cn.ho_ten[0]}</div>
+                      <div style={s.avatar}>
+                        {cn.anh_chan_dung
+                          ? <img src={mediaUrl(cn.anh_chan_dung)} alt={cn.ho_ten} style={s.avatarImg} />
+                          : (cn.ho_ten?.[0] ?? '?')}
+                      </div>
                       <div className="cn-name-text" style={s.name}>{cn.ho_ten}</div>
                     </td>
                     <td style={s.td}><span style={s.sub}>{cn.ten_cong_ty ?? '—'}</span></td>
                     <td style={s.td}><span style={s.sub}>{cn.nguoi_tuyen_ho_ten ?? '—'}</span></td>
                     <td style={s.td}><span style={s.mono}>{cn.so_dien_thoai ?? '—'}</span></td>
                     <td style={s.td}><span style={s.mono}>{fmtDate(cn.ngay_vao_lam)}</span></td>
+                    <td style={s.td}><span style={s.sub}>{NOI_O_LABEL[cn.trang_thai_noi_o] ?? '—'}</span></td>
                     <td style={s.td}><span className={`pill ${pill.cls}`}>{pill.label}</span></td>
                     <td style={s.tdAction}>
                       {isAdmin && (
@@ -340,6 +373,12 @@ export default function CongNhan() {
           {canFilterAll && (
             <>
               <div style={bs.field}>
+                <label className="form-label">Trạng thái phòng</label>
+                <select className="form-input" value={trangThaiNoiO} onChange={(e) => { setTrangThaiNoiO(e.target.value); setPage(1); }}>
+                  {NOI_O_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </div>
+              <div style={bs.field}>
                 <label className="form-label">Công ty</label>
                 <select className="form-input" value={congTyId} onChange={(e) => { setCongTyId(e.target.value); setPage(1); }}>
                   <option value="">Tất cả công ty</option>
@@ -399,6 +438,7 @@ const s = {
   td: { padding: '12px 16px', verticalAlign: 'middle', display: 'table-cell' },
   tdAction: { padding: '12px 12px 12px 0', textAlign: 'right' },
   avatar: { width: 30, height: 30, borderRadius: 8, background: 'linear-gradient(135deg, var(--accent), var(--accent2))', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: '#fff', marginRight: 10, verticalAlign: 'middle' },
+  avatarImg: { width: '100%', height: '100%', objectFit: 'cover', borderRadius: 8 },
   name: { display: 'inline-block', fontSize: 13, fontWeight: 600, color: 'var(--text1)', verticalAlign: 'middle' },
   sub:  { fontSize: 12, color: 'var(--text2)' },
   mono: { fontSize: 12, color: 'var(--text2)', fontFamily: "'JetBrains Mono', monospace" },
@@ -451,7 +491,9 @@ const m = {
     fontSize: 13,
     fontWeight: 700,
     flexShrink: 0,
+    overflow: 'hidden',
   },
+  avatarImg: { width: '100%', height: '100%', objectFit: 'cover' },
   name: { fontSize: 14, fontWeight: 700, color: 'var(--text1)' },
   company: { fontSize: 11, color: 'var(--text2)', marginTop: 2 },
   grid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 },

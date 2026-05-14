@@ -2,13 +2,24 @@ const congTyService = require('../services/congTyService');
 const asyncWrapper = require('../utils/asyncWrapper');
 const { sendSuccess, sendCreated } = require('../utils/response');
 
+function toPositiveInt(value, fieldName) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    const e = new Error(`${fieldName} không hợp lệ`);
+    e.statusCode = 400;
+    e.code = 'VALIDATION_ERROR';
+    throw e;
+  }
+  return parsed;
+}
+
 const getDanhSach = asyncWrapper(async (req, res) => {
   const { data, meta } = await congTyService.danhSach(req.query);
   sendSuccess(res, data, 'Thành công', 200, meta);
 });
 
 const getChiTiet = asyncWrapper(async (req, res) => {
-  const congTy = await congTyService.chiTiet(parseInt(req.params.id, 10));
+  const congTy = await congTyService.chiTiet(toPositiveInt(req.params.id, 'ID công ty'));
   sendSuccess(res, congTy);
 });
 
@@ -19,7 +30,7 @@ const postTaoMoi = asyncWrapper(async (req, res) => {
 
 const putCapNhat = asyncWrapper(async (req, res) => {
   const congTy = await congTyService.capNhat(
-    parseInt(req.params.id, 10),
+    toPositiveInt(req.params.id, 'ID công ty'),
     req.validatedBody,
   );
   sendSuccess(res, congTy, 'Cập nhật thành công');
@@ -28,8 +39,8 @@ const putCapNhat = asyncWrapper(async (req, res) => {
 // POST /api/cong-ty/:id/quan-ly  { user_id }
 const postGanQuanLy = asyncWrapper(async (req, res) => {
   await congTyService.ganQuanLy(
-    parseInt(req.params.id, 10),
-    parseInt(req.body.user_id, 10),
+    toPositiveInt(req.params.id, 'ID công ty'),
+    toPositiveInt(req.body.user_id, 'ID quản lý'),
   );
   sendSuccess(res, null, 'Đã gán quản lý vào công ty');
 });
@@ -37,8 +48,8 @@ const postGanQuanLy = asyncWrapper(async (req, res) => {
 // DELETE /api/cong-ty/:id/quan-ly/:userId
 const deleteGoQuanLy = asyncWrapper(async (req, res) => {
   await congTyService.goQuanLy(
-    parseInt(req.params.id, 10),
-    parseInt(req.params.userId, 10),
+    toPositiveInt(req.params.id, 'ID công ty'),
+    toPositiveInt(req.params.userId, 'ID quản lý'),
   );
   sendSuccess(res, null, 'Đã gỡ quản lý khỏi công ty');
 });

@@ -1,6 +1,17 @@
 const congNhanService = require('../services/congNhanService');
 const asyncWrapper = require('../utils/asyncWrapper');
-const { sendSuccess, sendCreated, sendNotFound } = require('../utils/response');
+const { sendSuccess, sendCreated } = require('../utils/response');
+
+function toPositiveInt(value, fieldName) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    const e = new Error(`${fieldName} không hợp lệ`);
+    e.statusCode = 400;
+    e.code = 'VALIDATION_ERROR';
+    throw e;
+  }
+  return parsed;
+}
 
 const getDanhSach = asyncWrapper(async (req, res) => {
   // req.scope được gắn bởi scopeByRole middleware
@@ -9,7 +20,7 @@ const getDanhSach = asyncWrapper(async (req, res) => {
 });
 
 const getChiTiet = asyncWrapper(async (req, res) => {
-  const congNhan = await congNhanService.chiTiet(parseInt(req.params.id, 10), req.scope);
+  const congNhan = await congNhanService.chiTiet(toPositiveInt(req.params.id, 'ID công nhân'), req.scope);
   sendSuccess(res, congNhan);
 });
 
@@ -26,14 +37,14 @@ const postTaoMoi = asyncWrapper(async (req, res) => {
 
 const putCapNhat = asyncWrapper(async (req, res) => {
   const congNhan = await congNhanService.capNhat(
-    parseInt(req.params.id, 10),
+    toPositiveInt(req.params.id, 'ID công nhân'),
     req.validatedBody,
   );
   sendSuccess(res, congNhan, 'Cập nhật thành công');
 });
 
 const deleteXoa = asyncWrapper(async (req, res) => {
-  await congNhanService.xoa(parseInt(req.params.id, 10));
+  await congNhanService.xoa(toPositiveInt(req.params.id, 'ID công nhân'));
   sendSuccess(res, null, 'Đã xoá công nhân');
 });
 

@@ -90,11 +90,30 @@ async function listThue(phongTroId) {
 }
 
 async function ganCongNhan({ cong_nhan_id, phong_tro_id, ngay_vao, ghi_chu }) {
+  const cn = await db.query(
+    `SELECT id, trang_thai_noi_o FROM cong_nhan WHERE id = $1 AND deleted_at IS NULL`,
+    [cong_nhan_id],
+  );
+  if (!cn.rows[0]) {
+    const e = new Error('Không tìm thấy công nhân');
+    e.statusCode = 404;
+    throw e;
+  }
+  if (cn.rows[0].trang_thai_noi_o !== 'chua_co_phong') {
+    const e = new Error('Chỉ gán phòng trọ cho công nhân có trạng thái "chưa có phòng"');
+    e.statusCode = 400;
+    throw e;
+  }
+
   const result = await db.query(
     `INSERT INTO thue_phong_tro (cong_nhan_id, phong_tro_id, ngay_vao, ghi_chu)
      VALUES ($1, $2, $3, $4)
      RETURNING *`,
     [cong_nhan_id, phong_tro_id, ngay_vao, ghi_chu ?? null],
+  );
+  await db.query(
+    `UPDATE cong_nhan SET trang_thai_noi_o = 'phong_tro' WHERE id = $1`,
+    [cong_nhan_id],
   );
   return result.rows[0];
 }
@@ -107,7 +126,24 @@ async function traPhong(thueId, ngay_ra) {
       RETURNING *`,
     [ngay_ra, thueId],
   );
-  return result.rows[0] || null;
+  const updated = result.rows[0] || null;
+  if (updated) {
+    const stillInPhongTro = await db.query(
+      `SELECT 1 FROM thue_phong_tro WHERE cong_nhan_id = $1 AND ngay_ra IS NULL LIMIT 1`,
+      [updated.cong_nhan_id],
+    );
+    const inKtx = await db.query(
+      `SELECT 1 FROM thue_phong WHERE cong_nhan_id = $1 AND ngay_ra IS NULL LIMIT 1`,
+      [updated.cong_nhan_id],
+    );
+    if (!stillInPhongTro.rows.length && !inKtx.rows.length) {
+      await db.query(
+        `UPDATE cong_nhan SET trang_thai_noi_o = 'chua_co_phong' WHERE id = $1`,
+        [updated.cong_nhan_id],
+      );
+    }
+  }
+  return updated;
 }
 
 module.exports = {

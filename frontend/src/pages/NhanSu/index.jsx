@@ -5,9 +5,10 @@
  *   - Cộng tác viên — kèm số người tuyển + tiền công
  */
 import { useState } from 'react';
-import { useUserList, useCongTacVien, useTaoUser, useCapNhatUser, useXoaUser } from '../../hooks/useUsers';
+import { useUserList, useCongTacVien, useTaoUser, useCapNhatUser, useXoaUser, useThanhToanCongTacVien } from '../../hooks/useUsers';
 import { useCongTyList } from '../../hooks/useCongNhan';
 import useIsMobile from '../../hooks/useIsMobile';
+import { useAuth } from '../../context/AuthContext';
 
 const ROLE_LABEL = {
   admin: 'Quản trị',
@@ -31,6 +32,8 @@ function fmtMoney(n) {
 
 function UserModal({ user, onClose }) {
   const isEdit = !!user;
+  const { isAdmin, isQuanLy } = useAuth();
+  const isManagerMode = isQuanLy && !isAdmin;
   const congTyArr = useCongTyList().data?.data ?? [];
   const tao = useTaoUser();
   const capNhat = useCapNhatUser();
@@ -44,6 +47,7 @@ function UserModal({ user, onClose }) {
     so_tai_khoan: user?.so_tai_khoan ?? '',
     ten_chu_tk: user?.ten_chu_tk ?? '',
     tien_cong_moi_nguoi: user?.tien_cong_moi_nguoi ?? 0,
+    hinh_thuc_thanh_toan: user?.hinh_thuc_thanh_toan ?? 'mot_lan',
     cong_ty_ids: user?.cong_ty_ids ?? [],
   });
   const [err, setErr] = useState('');
@@ -79,6 +83,7 @@ function UserModal({ user, onClose }) {
       so_tai_khoan: form.so_tai_khoan || undefined,
       ten_chu_tk: form.ten_chu_tk || undefined,
       tien_cong_moi_nguoi: Number(form.tien_cong_moi_nguoi || 0),
+      hinh_thuc_thanh_toan: form.vai_tro === 'cong_tac_vien' ? form.hinh_thuc_thanh_toan : undefined,
       cong_ty_ids: form.vai_tro === 'quan_ly' ? form.cong_ty_ids : [],
     };
     if (form.mat_khau) payload.mat_khau = form.mat_khau;
@@ -113,8 +118,11 @@ function UserModal({ user, onClose }) {
           </div>
           <div style={F.col}>
             <label className="form-label">Vai trò *</label>
-            <select className="form-input" name="vai_tro" value={form.vai_tro} onChange={handleChange}>
-              {Object.entries(ROLE_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            <select className="form-input" name="vai_tro" value={form.vai_tro} onChange={handleChange} disabled={isManagerMode}>
+              {(isManagerMode
+                ? [['cong_tac_vien', 'Cộng tác viên']]
+                : Object.entries(ROLE_LABEL)
+              ).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </select>
           </div>
           <div style={F.col}>
@@ -126,6 +134,15 @@ function UserModal({ user, onClose }) {
               <label className="form-label">Tiền công mỗi người tuyển</label>
               <input className="form-input" type="number" name="tien_cong_moi_nguoi"
                 value={form.tien_cong_moi_nguoi} onChange={handleChange} />
+            </div>
+          )}
+          {form.vai_tro === 'cong_tac_vien' && (
+            <div style={F.col}>
+              <label className="form-label">Hình thức thanh toán</label>
+              <select className="form-input" name="hinh_thuc_thanh_toan" value={form.hinh_thuc_thanh_toan} onChange={handleChange}>
+                <option value="mot_lan">Lấy 1 lần (đủ 26 ngày công)</option>
+                <option value="hang_thang">Nhận hàng tháng (đơn giá giờ)</option>
+              </select>
             </div>
           )}
           <div style={F.col}>
@@ -140,7 +157,7 @@ function UserModal({ user, onClose }) {
             <label className="form-label">Tên chủ tài khoản</label>
             <input className="form-input" name="ten_chu_tk" value={form.ten_chu_tk} onChange={handleChange} />
           </div>
-          {form.vai_tro === 'quan_ly' && (
+          {form.vai_tro === 'quan_ly' && isAdmin && (
             <div style={{ ...F.col, gridColumn: 'span 2' }}>
               <label className="form-label">Công ty quản lý</label>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
@@ -177,19 +194,22 @@ function UserModal({ user, onClose }) {
 }
 
 export default function NhanSu() {
-  const [tab, setTab] = useState('user');
+  const { isAdmin, isQuanLy } = useAuth();
+  const defaultTab = isAdmin ? 'user' : 'ctv';
+  const [tab, setTab] = useState(defaultTab);
   const [editing, setEditing] = useState(null);
   const [showAdd, setShowAdd] = useState(false);
 
-  const { data: userRes }  = useUserList();
+  const { data: userRes }  = useUserList({}, { enabled: isAdmin });
   const { data: ctvRes }   = useCongTacVien();
   const xoa = useXoaUser();
+  const thanhToanCtv = useThanhToanCongTacVien();
 
-  const users = userRes?.data ?? [];
+  const users = isAdmin ? (userRes?.data ?? []) : [];
   const ctvs  = ctvRes?.data ?? [];
   const isMobile = useIsMobile();
 
-  // Nhân viên = mọi role trừ vender + cong_tac_vien (theo nghĩa nội bộ)
+  // Nhân viên = mọi role trừ cộng tác viên (theo nghĩa nội bộ)
   const nhanVien = users.filter((u) => ['admin','quan_ly','ke_toan','vender'].includes(u.vai_tro));
 
   async function handleXoa(u) {
@@ -197,17 +217,41 @@ export default function NhanSu() {
     await xoa.mutateAsync(u.id);
   }
 
+  async function handleThanhToan(u) {
+    const isHangThang = u.hinh_thuc_thanh_toan === 'hang_thang';
+    const now = new Date();
+    const payload = isHangThang
+      ? { hinh_thuc: 'hang_thang', thang: now.getMonth() + 1, nam: now.getFullYear() }
+      : { hinh_thuc: 'mot_lan' };
+
+    const text = isHangThang
+      ? `Tạo kỳ thanh toán tháng ${payload.thang}/${payload.nam} cho CTV "${u.ho_ten}"?`
+      : `Tạo thanh toán 1 lần cho CTV "${u.ho_ten}" (chỉ công nhân đủ 26 ngày công và chưa từng nhận)?`;
+    if (!window.confirm(text)) return;
+
+    try {
+      const res = await thanhToanCtv.mutateAsync({ id: u.id, ...payload });
+      const kq = res?.data ?? {};
+      alert(`Đã tạo thanh toán: ${Number(kq.so_luong || 0)} công nhân, tổng ${fmtMoney(kq.tong_tien || 0)}`);
+    } catch (e) {
+      alert(e?.response?.data?.error?.message ?? 'Không thể tạo kỳ thanh toán');
+    }
+  }
+
   return (
     <div style={s.root}>
       <div style={{ ...s.header, ...(isMobile ? s.headerMobile : {}) }}>
         <div style={{ ...s.tabs, ...(isMobile ? s.tabsMobile : {}) }}>
-          {[['user','Tất cả user'],['nhan-vien','Nhân viên'],['ctv','Cộng tác viên']].map(([v, l]) => (
+          {(isAdmin
+            ? [['user','Tất cả user'],['nhan-vien','Nhân viên'],['ctv','Cộng tác viên']]
+            : [['ctv','Cộng tác viên']]
+          ).map(([v, l]) => (
             <button key={v} style={{ ...s.tab, ...(tab === v ? s.tabActive : {}) }}
               onClick={() => setTab(v)}>{l}</button>
           ))}
         </div>
         <button className="btn-primary" style={isMobile ? s.addBtnMobile : undefined} onClick={() => { setEditing(null); setShowAdd(true); }}>
-          + Thêm user
+          {isAdmin ? '+ Thêm user' : '+ Thêm cộng tác viên'}
         </button>
       </div>
 
@@ -333,29 +377,57 @@ export default function NhanSu() {
                     <div style={m.metaItem}><span style={m.metaLabel}>SĐT</span><span style={s.sub}>{u.so_dien_thoai ?? '—'}</span></div>
                     <div style={m.metaItem}><span style={m.metaLabel}>Số người tuyển</span><span style={s.mono}>{Number(u.so_cn_tuyen || 0)}</span></div>
                     <div style={m.metaItem}><span style={m.metaLabel}>Tiền công/người</span><span style={s.mono}>{fmtMoney(u.tien_cong_moi_nguoi)}</span></div>
-                    <div style={m.metaItem}><span style={m.metaLabel}>Tổng tiền</span><span style={{ ...s.mono, color: 'var(--green)', fontWeight: 700 }}>{fmtMoney(u.tong_tien_cong)}</span></div>
+                    <div style={m.metaItem}><span style={m.metaLabel}>Hình thức</span><span style={s.sub}>{u.hinh_thuc_thanh_toan === 'hang_thang' ? 'Nhận hàng tháng' : 'Lấy 1 lần'}</span></div>
+                    {u.hinh_thuc_thanh_toan !== 'hang_thang' && (
+                      <div style={m.metaItem}><span style={m.metaLabel}>Đủ điều kiện 1 lần</span><span style={s.mono}>{Number(u.so_cn_du_dieu_kien_mot_lan || 0)} người</span></div>
+                    )}
+                    <div style={m.metaItem}><span style={m.metaLabel}>Dự kiến thanh toán</span><span style={{ ...s.mono, color: 'var(--green)', fontWeight: 700 }}>{fmtMoney(u.du_kien_thanh_toan)}</span></div>
                   </div>
                   <div style={m.actions}>
+                    <button
+                      className="btn-primary"
+                      style={{ fontSize: 11, padding: '4px 8px' }}
+                      onClick={() => handleThanhToan(u)}
+                      disabled={thanhToanCtv.isPending}
+                    >
+                      Thanh toán
+                    </button>
                     <button className="btn-ghost" style={{ fontSize: 11, padding: '4px 8px' }} onClick={() => { setEditing(u); setShowAdd(true); }}>Sửa</button>
+                    <button style={{ ...s.delBtn, marginLeft: 4 }} onClick={() => handleXoa(u)}>🗑</button>
                   </div>
                 </div>
               ))}
             </div>
           ) : (
             <table style={s.table}>
-              <thead><tr>{['Tên','SĐT','Số người tuyển','Tiền công/người','Tổng tiền',''].map((h, i) => <th key={i} style={s.th}>{h}</th>)}</tr></thead>
+              <thead><tr>{['Tên','SĐT','Số người tuyển','Tiền công/người','Hình thức','Đủ điều kiện 1 lần','Dự kiến thanh toán',''].map((h, i) => <th key={i} style={s.th}>{h}</th>)}</tr></thead>
               <tbody>
-                {ctvs.length === 0 ? <tr><td colSpan={6} style={s.empty}>Chưa có cộng tác viên</td></tr> :
+                {ctvs.length === 0 ? <tr><td colSpan={8} style={s.empty}>Chưa có cộng tác viên</td></tr> :
                   ctvs.map((u) => (
                     <tr key={u.id} style={s.tr}>
                       <td style={s.td}><b style={{ color: 'var(--text1)' }}>{u.ho_ten}</b></td>
                       <td style={s.td}><span style={s.sub}>{u.so_dien_thoai ?? '—'}</span></td>
                       <td style={s.td}><span style={s.mono}>{Number(u.so_cn_tuyen || 0)}</span></td>
                       <td style={s.td}><span style={s.mono}>{fmtMoney(u.tien_cong_moi_nguoi)}</span></td>
-                      <td style={s.td}><span style={{ ...s.mono, color: 'var(--green)', fontWeight: 700 }}>{fmtMoney(u.tong_tien_cong)}</span></td>
+                      <td style={s.td}><span style={s.sub}>{u.hinh_thuc_thanh_toan === 'hang_thang' ? 'Nhận hàng tháng' : 'Lấy 1 lần'}</span></td>
                       <td style={s.td}>
+                        <span style={s.mono}>
+                          {u.hinh_thuc_thanh_toan === 'hang_thang' ? '—' : `${Number(u.so_cn_du_dieu_kien_mot_lan || 0)} người`}
+                        </span>
+                      </td>
+                      <td style={s.td}><span style={{ ...s.mono, color: 'var(--green)', fontWeight: 700 }}>{fmtMoney(u.du_kien_thanh_toan)}</span></td>
+                      <td style={s.td}>
+                        <button
+                          className="btn-primary"
+                          style={{ fontSize: 11, padding: '4px 8px' }}
+                          onClick={() => handleThanhToan(u)}
+                          disabled={thanhToanCtv.isPending}
+                        >
+                          Thanh toán
+                        </button>
                         <button className="btn-ghost" style={{ fontSize: 11, padding: '4px 8px' }}
                           onClick={() => { setEditing(u); setShowAdd(true); }}>Sửa</button>
+                        <button style={{ ...s.delBtn, marginLeft: 4 }} onClick={() => handleXoa(u)}>🗑</button>
                       </td>
                     </tr>
                   ))}

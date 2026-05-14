@@ -11,6 +11,17 @@ const ktxModel = require('../models/ktxModel');
 
 const router = Router();
 
+function toPositiveInt(value, fieldName) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    const e = new Error(`${fieldName} không hợp lệ`);
+    e.statusCode = 400;
+    e.code = 'VALIDATION_ERROR';
+    throw e;
+  }
+  return parsed;
+}
+
 // ─── KY_TUC_XA ────────────────────────────────────────────
 router.get('/', requireRole('admin'), asyncWrapper(async (_req, res) => {
   const data = await ktxModel.findAllKtx();
@@ -27,7 +38,7 @@ router.post('/', requireRole('admin'),
 
 // Vô hiệu hoá KTX (active = FALSE)
 router.delete('/:id', requireRole('admin'), asyncWrapper(async (req, res) => {
-  const data = await ktxModel.updateKtx(parseInt(req.params.id, 10), { active: false });
+  const data = await ktxModel.updateKtx(toPositiveInt(req.params.id, 'ID KTX'), { active: false });
   if (!data) { const e = new Error('Không tìm thấy KTX'); e.statusCode = 404; throw e; }
   sendSuccess(res, null, 'Đã vô hiệu hoá KTX');
 }));
@@ -35,7 +46,7 @@ router.delete('/:id', requireRole('admin'), asyncWrapper(async (req, res) => {
 router.put('/:id', requireRole('admin'),
   validate(z.object({ ten: z.string().min(1).max(100).optional(), dia_chi: z.string().max(500).optional(), ghi_chu: z.string().optional(), active: z.boolean().optional() })),
   asyncWrapper(async (req, res) => {
-    const data = await ktxModel.updateKtx(parseInt(req.params.id, 10), req.validatedBody);
+    const data = await ktxModel.updateKtx(toPositiveInt(req.params.id, 'ID KTX'), req.validatedBody);
     if (!data) { const e = new Error('Không tìm thấy KTX'); e.statusCode = 404; throw e; }
     sendSuccess(res, data, 'Cập nhật thành công');
   }),
@@ -43,7 +54,7 @@ router.put('/:id', requireRole('admin'),
 
 // ─── PHONG ────────────────────────────────────────────────
 router.get('/:ktxId/phong', requireRole('admin'), asyncWrapper(async (req, res) => {
-  const data = await ktxModel.findPhongByKtx(parseInt(req.params.ktxId, 10));
+  const data = await ktxModel.findPhongByKtx(toPositiveInt(req.params.ktxId, 'ID KTX'));
   sendSuccess(res, data);
 }));
 
@@ -61,7 +72,7 @@ router.post('/:ktxId/phong', requireRole('admin'),
   asyncWrapper(async (req, res) => {
     const data = await ktxModel.createPhong({
       ...req.validatedBody,
-      ktx_id: parseInt(req.params.ktxId, 10),
+      ktx_id: toPositiveInt(req.params.ktxId, 'ID KTX'),
     });
     sendCreated(res, data, 'Thêm phòng thành công');
   }),
@@ -70,21 +81,21 @@ router.post('/:ktxId/phong', requireRole('admin'),
 router.put('/phong/:phongId', requireRole('admin'),
   validate(phongSchema.omit({ ktx_id: true }).partial()),
   asyncWrapper(async (req, res) => {
-    const data = await ktxModel.updatePhong(parseInt(req.params.phongId, 10), req.validatedBody);
+    const data = await ktxModel.updatePhong(toPositiveInt(req.params.phongId, 'ID phòng'), req.validatedBody);
     if (!data) { const e = new Error('Không tìm thấy phòng'); e.statusCode = 404; throw e; }
     sendSuccess(res, data, 'Cập nhật phòng thành công');
   }),
 );
 
 router.delete('/phong/:phongId', requireRole('admin'), asyncWrapper(async (req, res) => {
-  const data = await ktxModel.deletePhong(parseInt(req.params.phongId, 10));
+  const data = await ktxModel.deletePhong(toPositiveInt(req.params.phongId, 'ID phòng'));
   if (!data) { const e = new Error('Không tìm thấy phòng'); e.statusCode = 404; throw e; }
   sendSuccess(res, null, 'Đã xoá phòng');
 }));
 
 // ─── GIUONG (xem chi tiết phòng) ──────────────────────────
 router.get('/phong/:phongId/giuong', requireRole('admin'), asyncWrapper(async (req, res) => {
-  const data = await ktxModel.findGiuongByPhong(parseInt(req.params.phongId, 10));
+  const data = await ktxModel.findGiuongByPhong(toPositiveInt(req.params.phongId, 'ID phòng'));
   sendSuccess(res, data);
 }));
 
@@ -99,7 +110,7 @@ router.post('/giuong/:giuongId/xep', requireRole('admin'),
   asyncWrapper(async (req, res) => {
     const data = await ktxModel.xepGiuong(
       req.validatedBody.cong_nhan_id,
-      parseInt(req.params.giuongId, 10),
+      toPositiveInt(req.params.giuongId, 'ID giường'),
       req.validatedBody.ngay_vao,
     );
     sendCreated(res, data, 'Xếp giường thành công');
@@ -110,7 +121,7 @@ router.put('/thue-phong/:id/tra', requireRole('admin'),
   validate(z.object({ ngay_ra: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) })),
   asyncWrapper(async (req, res) => {
     const data = await ktxModel.traPhong(
-      parseInt(req.params.id, 10),
+      toPositiveInt(req.params.id, 'ID thuê phòng'),
       req.validatedBody.ngay_ra,
     );
     if (!data) { const e = new Error('Không tìm thấy bản ghi thuê phòng'); e.statusCode = 404; throw e; }
@@ -120,23 +131,40 @@ router.put('/thue-phong/:id/tra', requireRole('admin'),
 
 // Lịch sử thuê phòng của 1 công nhân
 router.get('/lich-su/:congNhanId', requireRole('admin'), asyncWrapper(async (req, res) => {
-  const data = await ktxModel.findThuephongByCongNhan(parseInt(req.params.congNhanId, 10));
+  const data = await ktxModel.findThuephongByCongNhan(toPositiveInt(req.params.congNhanId, 'ID công nhân'));
+  sendSuccess(res, data);
+}));
+
+// Danh sách công nhân có thể xếp phòng (chưa có KTX/phòng trọ active)
+router.get('/cong-nhan/co-the-xep', requireRole('admin'), asyncWrapper(async (req, res) => {
+  const data = await ktxModel.findUngVienXepPhong({
+    search: req.query.search,
+    limit: req.query.limit,
+  });
   sendSuccess(res, data);
 }));
 
 // ─── HOA_DON_KTX ───────────────────────────────────────────
 router.get('/phong/:phongId/hoa-don', requireRole('admin'), asyncWrapper(async (req, res) => {
-  const data = await ktxModel.findHoaDonByPhong(parseInt(req.params.phongId, 10));
+  const data = await ktxModel.findHoaDonByPhong(toPositiveInt(req.params.phongId, 'ID phòng'));
   sendSuccess(res, data);
 }));
 
 // Lấy số điện/nước tháng trước để điền sẵn
 router.get('/phong/:phongId/hoa-don/thang-truoc', requireRole('admin'), asyncWrapper(async (req, res) => {
   const { thang, nam } = req.query;
+  const thangNum = toPositiveInt(thang, 'Tháng');
+  const namNum = toPositiveInt(nam, 'Năm');
+  if (thangNum < 1 || thangNum > 12) {
+    const e = new Error('Tháng không hợp lệ');
+    e.statusCode = 400;
+    e.code = 'VALIDATION_ERROR';
+    throw e;
+  }
   const data = await ktxModel.findSoThangTruoc(
-    parseInt(req.params.phongId, 10),
-    parseInt(thang, 10),
-    parseInt(nam, 10),
+    toPositiveInt(req.params.phongId, 'ID phòng'),
+    thangNum,
+    namNum,
   );
   sendSuccess(res, data);
 }));
@@ -159,7 +187,7 @@ router.post('/phong/:phongId/hoa-don', requireRole('admin'),
   asyncWrapper(async (req, res) => {
     const data = await ktxModel.createHoaDon({
       ...req.validatedBody,
-      phong_id: parseInt(req.params.phongId, 10),
+      phong_id: toPositiveInt(req.params.phongId, 'ID phòng'),
     });
     sendCreated(res, data, 'Lưu hóa đơn thành công');
   }),

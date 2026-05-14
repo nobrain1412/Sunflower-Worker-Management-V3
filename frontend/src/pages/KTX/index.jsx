@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useKtxList, useTaoKtx, useXoaKtx, usePhongList, useTaoPhong, useCapNhatPhong, useXoaPhong, useGiuongList, useXepGiuong, useTraPhong, useHoaDonList, useTaoHoaDon, useHoaDonThangTruoc } from '../../hooks/useKtx';
+import { useKtxList, useTaoKtx, useXoaKtx, usePhongList, useTaoPhong, useCapNhatPhong, useXoaPhong, useGiuongList, useXepGiuong, useTraPhong, useHoaDonList, useTaoHoaDon, useHoaDonThangTruoc, useUngVienXepPhong } from '../../hooks/useKtx';
 import { usePhongTroList, useTaoPhongTro, useXoaPhongTro } from '../../hooks/usePhongTro';
-import { useCongNhanList } from '../../hooks/useCongNhan';
 import { useAuth } from '../../context/AuthContext';
 
 function fmt(n) { return Number(n || 0).toLocaleString('vi-VN') + 'đ'; }
@@ -100,8 +99,9 @@ function AddPhongModal({ ktxId, onClose }) {
 // ─── Modal xếp giường ─────────────────────────────────────
 function XepGiuongModal({ giuong, phongId, onClose }) {
   const xep = useXepGiuong(phongId);
-  const { data: cnRes } = useCongNhanList({ limit: 200, trang_thai: 'dang_lam' });
-  const cnList = cnRes?.data ?? [];
+  const [search, setSearch] = useState('');
+  const { data: ungVienRes } = useUngVienXepPhong(search);
+  const cnList = ungVienRes?.data ?? [];
   const [congNhanId, setCongNhanId] = useState('');
   const [ngayVao, setNgayVao] = useState(new Date().toISOString().split('T')[0]);
   const [err, setErr] = useState('');
@@ -120,11 +120,43 @@ function XepGiuongModal({ giuong, phongId, onClose }) {
       <div style={M.modal}>
         <div style={M.title}>Xếp giường {giuong.so_thu_tu}</div>
         <div style={{ marginBottom: 10 }}>
-          <label className="form-label">Công nhân *</label>
-          <select className="form-input" value={congNhanId} onChange={(e) => setCongNhanId(e.target.value)}>
-            <option value="">— Chọn công nhân —</option>
-            {cnList.map((cn) => <option key={cn.id} value={cn.id}>{cn.ho_ten} {cn.cong_ty ? `(${cn.cong_ty})` : ''}</option>)}
-          </select>
+          <label className="form-label">Tìm công nhân chưa có chỗ ở *</label>
+          <input
+            className="form-input"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Nhập tên, CCCD, SĐT..."
+          />
+          <div style={{ marginTop: 8, maxHeight: 180, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 8 }}>
+            {cnList.length === 0 ? (
+              <div style={{ padding: '10px 12px', fontSize: 12, color: 'var(--text3)' }}>Không có công nhân phù hợp để xếp phòng</div>
+            ) : cnList.map((cn) => {
+              const active = String(cn.id) === String(congNhanId);
+              return (
+                <button
+                  key={cn.id}
+                  type="button"
+                  onClick={() => setCongNhanId(String(cn.id))}
+                  style={{
+                    width: '100%',
+                    textAlign: 'left',
+                    background: active ? 'rgba(79,124,255,0.12)' : 'transparent',
+                    border: 'none',
+                    borderBottom: '1px solid var(--border)',
+                    padding: '8px 10px',
+                    cursor: 'pointer',
+                    color: 'var(--text1)',
+                    fontFamily: "'Be Vietnam Pro', sans-serif",
+                  }}
+                >
+                  <div style={{ fontSize: 12, fontWeight: 600 }}>{cn.ho_ten}</div>
+                  <div style={{ fontSize: 10, color: 'var(--text3)' }}>
+                    {cn.ten_cong_ty ? `${cn.ten_cong_ty} · ` : ''}{cn.cccd ?? 'Không CCCD'} · {cn.so_dien_thoai ?? 'Không SĐT'}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
         </div>
         <div style={{ marginBottom: 10 }}>
           <label className="form-label">Ngày vào</label>

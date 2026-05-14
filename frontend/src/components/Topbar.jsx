@@ -1,4 +1,5 @@
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 
 const PAGE_TITLE = {
   '/':          'Dashboard',
@@ -11,9 +12,15 @@ const PAGE_TITLE = {
 };
 
 export default function Topbar({ onMenuClick }) {
+  const { logout } = useAuth();
+  const navigate = useNavigate();
   const { pathname } = useLocation();
   const title = PAGE_TITLE[pathname] ?? 'WorkerOS';
   const today = new Date().toLocaleDateString('vi-VN', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' });
+  async function handleLogout() {
+    await logout();
+    navigate('/login');
+  }
 
   return (
     <header style={s.bar}>
@@ -48,6 +55,9 @@ export default function Topbar({ onMenuClick }) {
             <path d="M13.73 21a2 2 0 0 1-3.46 0" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
           </svg>
           <span style={s.notifDot} />
+        </button>
+        <button className="topbar-mobile-logout" style={s.mobileLogoutBtn} onClick={handleLogout} title="Đăng xuất">
+          Đăng xuất
         </button>
       </div>
     </header>
@@ -84,5 +94,16 @@ const s = {
     position: 'absolute', top: 7, right: 7,
     width: 6, height: 6, borderRadius: '50%',
     background: 'var(--red)', border: '1.5px solid var(--bg1)',
+  },
+  mobileLogoutBtn: {
+    background: 'transparent',
+    border: '1px solid var(--border2)',
+    color: 'var(--text2)',
+    borderRadius: 8,
+    padding: '7px 10px',
+    fontSize: 11,
+    fontWeight: 600,
+    cursor: 'pointer',
+    fontFamily: "'Be Vietnam Pro', sans-serif",
   },
 };

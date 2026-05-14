@@ -40,11 +40,15 @@ CREATE TABLE users (
   ten_chu_tk           VARCHAR(100),
   -- Cộng tác viên: tiền công mỗi người tuyển
   tien_cong_moi_nguoi  NUMERIC(12,2) NOT NULL DEFAULT 0,
+  hinh_thuc_thanh_toan VARCHAR(20) NOT NULL DEFAULT 'mot_lan'
+                       CHECK (hinh_thuc_thanh_toan IN ('mot_lan', 'hang_thang')),
+  quan_ly_id           INT REFERENCES users(id) ON DELETE RESTRICT,
   created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX idx_users_ten_dang_nhap ON users (ten_dang_nhap);
 CREATE INDEX idx_users_vai_tro       ON users (vai_tro);
+CREATE INDEX idx_users_quan_ly_id    ON users (quan_ly_id);
 CREATE TRIGGER trg_users_updated_at BEFORE UPDATE ON users
   FOR EACH ROW EXECUTE FUNCTION fn_update_updated_at();
 
@@ -55,6 +59,7 @@ CREATE TABLE cong_ty (
   id              SERIAL PRIMARY KEY,
   ten_cong_ty     VARCHAR(200) NOT NULL,
   dia_chi         VARCHAR(500),
+  map_url         TEXT,
   so_dien_thoai   VARCHAR(20),
   email           VARCHAR(100),
   -- Lương cơ bản
@@ -139,9 +144,13 @@ CREATE TABLE cong_nhan (
   ten_chu_tk        VARCHAR(100),
   -- CCCD đã trả & mượn xe
   cccd_da_tra       BOOLEAN NOT NULL DEFAULT FALSE,
+  trang_thai_noi_o  VARCHAR(30) NOT NULL DEFAULT 'chua_co_phong'
+                    CHECK (trang_thai_noi_o IN ('chua_co_phong', 'tu_tuc', 'ktx', 'phong_tro')),
   muon_xe           BOOLEAN NOT NULL DEFAULT FALSE,
   loai_xe           VARCHAR(20) CHECK (loai_xe IS NULL OR loai_xe IN ('xe_dap', 'xe_dien', 'xe_may')),
   xe_da_tra         BOOLEAN NOT NULL DEFAULT FALSE,
+  ngay_muon_xe      DATE,
+  anh_xe            VARCHAR(500),
   -- Timestamps
   created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -250,6 +259,36 @@ CREATE INDEX idx_gdtc_ngay ON giao_dich_tai_chinh(ngay);
 CREATE INDEX idx_gdtc_loai ON giao_dich_tai_chinh(loai);
 CREATE TRIGGER trg_gdtc_updated_at BEFORE UPDATE ON giao_dich_tai_chinh
   FOR EACH ROW EXECUTE FUNCTION fn_update_updated_at();
+
+-- ═════════════════════════════════════════════════════════════
+-- 8.1. CONG_TAC_VIEN_THANH_TOAN
+-- ═════════════════════════════════════════════════════════════
+CREATE TABLE cong_tac_vien_thanh_toan (
+  id            SERIAL PRIMARY KEY,
+  ctv_id        INT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+  cong_nhan_id  INT NOT NULL REFERENCES cong_nhan(id) ON DELETE RESTRICT,
+  hinh_thuc     VARCHAR(20) NOT NULL CHECK (hinh_thuc IN ('mot_lan', 'hang_thang')),
+  thang         SMALLINT,
+  nam           SMALLINT,
+  so_tien       NUMERIC(14,2) NOT NULL DEFAULT 0,
+  ghi_chu       TEXT,
+  created_by    INT REFERENCES users(id) ON DELETE RESTRICT,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CHECK (
+    (hinh_thuc = 'mot_lan' AND thang IS NULL AND nam IS NULL)
+    OR
+    (hinh_thuc = 'hang_thang' AND thang BETWEEN 1 AND 12 AND nam >= 2020)
+  )
+);
+CREATE INDEX idx_ctv_tt_ctv ON cong_tac_vien_thanh_toan(ctv_id);
+CREATE INDEX idx_ctv_tt_cn ON cong_tac_vien_thanh_toan(cong_nhan_id);
+CREATE INDEX idx_ctv_tt_thang_nam ON cong_tac_vien_thanh_toan(thang, nam);
+CREATE UNIQUE INDEX uq_ctv_tt_mot_lan_cn
+  ON cong_tac_vien_thanh_toan(cong_nhan_id)
+  WHERE hinh_thuc = 'mot_lan';
+CREATE UNIQUE INDEX uq_ctv_tt_thang_cn
+  ON cong_tac_vien_thanh_toan(cong_nhan_id, thang, nam)
+  WHERE hinh_thuc = 'hang_thang';
 
 -- ═════════════════════════════════════════════════════════════
 -- 9. KY_TUC_XA — căn KTX

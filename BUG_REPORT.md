@@ -19,22 +19,21 @@
 ---
 
 ## Danh sách lỗi
-- bỏ validate ở password, chỉ cần trên 6 ký tự
-- lỗi giao diện bị vỡ khi dùng trên điện thoại
+- ở giao diện điện thoại, bỏ menu ngang nằm dưới, nó làm khuất mất các của sổ phụ của form
+- thêm nút đăng xuất cho điện thoại
 ## Tính năng mới
-
+- thêm tab cộng tác viên cho quản lý và admin. quản lý có thể thêm sửa xoá danh sách cộng tác viên của mình, đặt tiền thưởng/người với mỗi cộng tác viên, dự kiến số tiền cần thanh toán. có 2 hình thức thanh toán, lấy 1 lần, khi công nhân làm đủ 26 ngày công sẽ đủ điều kiện để thanh toán, 1 công nhân chỉ được nhận thưởng 1 lần . nhận hàng tháng, lấy base là tiền thưởng/người, tính ra đơn giá mỗi giờ bằng công thức (tiền thưởng/26/8) để tính ra tiền mỗi giờ, cuối tháng sẽ thanh toán theo số giờ công nhân làm được và được tính hàng tháng 
 # Dashboard
-- khi ấn vào tên vender, tên công nhân, tên phòng sẽ redirect sang thông tin chi tiết của vender, công nhân hoặc phòng đó
-# Công nhân
-- thêm chức năng thêm mới công nhân bằng cách đọc dữ liệu từ cccd hoặc chụp danh sách viết tay
-- tất cả các option lọc dữ liệu được thu vào trong 1 của sổ phụ, của sổ này sẽ hiện lên khi chọn nút lọc dữ liệu
-# Ký túc xá
-- cho phép vender sử dụng chức năng nhà trọ
-- chức năng ký túc xá chỉ dành cho admin, những role khác ngoài admin sẽ bị ẩn ký túc xá
-# công ty
 
+# Công nhân
+- thay ảnh đại diện ở trên danh sách công nhân thành ảnh chân dung của công nhân đó
+- trong chi tiết công nhân, khi ấn vào ảnh cccd hoặc ảnh chân dung sẽ có thể xem chi tiết ảnh đó. thêm trạng thái mượn xe bao gồm xe máy, xe đạp, xe đạp điện và không mượn xe, đối với những người có mượn xe sẽ hiện ảnh của chiếc xe và ngày mượn, trạng thái đã trả xe chưa có thể toggle trong thông tin cá nhân luôn
+# Ký túc xá
+- chỗ xếp phòng hãy để thanh search kèm gợi ý theo input nhập vào. chỉ có thể xếp phòng cho các công nhân chưa có chỗ ở, công nhân sẽ có thêm trạng thái phòng gồm chưa có phòng, tự túc chỗ ở và danh sách các nhà trọ + ký túc xá mà user đó được phép truy cập
+# công ty
+- công ty sẽ có thêm định vị được nhúng google map vào
 # tài chính
-- cho phép vender sử dụng chức năng tài chính
+
 # nhân viên
 
 # cộng tác viên

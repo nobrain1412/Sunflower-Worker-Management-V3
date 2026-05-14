@@ -21,7 +21,7 @@ async function findAll({ page = 1, limit = 20, sort = 'ten_cong_ty', order = 'as
 
   params.push(limit, offset);
   const rows = await db.query(
-    `SELECT id, ten_cong_ty, dia_chi, so_dien_thoai, email,
+    `SELECT id, ten_cong_ty, dia_chi, map_url, so_dien_thoai, email,
             luong_co_ban, luong_theo_gio, he_so_ot, ngay_lam_chuan,
             luong_tc_ngay, luong_hc_dem, luong_tc_dem, luong_chu_nhat, luong_ngay_le,
             tien_dong_phuc, tien_phat_nghi,
@@ -43,7 +43,7 @@ async function findById(id) {
 }
 
 async function create(data) {
-  const { ten_cong_ty, dia_chi, so_dien_thoai, email,
+  const { ten_cong_ty, dia_chi, map_url, so_dien_thoai, email,
           luong_co_ban, luong_theo_gio, he_so_ot, ngay_lam_chuan,
           luong_tc_ngay, luong_hc_dem, luong_tc_dem, luong_chu_nhat, luong_ngay_le,
           tien_dong_phuc, tien_phat_nghi,
@@ -53,16 +53,16 @@ async function create(data) {
 
   const result = await db.query(
     `INSERT INTO cong_ty
-       (ten_cong_ty, dia_chi, so_dien_thoai, email,
+       (ten_cong_ty, dia_chi, map_url, so_dien_thoai, email,
         luong_co_ban, luong_theo_gio, he_so_ot, ngay_lam_chuan,
         luong_tc_ngay, luong_hc_dem, luong_tc_dem, luong_chu_nhat, luong_ngay_le,
         tien_dong_phuc, tien_phat_nghi,
         don_gia_theo_gio_vender, tro_cap, chuyen_can, ngay_chot_cong,
         mo_ta_cong_viec, media_urls,
         ghi_chu)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
      RETURNING *`,
-    [ten_cong_ty, dia_chi ?? null, so_dien_thoai ?? null, email ?? null,
+    [ten_cong_ty, dia_chi ?? null, map_url ?? null, so_dien_thoai ?? null, email ?? null,
      luong_co_ban ?? 0, luong_theo_gio ?? 0, he_so_ot ?? 1.5, ngay_lam_chuan ?? 26,
      luong_tc_ngay ?? 0, luong_hc_dem ?? 0, luong_tc_dem ?? 0, luong_chu_nhat ?? 0, luong_ngay_le ?? 0,
      tien_dong_phuc ?? 0, tien_phat_nghi ?? 0,
@@ -74,7 +74,7 @@ async function create(data) {
 }
 
 async function update(id, data) {
-  const allowed = ['ten_cong_ty', 'dia_chi', 'so_dien_thoai', 'email',
+  const allowed = ['ten_cong_ty', 'dia_chi', 'map_url', 'so_dien_thoai', 'email',
                    'luong_co_ban', 'luong_theo_gio', 'he_so_ot', 'ngay_lam_chuan',
                    'luong_tc_ngay', 'luong_hc_dem', 'luong_tc_dem', 'luong_chu_nhat', 'luong_ngay_le',
                    'tien_dong_phuc', 'tien_phat_nghi',

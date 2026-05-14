@@ -161,9 +161,9 @@ body {
 
   /* ---- Layout ---- */
   .sidebar-wrap      { display: none !important; }
-  .layout-main       { margin-left: 0 !important; padding-bottom: 68px; }
+  .layout-main       { margin-left: 0 !important; padding-bottom: 0 !important; }
   .layout-content    { padding: 14px 16px !important; }
-  .bottom-nav-wrap nav { display: flex !important; }
+  .bottom-nav-wrap nav { display: none !important; }
 
   /* Mobile sidebar drawer */
   .sidebar-overlay.open { display: block; }
@@ -333,6 +333,20 @@ body {
   }
   .nhan-su-form-grid > div {
     grid-column: auto !important;
+  }
+}
+
+body.sheet-open .bottom-nav-wrap nav {
+  display: none !important;
+}
+
+.topbar-mobile-logout {
+  display: none !important;
+}
+
+@media (max-width: 768px) {
+  .topbar-mobile-logout {
+    display: inline-flex !important;
   }
 }
 

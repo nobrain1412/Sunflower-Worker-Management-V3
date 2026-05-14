@@ -3,9 +3,17 @@ import { useEffect } from 'react';
 export default function BottomSheet({ open, onClose, title, children }) {
   // Khoá scroll body khi mở
   useEffect(() => {
-    if (open) document.body.style.overflow = 'hidden';
-    else document.body.style.overflow = '';
-    return () => { document.body.style.overflow = ''; };
+    if (open) {
+      document.body.style.overflow = 'hidden';
+      document.body.classList.add('sheet-open');
+    } else {
+      document.body.style.overflow = '';
+      document.body.classList.remove('sheet-open');
+    }
+    return () => {
+      document.body.style.overflow = '';
+      document.body.classList.remove('sheet-open');
+    };
   }, [open]);
 
   if (!open) return null;

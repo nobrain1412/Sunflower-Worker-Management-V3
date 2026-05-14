@@ -131,6 +131,23 @@ async function findGiuongByPhong(phongId) {
 
 // ─── THUE_PHONG ────────────────────────────────────────────
 async function xepGiuong(congNhanId, giuongId, ngayVao) {
+  const cn = await db.query(
+    `SELECT id, trang_thai_noi_o FROM cong_nhan WHERE id = $1 AND deleted_at IS NULL`,
+    [congNhanId],
+  );
+  if (!cn.rows[0]) {
+    const err = new Error('Không tìm thấy công nhân');
+    err.statusCode = 404;
+    err.code = 'NOT_FOUND';
+    throw err;
+  }
+  if (cn.rows[0].trang_thai_noi_o !== 'chua_co_phong') {
+    const err = new Error('Chỉ được xếp phòng cho công nhân có trạng thái "chưa có phòng"');
+    err.statusCode = 400;
+    err.code = 'INVALID_TRANG_THAI_NOI_O';
+    throw err;
+  }
+
   // Kiểm tra không trùng giường đang ở
   const check = await db.query(
     `SELECT id FROM thue_phong WHERE giuong_id = $1 AND ngay_ra IS NULL`,
@@ -151,6 +168,12 @@ async function xepGiuong(congNhanId, giuongId, ngayVao) {
      VALUES ($1,$2,$3) RETURNING *`,
     [congNhanId, giuongId, ngayVao],
   );
+  await db.query(
+    `UPDATE cong_nhan
+        SET trang_thai_noi_o = 'ktx'
+      WHERE id = $1`,
+    [congNhanId],
+  );
   return result.rows[0];
 }
 
@@ -159,7 +182,24 @@ async function traPhong(thuephongId, ngayRa) {
     `UPDATE thue_phong SET ngay_ra = $1 WHERE id = $2 AND ngay_ra IS NULL RETURNING *`,
     [ngayRa, thuephongId],
   );
-  return result.rows[0] || null;
+  const updated = result.rows[0] || null;
+  if (updated) {
+    const stillInKtx = await db.query(
+      `SELECT 1 FROM thue_phong WHERE cong_nhan_id = $1 AND ngay_ra IS NULL LIMIT 1`,
+      [updated.cong_nhan_id],
+    );
+    const inPhongTro = await db.query(
+      `SELECT 1 FROM thue_phong_tro WHERE cong_nhan_id = $1 AND ngay_ra IS NULL LIMIT 1`,
+      [updated.cong_nhan_id],
+    );
+    if (!stillInKtx.rows.length && !inPhongTro.rows.length) {
+      await db.query(
+        `UPDATE cong_nhan SET trang_thai_noi_o = 'chua_co_phong' WHERE id = $1`,
+        [updated.cong_nhan_id],
+      );
+    }
+  }
+  return updated;
 }
 
 async function findThuephongByCongNhan(congNhanId) {
@@ -173,6 +213,46 @@ async function findThuephongByCongNhan(congNhanId) {
      ORDER BY tp.ngay_vao DESC`,
     [congNhanId],
   );
+  return result.rows;
+}
+
+async function findUngVienXepPhong({ search, limit = 100 }) {
+  const params = [];
+  const conditions = [
+    `cn.deleted_at IS NULL`,
+    `cn.trang_thai IN ('dang_lam', 'moi_vao')`,
+    `cn.trang_thai_noi_o = 'chua_co_phong'`,
+    `NOT EXISTS (
+      SELECT 1 FROM thue_phong tp
+      WHERE tp.cong_nhan_id = cn.id AND tp.ngay_ra IS NULL
+    )`,
+    `NOT EXISTS (
+      SELECT 1 FROM thue_phong_tro tpt
+      WHERE tpt.cong_nhan_id = cn.id AND tpt.ngay_ra IS NULL
+    )`,
+  ];
+
+  if (search) {
+    params.push(`%${search}%`);
+    conditions.push(`(
+      cn.ho_ten ILIKE $${params.length}
+      OR cn.cccd ILIKE $${params.length}
+      OR cn.so_dien_thoai ILIKE $${params.length}
+    )`);
+  }
+
+  params.push(Math.min(Math.max(Number(limit) || 100, 1), 200));
+  const result = await db.query(
+    `SELECT cn.id, cn.ho_ten, cn.cccd, cn.so_dien_thoai, cn.trang_thai,
+            cn.trang_thai_noi_o, ct.ten_cong_ty
+     FROM cong_nhan cn
+     LEFT JOIN cong_ty ct ON ct.id = cn.cong_ty_id
+     WHERE ${conditions.join(' AND ')}
+     ORDER BY cn.ho_ten ASC
+     LIMIT $${params.length}`,
+    params,
+  );
+
   return result.rows;
 }
 
@@ -240,6 +320,6 @@ module.exports = {
   findAllKtx, findKtxById, createKtx, updateKtx,
   findPhongByKtx, findPhongById, createPhong, updatePhong, deletePhong,
   findGiuongByPhong,
-  xepGiuong, traPhong, findThuephongByCongNhan,
+  xepGiuong, traPhong, findThuephongByCongNhan, findUngVienXepPhong,
   findHoaDonByPhong, findHoaDonThang, findSoThangTruoc, createHoaDon,
 };

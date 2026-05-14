@@ -115,6 +115,19 @@ export function useLichSuPhong(congNhanId) {
   });
 }
 
+export function useUngVienXepPhong(search = '') {
+  return useQuery({
+    queryKey: ['ktx', 'co-the-xep', search],
+    queryFn: () => api.get('/ktx/cong-nhan/co-the-xep', {
+      params: {
+        search: search || undefined,
+        limit: 100,
+      },
+    }),
+    staleTime: 15_000,
+  });
+}
+
 // ─── HOA_DON ──────────────────────────────────────────────
 export function useHoaDonList(phongId) {
   return useQuery({

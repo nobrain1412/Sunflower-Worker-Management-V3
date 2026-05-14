@@ -58,6 +58,14 @@ export function useNoiOCongNhan(id) {
   });
 }
 
+export function useNoiOTruyCap() {
+  return useQuery({
+    queryKey: ['cong-nhan', 'noi-o-truy-cap'],
+    queryFn: () => api.get('/cong-nhan/noi-o/truy-cap'),
+    staleTime: 30_000,
+  });
+}
+
 export function useTongUngCongNhan(id) {
   return useQuery({
     queryKey: ['cong-nhan', id, 'tong-ung'],
