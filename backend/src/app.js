@@ -23,6 +23,9 @@ const ocrRoutes       = require('./routes/ocr');
 
 const app = express();
 
+// Trust Railway / reverse proxy — cần thiết để express-rate-limit đọc đúng IP
+app.set('trust proxy', 1);
+
 // --- Security ---
 app.use(helmet());
 app.use(cors({

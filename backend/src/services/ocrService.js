@@ -1,15 +1,8 @@
 const { createWorker } = require('tesseract.js');
-const os   = require('os');
-const path = require('path');
-const fs   = require('fs');
 
-// Cache tessdata để không download lại mỗi lần — dùng /tmp để tương thích Railway
-const CACHE_DIR = path.join(os.tmpdir(), 'tessdata');
-if (!fs.existsSync(CACHE_DIR)) fs.mkdirSync(CACHE_DIR, { recursive: true });
-
+// v7: không dùng cachePath, Tesseract tự quản lý cache
 async function recognize(imagePath) {
   const worker = await createWorker(['vie', 'eng'], 1, {
-    cachePath: CACHE_DIR,
     logger: () => {}, // tắt progress log
   });
   try {
