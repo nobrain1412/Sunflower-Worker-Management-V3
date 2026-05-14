@@ -1,12 +1,23 @@
 const { createWorker } = require('tesseract.js');
+const fs     = require('fs');
+const logger = require('../utils/logger');
 
-// v7: không dùng cachePath, Tesseract tự quản lý cache
 async function recognize(imagePath) {
+  // Đọc file thành Buffer trước — tránh worker thread không truy cập được path
+  const imageBuffer = fs.readFileSync(imagePath);
+
   const worker = await createWorker(['vie', 'eng'], 1, {
-    logger: () => {}, // tắt progress log
+    logger: () => {},
   });
   try {
-    const { data } = await worker.recognize(imagePath);
+    const { data } = await worker.recognize(imageBuffer);
+    // Log raw text để debug — giúp biết Tesseract đọc được gì
+    logger.info({
+      filePath: imagePath,
+      textLength: data.text?.length ?? 0,
+      rawText: data.text?.slice(0, 500), // 500 ký tự đầu
+      confidence: data.confidence,
+    }, 'OCR raw result');
     return data;
   } finally {
     await worker.terminate();
@@ -121,18 +132,14 @@ function parseDanhSach(textLines) {
 
 async function scanCCCD(filePath) {
   const data = await recognize(filePath);
-  if (!data.text.trim()) {
-    throw Object.assign(new Error('Không đọc được văn bản từ ảnh, thử ảnh khác'), { statusCode: 422 });
-  }
-  return parseCCCD(data.text);
+  // Kể cả khi text rỗng vẫn trả về object rỗng — user tự nhập tay trên UI
+  return parseCCCD(data.text ?? '');
 }
 
 async function scanDanhSach(filePath) {
   const data = await recognize(filePath);
   const lines = (data.lines ?? []).map((l) => l.text.trim()).filter(Boolean);
-  if (!lines.length) {
-    throw Object.assign(new Error('Không đọc được văn bản từ ảnh, thử ảnh khác'), { statusCode: 422 });
-  }
+  // Kể cả khi không có dòng nào vẫn trả về mảng rỗng
   return parseDanhSach(lines);
 }
 
