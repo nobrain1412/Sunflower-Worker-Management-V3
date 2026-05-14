@@ -23,8 +23,8 @@ async function postScan(req, res) {
   let ketQua;
   try {
     ketQua = loai === 'cccd'
-      ? await scanCCCD(file.path, file.mimetype)
-      : await scanDanhSach(file.path, file.mimetype);
+      ? await scanCCCD(file.path)
+      : await scanDanhSach(file.path);
   } catch (err) {
     if (err.statusCode) throw err;
     // Log message gốc luôn để debug trên Railway
