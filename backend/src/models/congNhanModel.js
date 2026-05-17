@@ -124,6 +124,7 @@ async function create(data) {
     nguoi_tuyen_id, cong_ty_id,
     ngan_hang, so_tai_khoan, ten_chu_tk,
     cccd_da_tra, trang_thai_noi_o, muon_xe, loai_xe,
+    ma_van_tay,
   } = data;
 
   const result = await db.query(
@@ -132,15 +133,16 @@ async function create(data) {
         dia_chi_hien_tai, so_dien_thoai, ngay_cap_cccd,
         noi_cap_cccd, trang_thai, ngay_vao_lam, ghi_chu, nguoi_tuyen_id, cong_ty_id,
         ngan_hang, so_tai_khoan, ten_chu_tk,
-        cccd_da_tra, trang_thai_noi_o, muon_xe, loai_xe)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
+        cccd_da_tra, trang_thai_noi_o, muon_xe, loai_xe, ma_van_tay)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
      RETURNING *`,
     [ho_ten, cccd ?? null, ngay_sinh ?? null, gioi_tinh ?? null, que_quan ?? null,
      dia_chi_hien_tai ?? null, so_dien_thoai ?? null, ngay_cap_cccd ?? null,
      noi_cap_cccd ?? null, trang_thai ?? 'moi_vao', ngay_vao_lam ?? null, ghi_chu ?? null,
      nguoi_tuyen_id ?? null, cong_ty_id ?? null,
      ngan_hang ?? null, so_tai_khoan ?? null, ten_chu_tk ?? null,
-     cccd_da_tra ?? false, trang_thai_noi_o ?? 'chua_co_phong', muon_xe ?? false, loai_xe ?? null],
+     cccd_da_tra ?? false, trang_thai_noi_o ?? 'chua_co_phong', muon_xe ?? false, loai_xe ?? null,
+     ma_van_tay ?? null],
   );
 
   return result.rows[0];
@@ -157,6 +159,7 @@ async function update(id, data) {
     'cong_ty_id', 'da_tra_dong_phuc', 'da_viet_don_nghi',
     'ngan_hang', 'so_tai_khoan', 'ten_chu_tk',
     'cccd_da_tra', 'trang_thai_noi_o', 'muon_xe', 'loai_xe', 'xe_da_tra', 'ngay_muon_xe',
+    'ma_van_tay',
   ];
 
   for (const field of allowedFields) {

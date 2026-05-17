@@ -4,16 +4,12 @@ import { useKtxList, useTaoKtx, useCapNhatKtx, useXoaKtx, usePhongList, useTaoPh
 import { usePhongTroList, useTaoPhongTro, useCapNhatPhongTro, useXoaPhongTro, usePhongTroThue, useTraPhongTro } from '../../hooks/usePhongTro';
 import { useAuth } from '../../context/AuthContext';
 import { isEmbeddableMapUrl, normalizeMapUrl } from '../../constants/mapUrl';
+import MediaUploader from '../../components/MediaUploader';
 
 function fmt(n) { return Number(n || 0).toLocaleString('vi-VN') + 'đ'; }
-function parseMediaText(text) {
-  return String(text || '')
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean);
-}
-function mediaToText(arr) {
-  return Array.isArray(arr) ? arr.join('\n') : '';
+function toMediaArray(v) {
+  if (Array.isArray(v)) return v;
+  return [];
 }
 
 function occupancy(soGiuong, soDangO, sucChua) {
@@ -422,7 +418,7 @@ export default function KTX({ forcePhongTro = false }) {
   const [addKtxModal, setAddKtxModal] = useState(false);
   const [addPhongModal, setAddPhongModal] = useState(false);
   const [editingKtxMedia, setEditingKtxMedia] = useState(false);
-  const [ktxMediaInput, setKtxMediaInput] = useState('');
+  const [ktxMediaUrls, setKtxMediaUrls] = useState([]);
 
   const selectedKtx  = ktxList.find((k) => k.id === selectedKtxId) ?? ktxList[0] ?? null;
   const activeKtxId  = selectedKtx?.id ?? null;
@@ -434,7 +430,7 @@ export default function KTX({ forcePhongTro = false }) {
   const selectedPhong = phongList.find((p) => p.id === selectedPhongId) ?? null;
 
   useEffect(() => {
-    setKtxMediaInput(mediaToText(selectedKtx?.media_urls));
+    setKtxMediaUrls(toMediaArray(selectedKtx?.media_urls));
   }, [selectedKtx?.id]);
 
   // Group by floor
@@ -539,14 +535,14 @@ export default function KTX({ forcePhongTro = false }) {
             )}
             {isAdmin && editingKtxMedia && (
               <div>
-                <label className="form-label">Ảnh KTX (mỗi dòng 1 URL)</label>
-                <textarea className="form-input" rows={3} value={ktxMediaInput} onChange={(e) => setKtxMediaInput(e.target.value)} />
+                <label className="form-label">Ảnh KTX</label>
+                <MediaUploader value={ktxMediaUrls} onChange={setKtxMediaUrls} folder="ktx" />
                 <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
                   <button
                     className="btn-primary"
                     style={{ fontSize: 12, padding: '6px 12px' }}
                     onClick={async () => {
-                      await capNhatKtx.mutateAsync({ media_urls: parseMediaText(ktxMediaInput) });
+                      await capNhatKtx.mutateAsync({ media_urls: ktxMediaUrls });
                       setEditingKtxMedia(false);
                     }}
                     disabled={capNhatKtx.isPending}
@@ -656,7 +652,7 @@ function PhongTroSection({ canDelete }) {
   const xoa = useXoaPhongTro();
   const traPhongTro = useTraPhongTro();
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ ten: '', dia_chi: '', map_url: '', chu_tro: '', sdt_chu_tro: '', so_phong: 0, ghi_chu: '', media_urls: '' });
+  const [form, setForm] = useState({ ten: '', dia_chi: '', map_url: '', chu_tro: '', sdt_chu_tro: '', so_phong: 0, ghi_chu: '', media_urls: [] });
   const [editing, setEditing] = useState(null);
   const [selectedPhongTro, setSelectedPhongTro] = useState(null);
   const [err, setErr] = useState('');
@@ -675,9 +671,9 @@ function PhongTroSection({ canDelete }) {
         sdt_chu_tro: form.sdt_chu_tro || undefined,
         so_phong: parseInt(form.so_phong, 10) || 0,
         ghi_chu: form.ghi_chu || undefined,
-        media_urls: parseMediaText(form.media_urls),
+        media_urls: toMediaArray(form.media_urls),
       });
-      setForm({ ten: '', dia_chi: '', map_url: '', chu_tro: '', sdt_chu_tro: '', so_phong: 0, ghi_chu: '', media_urls: '' });
+      setForm({ ten: '', dia_chi: '', map_url: '', chu_tro: '', sdt_chu_tro: '', so_phong: 0, ghi_chu: '', media_urls: [] });
       setShowForm(false);
     } catch (e) { setErr(e?.response?.data?.error?.message ?? 'Lỗi'); }
   }
@@ -695,7 +691,7 @@ function PhongTroSection({ canDelete }) {
         sdt_chu_tro: editing.sdt_chu_tro || undefined,
         so_phong: parseInt(editing.so_phong, 10) || 0,
         ghi_chu: editing.ghi_chu || undefined,
-        media_urls: parseMediaText(editing.media_urls),
+        media_urls: toMediaArray(editing.media_urls),
       });
       setEditing(null);
     } catch (e) {
@@ -753,8 +749,8 @@ function PhongTroSection({ canDelete }) {
               <input className="form-input" value={form.ghi_chu} onChange={(e) => setForm((f) => ({ ...f, ghi_chu: e.target.value }))} />
             </div>
             <div style={{ gridColumn: 'span 2', display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <label className="form-label">Ảnh phòng trọ (mỗi dòng 1 URL)</label>
-              <textarea className="form-input" rows={2} value={form.media_urls} onChange={(e) => setForm((f) => ({ ...f, media_urls: e.target.value }))} />
+              <label className="form-label">Ảnh phòng trọ</label>
+              <MediaUploader value={toMediaArray(form.media_urls)} onChange={(urls) => setForm((f) => ({ ...f, media_urls: urls }))} folder="phong-tro" />
             </div>
           </div>
           {err && <div style={{ color: 'var(--red)', fontSize: 12, marginTop: 8 }}>{err}</div>}
@@ -788,8 +784,8 @@ function PhongTroSection({ canDelete }) {
               <input className="form-input" value={editing.ghi_chu ?? ''} onChange={(e) => setEditing((f) => ({ ...f, ghi_chu: e.target.value }))} />
             </div>
             <div style={{ gridColumn: 'span 2', display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <label className="form-label">Ảnh phòng trọ (mỗi dòng 1 URL)</label>
-              <textarea className="form-input" rows={2} value={editing.media_urls ?? ''} onChange={(e) => setEditing((f) => ({ ...f, media_urls: e.target.value }))} />
+              <label className="form-label">Ảnh phòng trọ</label>
+              <MediaUploader value={toMediaArray(editing.media_urls)} onChange={(urls) => setEditing((f) => ({ ...f, media_urls: urls }))} folder="phong-tro" />
             </div>
           </div>
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10, gap: 8 }}>
@@ -859,7 +855,7 @@ function PhongTroSection({ canDelete }) {
                     setShowForm(false);
                     setEditing({
                       ...p,
-                      media_urls: mediaToText(p.media_urls),
+                      media_urls: toMediaArray(p.media_urls),
                     });
                   }}
                 >

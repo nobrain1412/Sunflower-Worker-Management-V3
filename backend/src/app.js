@@ -20,6 +20,7 @@ const ktxRoutes       = require('./routes/ktx');
 const phongTroRoutes  = require('./routes/phongTro');
 const taiChinhRoutes  = require('./routes/taiChinh');
 const ocrRoutes       = require('./routes/ocr');
+const uploadRoutes    = require('./routes/upload');
 
 const app = express();
 
@@ -80,6 +81,7 @@ app.use('/api/ktx',       ktxRoutes);
 app.use('/api/phong-tro', phongTroRoutes);
 app.use('/api/tai-chinh', taiChinhRoutes);
 app.use('/api/ocr',       ocrRoutes);
+app.use('/api/upload',    uploadRoutes);
 
 // Health check
 app.get('/health', (_req, res) => res.json({ status: 'ok', ts: new Date().toISOString() }));

@@ -27,6 +27,7 @@ const INIT = {
   giuong_id: '',
   phong_tro_id: '',
   muon_xe: false, loai_xe: '',
+  ma_van_tay: '',
 };
 
 // Convert dd/mm/yyyy → yyyy-mm-dd cho payload backend
@@ -117,7 +118,7 @@ export default function AddCongNhanModal({ onClose }) {
 
     const payload = { ho_ten: form.ho_ten, trang_thai: form.trang_thai };
     ['cccd','gioi_tinh','que_quan','dia_chi_hien_tai','so_dien_thoai','noi_cap_cccd','ghi_chu',
-     'ngan_hang','so_tai_khoan','ten_chu_tk']
+     'ngan_hang','so_tai_khoan','ten_chu_tk','ma_van_tay']
       .forEach((k) => { if (form[k]) payload[k] = form[k]; });
     payload.cccd_da_tra = !!form.cccd_da_tra;
     payload.trang_thai_noi_o = form.trang_thai_noi_o;
@@ -301,6 +302,9 @@ export default function AddCongNhanModal({ onClose }) {
             )}
             <FormField label="Ngày vào làm" error={errors.ngay_vao_lam}>
               <input className="form-input" name="ngay_vao_lam" value={form.ngay_vao_lam} onChange={handleDateChange('ngay_vao_lam')} placeholder="dd/mm/yyyy" maxLength={10} />
+            </FormField>
+            <FormField label="Mã vân tay (máy chấm công)">
+              <input className="form-input" name="ma_van_tay" value={form.ma_van_tay} onChange={handleChange} placeholder="VD: 1024" maxLength={50} />
             </FormField>
             <FormField label="Ghi chú" style={{ gridColumn: 'span 2' }}>
               <textarea className="form-input" name="ghi_chu" value={form.ghi_chu} onChange={handleChange} rows={2} placeholder="Ghi chú thêm..." style={{ resize: 'vertical' }} />

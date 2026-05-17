@@ -74,7 +74,8 @@ function UploadAnhModal({ cn, onClose }) {
     { uploadField: 'cccd_mat_truoc', dataField: 'anh_cccd_truoc', label: 'CCCD mặt trước' },
     { uploadField: 'cccd_mat_sau', dataField: 'anh_cccd_sau', label: 'CCCD mặt sau' },
     { uploadField: 'anh_chan_dung', dataField: 'anh_chan_dung', label: 'Ảnh chân dung' },
-    { uploadField: 'anh_xe', dataField: 'anh_xe', label: 'Ảnh xe mượn' },
+    // Chỉ cho upload ảnh xe khi công nhân thật sự có mượn xe
+    ...(cn.muon_xe ? [{ uploadField: 'anh_xe', dataField: 'anh_xe', label: 'Ảnh xe mượn' }] : []),
   ];
 
   function handleFile(field, file) {
@@ -170,6 +171,7 @@ function EditModal({ cn, onClose, noiOHienTai, isAdmin }) {
     loai_xe:          cn.loai_xe ?? '',
     xe_da_tra:        cn.xe_da_tra ?? false,
     ngay_muon_xe:     toInputDate(cn.ngay_muon_xe),
+    ma_van_tay:       cn.ma_van_tay ?? '',
     ktx_id:           noiOHienTai?.ktx?.ktx_id ? String(noiOHienTai.ktx.ktx_id) : '',
     phong_id:         noiOHienTai?.ktx?.phong_id ? String(noiOHienTai.ktx.phong_id) : '',
     giuong_id:        noiOHienTai?.ktx?.giuong_id ? String(noiOHienTai.ktx.giuong_id) : '',
@@ -315,6 +317,10 @@ function EditModal({ cn, onClose, noiOHienTai, isAdmin }) {
               <input className="form-input" name={name} type={type} value={form[name]} onChange={handleChange} />
             </div>
           ))}
+          <div style={{ ...m.fieldWrap, gridColumn: 'span 2' }}>
+            <label className="form-label">Mã vân tay (máy chấm công)</label>
+            <input className="form-input" name="ma_van_tay" value={form.ma_van_tay} onChange={handleChange} placeholder="VD: 1024" maxLength={50} />
+          </div>
           <div style={{ gridColumn: 'span 2', display: 'flex', flexDirection: 'column', gap: 4 }}>
             <label className="form-label">Ghi chú</label>
             <textarea className="form-input" name="ghi_chu" value={form.ghi_chu} onChange={handleChange} rows={2} style={{ resize: 'vertical' }} />
@@ -580,6 +586,7 @@ export default function CongNhanDetail() {
             <Field label="Ngày vào làm" value={cn.ngay_vao_lam ? new Date(cn.ngay_vao_lam).toLocaleDateString('vi-VN') : null} />
             <Field label="Ngày nghỉ việc" value={cn.ngay_nghi_viec ? new Date(cn.ngay_nghi_viec).toLocaleDateString('vi-VN') : null} />
             <Field label="Người tuyển" value={cn.nguoi_tuyen_ho_ten} />
+            <Field label="Mã vân tay" value={cn.ma_van_tay} />
             <Field label="Ghi chú" value={cn.ghi_chu} />
           </div>
         </div>

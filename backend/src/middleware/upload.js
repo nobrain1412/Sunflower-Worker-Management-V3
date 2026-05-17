@@ -28,4 +28,7 @@ const uploadAnhCongNhan = upload.fields([
   { name: 'anh_xe',         maxCount: 1 },
 ]);
 
-module.exports = { uploadAnhCongNhan };
+// Generic 1-file uploader cho ảnh KTX, phòng trọ, công ty — field name "file"
+const uploadSingleImage = upload.single('file');
+
+module.exports = { uploadAnhCongNhan, uploadSingleImage };

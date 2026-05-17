@@ -32,39 +32,59 @@ const cccdRegex = /^\d{12}$/;
 // Số điện thoại VN: 09x / 08x / 07x / 05x / 03x
 const sdtRegex  = /^(0[3578]\d{8}|0[6789]\d{8})$/;
 
+// Helper: cho phép '' → null (FE thường gửi '' khi user xoá field)
+const nullableStr = (max) => z.preprocess(
+  (v) => (v === '' || v === null ? null : v),
+  z.string().max(max).nullable().optional(),
+);
+const nullableDate = (msg) => z.preprocess(
+  (v) => (v === '' || v === null ? null : v),
+  z.string().date(msg).nullable().optional(),
+);
+const nullableEnum = (values) => z.preprocess(
+  (v) => (v === '' || v === null ? null : v),
+  z.enum(values).nullable().optional(),
+);
+const nullableRegex = (re, msg, max = 100) => z.preprocess(
+  (v) => (v === '' || v === null ? null : v),
+  z.string().regex(re, msg).max(max).nullable().optional(),
+);
+
 const taoMoiSchema = z.object({
   ho_ten:           z.string().min(2, 'Họ tên tối thiểu 2 ký tự').max(100),
-  cccd:             z.string().regex(cccdRegex, 'CCCD phải gồm đúng 12 chữ số').optional().or(z.literal('').transform(() => undefined)),
-  ngay_sinh:        z.string().date('Ngày sinh không hợp lệ (YYYY-MM-DD)').optional(),
-  gioi_tinh:        z.enum(['Nam', 'Nữ', 'Khác']).optional(),
-  que_quan:         z.string().max(200).optional(),
-  dia_chi_hien_tai: z.string().max(500).optional(),
-  so_dien_thoai:    z.string().regex(sdtRegex, 'Số điện thoại không hợp lệ').optional().or(z.literal('').transform(() => undefined)),
-  ngay_cap_cccd:    z.string().date('Ngày cấp CCCD không hợp lệ (YYYY-MM-DD)').optional(),
-  noi_cap_cccd:     z.string().max(200).optional(),
+  cccd:             nullableRegex(cccdRegex, 'CCCD phải gồm đúng 12 chữ số', 12),
+  ngay_sinh:        nullableDate('Ngày sinh không hợp lệ (YYYY-MM-DD)'),
+  gioi_tinh:        nullableEnum(['Nam', 'Nữ', 'Khác']),
+  que_quan:         nullableStr(200),
+  dia_chi_hien_tai: nullableStr(500),
+  so_dien_thoai:    nullableRegex(sdtRegex, 'Số điện thoại không hợp lệ', 20),
+  ngay_cap_cccd:    nullableDate('Ngày cấp CCCD không hợp lệ (YYYY-MM-DD)'),
+  noi_cap_cccd:     nullableStr(200),
   trang_thai:       z.enum(['dang_lam', 'nghi_phep', 'moi_vao', 'nghi_viec']).default('moi_vao'),
-  ngay_vao_lam:     z.string().date('Ngày vào làm không hợp lệ (YYYY-MM-DD)').optional(),
-  ngay_nghi_viec:   z.string().date('Ngày nghỉ không hợp lệ (YYYY-MM-DD)').optional(),
-  ghi_chu:          z.string().max(1000).optional(),
-  cong_ty_id:       z.number().int().positive().optional(),
+  ngay_vao_lam:     nullableDate('Ngày vào làm không hợp lệ (YYYY-MM-DD)'),
+  ngay_nghi_viec:   nullableDate('Ngày nghỉ không hợp lệ (YYYY-MM-DD)'),
+  ghi_chu:          nullableStr(1000),
+  cong_ty_id:       z.number().int().positive().nullable().optional(),
   // Admin/quan_ly có thể chỉ định người tuyển; vender bị bỏ qua ở controller
-  nguoi_tuyen_id:   z.number().int().positive().optional(),
+  nguoi_tuyen_id:   z.number().int().positive().nullable().optional(),
   da_tra_dong_phuc: z.boolean().optional(),
   da_viet_don_nghi: z.boolean().optional(),
-  // Mới: thông tin tài khoản ngân hàng
-  ngan_hang:        z.string().max(100).optional(),
-  so_tai_khoan:     z.string().max(50).optional(),
-  ten_chu_tk:       z.string().max(100).optional(),
-  // Mới: trạng thái CCCD đã trả & mượn xe
+  // Thông tin tài khoản ngân hàng
+  ngan_hang:        nullableStr(100),
+  so_tai_khoan:     nullableStr(50),
+  ten_chu_tk:       nullableStr(100),
+  // Trạng thái CCCD đã trả & mượn xe
   cccd_da_tra:      z.boolean().optional(),
-  trang_thai_noi_o: z.enum(['chua_co_phong', 'tu_tuc', 'ktx', 'phong_tro']).optional(),
+  trang_thai_noi_o: nullableEnum(['chua_co_phong', 'tu_tuc', 'ktx', 'phong_tro']),
   muon_xe:          z.boolean().optional(),
-  loai_xe:          z.enum(['xe_dap', 'xe_dien', 'xe_may']).optional().or(z.literal('').transform(() => undefined)),
+  loai_xe:          nullableEnum(['xe_dap', 'xe_dien', 'xe_may']),
   xe_da_tra:        z.boolean().optional(),
-  ngay_muon_xe:     z.string().date('Ngày mượn xe không hợp lệ (YYYY-MM-DD)').optional(),
+  ngay_muon_xe:     nullableDate('Ngày mượn xe không hợp lệ (YYYY-MM-DD)'),
+  // Mã vân tay máy chấm công
+  ma_van_tay:       nullableStr(50),
 });
 
-// PUT cho phép partial update (mọi trường optional)
+// PUT cho phép partial update (mọi trường optional, chấp nhận null để xoá)
 const capNhatSchema = taoMoiSchema.partial();
 
 // --- Routes ---
@@ -122,6 +142,17 @@ router.post('/:id/upload-anh',
     if (!toUpload.length) {
       const err = new Error('Không có file nào được upload');
       err.statusCode = 400; throw err;
+    }
+
+    // Chỉ cho upload ảnh xe khi công nhân thực sự có mượn xe
+    if (toUpload.some(({ field }) => field === 'anh_xe')) {
+      const cnHienTai = await congNhanModel.findById(id);
+      if (!cnHienTai) { const e = new Error('Không tìm thấy công nhân'); e.statusCode = 404; throw e; }
+      if (!cnHienTai.muon_xe) {
+        const e = new Error('Công nhân không mượn xe — không thể upload ảnh xe');
+        e.statusCode = 400; e.code = 'VEHICLE_NOT_BORROWED';
+        throw e;
+      }
     }
 
     const results = await Promise.all(

@@ -3,6 +3,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../hooks/useApi';
 import { useAuth } from '../../context/AuthContext';
 import { isEmbeddableMapUrl, normalizeMapUrl } from '../../constants/mapUrl';
+import MediaUploader from '../../components/MediaUploader';
+
+function toMediaArray(v) { return Array.isArray(v) ? v : []; }
 
 function fmt(n) { return Number(n || 0).toLocaleString('vi-VN') + 'đ'; }
 
@@ -123,7 +126,7 @@ const numberFields = [
 ];
 
 const EMPTY_FORM = {
-  ten_cong_ty: '', dia_chi: '', map_url: '', mo_ta_cong_viec: '', media_urls: '',
+  ten_cong_ty: '', dia_chi: '', map_url: '', mo_ta_cong_viec: '', media_urls: [],
   luong_co_ban: '', luong_theo_gio: '', ngay_lam_chuan: '26',
   luong_tc_ngay: '', luong_hc_dem: '', luong_tc_dem: '', luong_chu_nhat: '', luong_ngay_le: '',
   tien_dong_phuc: '0', tien_phat_nghi: '0',
@@ -155,7 +158,7 @@ export default function CongTy() {
       dia_chi:       selected.dia_chi ?? '',
       map_url:       selected.map_url ?? '',
       mo_ta_cong_viec: selected.mo_ta_cong_viec ?? '',
-      media_urls:    Array.isArray(selected.media_urls) ? selected.media_urls.join('\n') : (selected.media_urls ?? ''),
+      media_urls:    toMediaArray(selected.media_urls),
       luong_co_ban:  selected.luong_co_ban,
       luong_theo_gio: selected.luong_theo_gio,
       ngay_lam_chuan: selected.ngay_lam_chuan,
@@ -189,10 +192,8 @@ export default function CongTy() {
         payload[k] = parseFloat(payload[k]);
       }
     });
-    if (typeof payload.media_urls === 'string') {
-      payload.media_urls = payload.media_urls.split('\n').map((u) => u.trim()).filter(Boolean);
-      if (payload.media_urls.length === 0) delete payload.media_urls;
-    }
+    payload.media_urls = toMediaArray(payload.media_urls);
+    if (payload.media_urls.length === 0) delete payload.media_urls;
     if (!payload.map_url?.trim()) {
       delete payload.map_url;
     } else {
@@ -317,8 +318,8 @@ export default function CongTy() {
                       <textarea className="form-input" name="mo_ta_cong_viec" rows={3} value={form.mo_ta_cong_viec ?? ''} onChange={handleChange} placeholder="Mô tả tính chất công việc, ca làm..." />
                     </div>
                     <div style={{ gridColumn: 'span 2', display: 'flex', flexDirection: 'column', gap: 5 }}>
-                      <label className="form-label">Ảnh / Video mô tả (URL, mỗi dòng 1 link)</label>
-                      <textarea className="form-input" name="media_urls" rows={2} value={form.media_urls ?? ''} onChange={handleChange} placeholder="https://..." />
+                      <label className="form-label">Ảnh công ty</label>
+                      <MediaUploader value={toMediaArray(form.media_urls)} onChange={(urls) => setForm((f) => ({ ...f, media_urls: urls }))} folder="cong-ty" />
                     </div>
                     {numberFields.map(([name, label]) => (
                       <div key={name} style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
@@ -401,8 +402,8 @@ export default function CongTy() {
                 <textarea className="form-input" name="mo_ta_cong_viec" rows={3} value={form.mo_ta_cong_viec ?? ''} onChange={handleChange} placeholder="Mô tả tính chất công việc, ca làm..." />
               </div>
               <div style={{ gridColumn: 'span 2', display: 'flex', flexDirection: 'column', gap: 5 }}>
-                <label className="form-label">Ảnh / Video mô tả (URL, mỗi dòng 1 link)</label>
-                <textarea className="form-input" name="media_urls" rows={2} value={form.media_urls ?? ''} onChange={handleChange} placeholder="https://..." />
+                <label className="form-label">Ảnh công ty</label>
+                <MediaUploader value={toMediaArray(form.media_urls)} onChange={(urls) => setForm((f) => ({ ...f, media_urls: urls }))} folder="cong-ty" />
               </div>
               {numberFields.map(([name, label]) => (
                 <div key={name} style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
