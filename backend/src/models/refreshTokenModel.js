@@ -14,15 +14,19 @@ async function create({
   );
 }
 
+// Grace period (giây) cho phép dùng lại token vừa bị rotation revoke,
+// tránh race condition khi FE bắn nhiều request /refresh song song.
+const REVOKE_GRACE_SECONDS = 30;
+
 async function findActiveByHash(tokenHash) {
   const result = await db.query(
     `SELECT id, user_id, token_hash, expires_at, revoked_at
      FROM refresh_tokens
      WHERE token_hash = $1
-       AND revoked_at IS NULL
        AND expires_at > NOW()
+       AND (revoked_at IS NULL OR revoked_at > NOW() - ($2 || ' seconds')::interval)
      LIMIT 1`,
-    [tokenHash],
+    [tokenHash, REVOKE_GRACE_SECONDS],
   );
   return result.rows[0] || null;
 }
