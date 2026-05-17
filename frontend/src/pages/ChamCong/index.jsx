@@ -1,169 +1,337 @@
-import { useState } from 'react';
+/**
+ * Trang Chấm công — bảng tháng theo công nhân (theo phan_cong).
+ *
+ * - Admin: thấy tất cả CN, filter theo công ty + người tuyển
+ * - Quản lý: scope tự động lọc theo công ty được phân
+ * - Edit từng ô → bấm "Lưu thay đổi" mới commit (batch)
+ * - Mỗi CN có thể có nhiều dòng nếu chuyển công ty (mỗi phan_cong 1 dòng)
+ * - Cell có thể: số giờ (0-24), 'P' = nghỉ phép, 'V' = nghỉ việc, trống = bỏ chấm
+ * - Chủ nhật cho phép chấm bình thường
+ */
+import { useMemo, useState, useEffect } from 'react';
+import { useChamCongThang, useUpsertChamCong } from '../../hooks/useChamCong';
+import { useCongTyList, useVenders } from '../../hooks/useCongNhan';
+import { useAuth } from '../../context/AuthContext';
 
-const THANG = 5; const NAM = 2026;
-const SO_NGAY = 31;
+const MONTH_NAMES = ['T1','T2','T3','T4','T5','T6','T7','T8','T9','T10','T11','T12'];
+const WEEKDAYS = ['CN','T2','T3','T4','T5','T6','T7'];
 
-const CN_LIST = [
-  { id: 1, ho_ten: 'Nguyễn Văn An',  cong_ty: 'Công ty A' },
-  { id: 2, ho_ten: 'Trần Thị Bình',  cong_ty: 'Công ty B' },
-  { id: 3, ho_ten: 'Lê Văn Cường',   cong_ty: 'Công ty A' },
-  { id: 4, ho_ten: 'Phạm Thị Dung',  cong_ty: 'Công ty C' },
-  { id: 5, ho_ten: 'Hoàng Văn Em',   cong_ty: 'Công ty B' },
-];
-
-// Sinh dữ liệu chấm công ngẫu nhiên
-function genData() {
-  const data = {};
-  CN_LIST.forEach((cn) => {
-    data[cn.id] = {};
-    for (let d = 1; d <= SO_NGAY; d++) {
-      const dow = new Date(NAM, THANG - 1, d).getDay();
-      if (dow === 0) { data[cn.id][d] = ''; continue; } // CN nghỉ
-      const r = Math.random();
-      data[cn.id][d] = r > 0.85 ? 'P' : r > 0.75 ? 'OT' : '1';
-    }
-  });
-  return data;
+function daysInMonth(thang, nam) {
+  return new Date(nam, thang, 0).getDate();
+}
+function ymd(thang, nam, day) {
+  return `${nam}-${String(thang).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
 }
 
-const INIT_DATA = genData();
+// Convert string cell input → { so_gio, so_gio_ot, ca_lam }
+function parseCell(raw) {
+  const s = String(raw ?? '').trim().toUpperCase();
+  if (s === '' || s === '—') return { so_gio: 0, so_gio_ot: 0, ca_lam: null };
+  if (s === 'P')  return { so_gio: 0, so_gio_ot: 0, ca_lam: 'nghi_phep' };
+  if (s === 'V')  return { so_gio: 0, so_gio_ot: 0, ca_lam: 'nghi_viec' };
+  // "8" hoặc "8/2" (giờ thường / OT)
+  const parts = s.split('/').map((x) => Number(x.replace(',', '.')));
+  if (parts.length === 1 && Number.isFinite(parts[0])) {
+    return { so_gio: parts[0], so_gio_ot: 0, ca_lam: 'lam' };
+  }
+  if (parts.length === 2 && Number.isFinite(parts[0]) && Number.isFinite(parts[1])) {
+    return { so_gio: parts[0], so_gio_ot: parts[1], ca_lam: 'lam' };
+  }
+  return null;
+}
 
-const DAY_TYPE = {
-  '1':  { label: '1',   bg: 'rgba(79,124,255,0.15)',  color: 'var(--accent)',  title: 'Đủ công' },
-  'OT': { label: 'OT',  bg: 'rgba(123,95,255,0.15)',  color: 'var(--accent2)', title: 'Tăng ca' },
-  'P':  { label: 'P',   bg: 'rgba(255,179,68,0.15)',  color: 'var(--amber)',   title: 'Nghỉ phép' },
-  '':   { label: '—',   bg: 'transparent',             color: 'var(--text3)',   title: 'Nghỉ CN' },
-};
+function formatCell(cc) {
+  if (!cc) return '';
+  if (cc.ca_lam === 'nghi_phep') return 'P';
+  if (cc.ca_lam === 'nghi_viec') return 'V';
+  const g = Number(cc.so_gio || 0);
+  const ot = Number(cc.so_gio_ot || 0);
+  if (g === 0 && ot === 0) return '';
+  return ot > 0 ? `${g}/${ot}` : `${g}`;
+}
 
-const DAYS = Array.from({ length: SO_NGAY }, (_, i) => i + 1);
-const WEEKDAYS = DAYS.map((d) => {
-  const dow = new Date(NAM, THANG - 1, d).getDay();
-  return ['CN','T2','T3','T4','T5','T6','T7'][dow];
-});
+function cellColor(cc) {
+  if (!cc) return { color: 'var(--text3)', bg: 'transparent' };
+  if (cc.ca_lam === 'nghi_phep') return { color: 'var(--amber)', bg: 'rgba(255,179,68,0.12)' };
+  if (cc.ca_lam === 'nghi_viec') return { color: 'var(--red)',   bg: 'rgba(255,95,114,0.12)' };
+  const ot = Number(cc.so_gio_ot || 0);
+  if (ot > 0) return { color: 'var(--accent2)', bg: 'rgba(123,95,255,0.12)' };
+  if (Number(cc.so_gio || 0) > 0) return { color: 'var(--accent)', bg: 'rgba(79,124,255,0.12)' };
+  return { color: 'var(--text3)', bg: 'transparent' };
+}
 
 export default function ChamCong() {
-  const [data, setData]   = useState(INIT_DATA);
-  const [filter, setFilter] = useState('');
+  const { isAdmin } = useAuth();
+  const now = new Date();
+  const [thang, setThang] = useState(now.getMonth() + 1);
+  const [nam, setNam]     = useState(now.getFullYear());
+  const [congTyId, setCongTyId] = useState('');
+  const [nguoiTuyenId, setNguoiTuyenId] = useState('');
+  const [search, setSearch] = useState('');
 
-  function toggle(cnId, day) {
-    setData((prev) => {
-      const cur = prev[cnId][day];
-      const next = cur === '1' ? 'OT' : cur === 'OT' ? 'P' : cur === 'P' ? '' : '1';
-      return { ...prev, [cnId]: { ...prev[cnId], [day]: next } };
-    });
+  const params = { thang, nam };
+  if (congTyId) params.cong_ty_id = congTyId;
+  if (nguoiTuyenId) params.nguoi_tuyen_id = nguoiTuyenId;
+
+  const { data: res, isLoading } = useChamCongThang(params);
+  const rows = res?.data ?? [];
+
+  const congTyArr = useCongTyList().data?.data ?? [];
+  const venderArr = useVenders().data?.data ?? [];
+
+  // edits[phanCongId][day] = raw string from input
+  const [edits, setEdits] = useState({});
+  const [savingId, setSavingId] = useState(null);
+  const upsert = useUpsertChamCong();
+
+  // Khi đổi tháng/filter → clear edits
+  useEffect(() => { setEdits({}); }, [thang, nam, congTyId, nguoiTuyenId]);
+
+  const days = daysInMonth(thang, nam);
+  const dayList = Array.from({ length: days }, (_, i) => i + 1);
+
+  const filtered = useMemo(() => {
+    if (!search) return rows;
+    const q = search.toLowerCase();
+    return rows.filter((r) =>
+      (r.cong_nhan_ten || '').toLowerCase().includes(q)
+      || (r.ten_cong_ty || '').toLowerCase().includes(q),
+    );
+  }, [rows, search]);
+
+  // Map: phan_cong_id → { day → cell }
+  const ccMap = useMemo(() => {
+    const out = {};
+    for (const r of rows) {
+      out[r.phan_cong_id] = {};
+      for (const cc of (r.cham_cong || [])) {
+        const day = Number((cc.ngay || '').slice(-2));
+        out[r.phan_cong_id][day] = cc;
+      }
+    }
+    return out;
+  }, [rows]);
+
+  function getCell(phanCongId, day) {
+    const e = edits[phanCongId]?.[day];
+    if (e !== undefined) return e;
+    return formatCell(ccMap[phanCongId]?.[day]);
   }
 
-  const filtered = CN_LIST.filter((cn) =>
-    !filter || cn.ho_ten.toLowerCase().includes(filter.toLowerCase()) || cn.cong_ty.includes(filter)
-  );
+  function setCell(phanCongId, day, raw) {
+    setEdits((prev) => ({
+      ...prev,
+      [phanCongId]: { ...(prev[phanCongId] || {}), [day]: raw },
+    }));
+  }
 
-  // Tính tổng
-  function countType(cnId, type) {
-    return Object.values(data[cnId] || {}).filter((v) => v === type).length;
+  function isDirty(phanCongId) {
+    return !!edits[phanCongId] && Object.keys(edits[phanCongId]).length > 0;
+  }
+
+  async function handleSave(row) {
+    const phanCongId = row.phan_cong_id;
+    const dirty = edits[phanCongId] || {};
+    const entries = [];
+    for (const [day, raw] of Object.entries(dirty)) {
+      const parsed = parseCell(raw);
+      if (parsed === null) {
+        alert(`Ô ngày ${day} không hợp lệ: "${raw}". Dùng số giờ (vd "8" hoặc "8/2"), 'P' = nghỉ phép, 'V' = nghỉ việc, trống = xoá.`);
+        return;
+      }
+      entries.push({
+        ngay: ymd(thang, nam, Number(day)),
+        ...parsed,
+      });
+    }
+    if (entries.length === 0) return;
+
+    if (!window.confirm(`Lưu ${entries.length} thay đổi cho ${row.cong_nhan_ten}?\n(Nếu có ngày nghỉ phép/nghỉ việc, người tuyển sẽ nhận thông báo.)`)) {
+      return;
+    }
+
+    setSavingId(phanCongId);
+    try {
+      await upsert.mutateAsync({ phan_cong_id: phanCongId, entries });
+      // Clear dirty cho dòng này
+      setEdits((prev) => {
+        const next = { ...prev };
+        delete next[phanCongId];
+        return next;
+      });
+    } catch (e) {
+      alert(e?.response?.data?.error?.message ?? 'Lỗi lưu chấm công');
+    } finally {
+      setSavingId(null);
+    }
+  }
+
+  function handleDiscard(phanCongId) {
+    setEdits((prev) => {
+      const next = { ...prev };
+      delete next[phanCongId];
+      return next;
+    });
   }
 
   return (
     <div style={s.root}>
-      {/* Toolbar */}
-      <div style={s.toolbar}>
-        <div style={s.monthLabel}>
-          Tháng <span style={{ fontFamily: "'JetBrains Mono', monospace", color: 'var(--text1)', fontWeight: 700 }}>{THANG}/{NAM}</span>
-        </div>
-        <input className="form-input" style={{ width: 200 }} placeholder="Lọc công nhân..." value={filter} onChange={(e) => setFilter(e.target.value)} />
-        <button className="btn-primary" style={{ marginLeft: 'auto' }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="#fff" strokeWidth="2" strokeLinecap="round"/><polyline points="7 10 12 15 17 10" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><line x1="12" y1="15" x2="12" y2="3" stroke="#fff" strokeWidth="2" strokeLinecap="round"/></svg>
-          Xuất Excel
-        </button>
-      </div>
-
-      {/* Legend */}
-      <div style={s.legend}>
-        {Object.entries(DAY_TYPE).filter(([k]) => k !== '').map(([k, v]) => (
-          <div key={k} style={s.legendItem}>
-            <span style={{ ...s.legendDot, background: v.bg, color: v.color, border: `1px solid ${v.color}40` }}>{v.label}</span>
-            <span style={s.legendText}>{v.title}</span>
+      <div style={s.header}>
+        <div>
+          <div style={s.title}>Chấm công</div>
+          <div style={s.subtitle}>
+            Số: số giờ (vd 8 hoặc 8/2 = 8 thường + 2 OT). P = nghỉ phép. V = nghỉ việc. Trống = bỏ chấm.
           </div>
-        ))}
-        <div style={s.legendItem}>
-          <span style={{ ...s.legendDot, background: 'transparent', color: 'var(--text3)' }}>—</span>
-          <span style={s.legendText}>Nghỉ CN / Không làm</span>
         </div>
-        <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text3)' }}>Click ô để thay đổi trạng thái</span>
       </div>
 
-      {/* Bảng chấm công */}
-      <div style={s.tableWrap}>
-        <table style={s.table}>
-          <thead>
-            <tr>
-              <th style={{ ...s.th, ...s.stickyCol, minWidth: 160 }}>Công nhân</th>
-              {DAYS.map((d) => (
-                <th key={d} style={{ ...s.th, minWidth: 32, padding: '8px 0', textAlign: 'center', color: WEEKDAYS[d-1] === 'CN' ? 'var(--red)' : 'var(--text3)' }}>
-                  <div>{d}</div>
-                  <div style={{ fontSize: 9, marginTop: 1 }}>{WEEKDAYS[d-1]}</div>
-                </th>
-              ))}
-              <th style={{ ...s.th, minWidth: 36, textAlign: 'center' }}>Công</th>
-              <th style={{ ...s.th, minWidth: 36, textAlign: 'center' }}>OT</th>
-              <th style={{ ...s.th, minWidth: 36, textAlign: 'center' }}>P</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((cn) => (
-              <tr key={cn.id} style={s.tr}>
-                <td style={{ ...s.td, ...s.stickyCol }}>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text1)' }}>{cn.ho_ten}</div>
-                  <div style={{ fontSize: 10, color: 'var(--text3)' }}>{cn.cong_ty}</div>
-                </td>
-                {DAYS.map((d) => {
-                  const val = data[cn.id]?.[d] ?? '';
-                  const dt = DAY_TYPE[val] ?? DAY_TYPE[''];
-                  const isSun = WEEKDAYS[d-1] === 'CN';
+      <div style={s.toolbar}>
+        <select className="form-input" style={s.select} value={thang} onChange={(e) => setThang(Number(e.target.value))}>
+          {MONTH_NAMES.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
+        </select>
+        <select className="form-input" style={s.select} value={nam} onChange={(e) => setNam(Number(e.target.value))}>
+          {[nam - 1, nam, nam + 1].map((y) => <option key={y} value={y}>{y}</option>)}
+        </select>
+        <select className="form-input" style={s.select} value={congTyId} onChange={(e) => setCongTyId(e.target.value)}>
+          <option value="">— Mọi công ty —</option>
+          {congTyArr.map((c) => <option key={c.id} value={c.id}>{c.ten_cong_ty}</option>)}
+        </select>
+        {isAdmin && (
+          <select className="form-input" style={s.select} value={nguoiTuyenId} onChange={(e) => setNguoiTuyenId(e.target.value)}>
+            <option value="">— Mọi người tuyển —</option>
+            {venderArr.map((v) => <option key={v.id} value={v.id}>{v.ho_ten}</option>)}
+          </select>
+        )}
+        <input className="form-input" style={{ ...s.select, minWidth: 200 }} placeholder="Tìm tên CN / công ty" value={search} onChange={(e) => setSearch(e.target.value)} />
+      </div>
+
+      <div style={s.card}>
+        {isLoading ? (
+          <div style={s.empty}>Đang tải...</div>
+        ) : filtered.length === 0 ? (
+          <div style={s.empty}>Không có công nhân nào phù hợp.</div>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={s.table}>
+              <thead>
+                <tr>
+                  <th style={{ ...s.th, ...s.thSticky, minWidth: 160 }}>Công nhân / Công ty</th>
+                  {dayList.map((d) => {
+                    const dow = new Date(nam, thang - 1, d).getDay();
+                    return (
+                      <th key={d} style={{ ...s.thDay, color: dow === 0 ? 'var(--red)' : 'var(--text3)' }}>
+                        <div style={{ fontSize: 9 }}>{WEEKDAYS[dow]}</div>
+                        <div>{d}</div>
+                      </th>
+                    );
+                  })}
+                  <th style={{ ...s.th, minWidth: 70 }}>Tổng</th>
+                  <th style={{ ...s.th, minWidth: 140 }}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((r) => {
+                  const dirty = isDirty(r.phan_cong_id);
+                  let tongGio = 0;
+                  for (const d of dayList) {
+                    const raw = getCell(r.phan_cong_id, d);
+                    const p = parseCell(raw);
+                    if (p) tongGio += (p.so_gio || 0) + (p.so_gio_ot || 0);
+                  }
                   return (
-                    <td key={d} style={{ ...s.td, padding: '4px 2px', textAlign: 'center' }}>
-                      <div
-                        onClick={() => !isSun && toggle(cn.id, d)}
-                        style={{
-                          width: 28, height: 28, borderRadius: 6, margin: 'auto',
-                          background: isSun ? 'transparent' : dt.bg,
-                          color: isSun ? 'var(--border)' : dt.color,
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          fontSize: 10, fontWeight: 700,
-                          cursor: isSun ? 'default' : 'pointer',
-                          border: `1px solid ${isSun ? 'transparent' : dt.color + '40'}`,
-                          transition: 'all 0.1s',
-                        }}
-                        title={dt.title}
-                      >
-                        {isSun ? '' : dt.label}
-                      </div>
-                    </td>
+                    <tr key={r.phan_cong_id} style={{ ...s.tr, background: dirty ? 'rgba(255,179,68,0.05)' : 'transparent' }}>
+                      <td style={{ ...s.tdSticky }}>
+                        <div style={s.cnName}>{r.cong_nhan_ten}</div>
+                        <div style={s.cnSub}>🏭 {r.ten_cong_ty || '—'}</div>
+                        {(r.ngay_ket_thuc || r.ngay_nghi_viec) && (
+                          <div style={{ fontSize: 10, color: 'var(--red)' }}>
+                            {r.ngay_ket_thuc ? `Kết thúc: ${r.ngay_ket_thuc.slice(0, 10)}` : ''}
+                            {r.ngay_nghi_viec ? ` · Nghỉ việc: ${r.ngay_nghi_viec.slice(0, 10)}` : ''}
+                          </div>
+                        )}
+                      </td>
+                      {dayList.map((d) => {
+                        const raw = getCell(r.phan_cong_id, d);
+                        const isEdited = edits[r.phan_cong_id]?.[d] !== undefined;
+                        const cc = parseCell(raw);
+                        const styles = cellColor(cc);
+                        return (
+                          <td key={d} style={s.tdDay}>
+                            <input
+                              value={raw}
+                              onChange={(e) => setCell(r.phan_cong_id, d, e.target.value)}
+                              style={{
+                                width: 38, height: 28, textAlign: 'center',
+                                background: styles.bg,
+                                color: styles.color,
+                                border: `1px solid ${isEdited ? 'var(--amber)' : 'var(--border)'}`,
+                                borderRadius: 4, fontSize: 12,
+                                fontFamily: "'JetBrains Mono', monospace",
+                                outline: 'none',
+                              }}
+                              placeholder="—"
+                              title={isEdited ? 'Chưa lưu' : ''}
+                            />
+                          </td>
+                        );
+                      })}
+                      <td style={{ ...s.td, fontFamily: "'JetBrains Mono', monospace", fontWeight: 700, color: 'var(--text1)' }}>
+                        {tongGio.toFixed(1)}h
+                      </td>
+                      <td style={s.td}>
+                        {dirty && (
+                          <div style={{ display: 'flex', gap: 6 }}>
+                            <button
+                              className="btn-primary"
+                              style={{ fontSize: 11, padding: '4px 8px' }}
+                              disabled={savingId === r.phan_cong_id}
+                              onClick={() => handleSave(r)}
+                            >
+                              {savingId === r.phan_cong_id ? 'Đang lưu...' : '💾 Lưu'}
+                            </button>
+                            <button
+                              className="btn-ghost"
+                              style={{ fontSize: 11, padding: '4px 8px' }}
+                              onClick={() => handleDiscard(r.phan_cong_id)}
+                            >
+                              Bỏ
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
                   );
                 })}
-                <td style={{ ...s.td, textAlign: 'center', fontFamily: "'JetBrains Mono', monospace", fontSize: 12, fontWeight: 700, color: 'var(--accent)' }}>{countType(cn.id, '1')}</td>
-                <td style={{ ...s.td, textAlign: 'center', fontFamily: "'JetBrains Mono', monospace", fontSize: 12, fontWeight: 700, color: 'var(--accent2)' }}>{countType(cn.id, 'OT')}</td>
-                <td style={{ ...s.td, textAlign: 'center', fontFamily: "'JetBrains Mono', monospace", fontSize: 12, fontWeight: 700, color: 'var(--amber)' }}>{countType(cn.id, 'P')}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
 const s = {
-  root:      { display: 'flex', flexDirection: 'column', gap: 14 },
-  toolbar:   { display: 'flex', alignItems: 'center', gap: 12 },
-  monthLabel:{ fontSize: 13, color: 'var(--text2)' },
-  legend:    { display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' },
-  legendItem:{ display: 'flex', alignItems: 'center', gap: 6 },
-  legendDot: { width: 26, height: 26, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700 },
-  legendText:{ fontSize: 11, color: 'var(--text2)' },
-  tableWrap: { background: 'var(--bg1)', border: '1px solid var(--border)', borderRadius: 14, overflowX: 'auto' },
-  table:     { borderCollapse: 'collapse', width: 'max-content', minWidth: '100%' },
-  th:        { fontSize: 10, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', padding: '10px 8px', borderBottom: '1px solid var(--border)', textAlign: 'left', background: 'var(--bg1)', position: 'sticky', top: 0, zIndex: 2 },
-  stickyCol: { position: 'sticky', left: 0, background: 'var(--bg1)', zIndex: 3, borderRight: '1px solid var(--border)', padding: '10px 16px' },
-  tr:        { borderBottom: '1px solid var(--border)' },
-  td:        { padding: '8px 8px', verticalAlign: 'middle' },
+  root: { display: 'flex', flexDirection: 'column', gap: 14 },
+  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' },
+  title: { fontSize: 16, fontWeight: 700, color: 'var(--text1)' },
+  subtitle: { fontSize: 11, color: 'var(--text3)', marginTop: 2 },
+  toolbar: { display: 'flex', flexWrap: 'wrap', gap: 8 },
+  select: { padding: '6px 10px', fontSize: 12 },
+  card: { background: 'var(--bg1)', border: '1px solid var(--border)', borderRadius: 14, padding: 14 },
+  table: { borderCollapse: 'separate', borderSpacing: 0 },
+  th: { fontSize: 10, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase',
+    letterSpacing: '0.06em', textAlign: 'left', padding: '6px 8px', borderBottom: '1px solid var(--border)',
+    background: 'var(--bg1)' },
+  thSticky: { position: 'sticky', left: 0, zIndex: 1 },
+  thDay: { fontSize: 10, fontWeight: 700, color: 'var(--text3)', padding: '4px 2px',
+    borderBottom: '1px solid var(--border)', textAlign: 'center', width: 42, background: 'var(--bg1)' },
+  tr: { borderBottom: '1px solid var(--border)' },
+  td: { padding: '4px 8px', borderBottom: '1px solid var(--border)', fontSize: 12 },
+  tdSticky: { position: 'sticky', left: 0, background: 'var(--bg1)', padding: '6px 10px',
+    borderBottom: '1px solid var(--border)', minWidth: 180, zIndex: 1 },
+  tdDay: { padding: '3px 2px', borderBottom: '1px solid var(--border)', textAlign: 'center' },
+  cnName: { fontSize: 13, color: 'var(--text1)', fontWeight: 600 },
+  cnSub: { fontSize: 11, color: 'var(--text3)' },
+  empty: { padding: 60, textAlign: 'center', color: 'var(--text3)' },
 };

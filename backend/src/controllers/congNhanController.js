@@ -39,6 +39,7 @@ const putCapNhat = asyncWrapper(async (req, res) => {
   const congNhan = await congNhanService.capNhat(
     toPositiveInt(req.params.id, 'ID công nhân'),
     req.validatedBody,
+    req.user?.id ?? null,
   );
   sendSuccess(res, congNhan, 'Cập nhật thành công');
 });

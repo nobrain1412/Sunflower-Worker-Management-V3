@@ -217,6 +217,32 @@ router.patch('/:id/hoan-tien', requireRole('admin', 'quan_ly'),
       const e = new Error('Không tìm thấy giao dịch chi hoặc không thể toggle');
       e.statusCode = 404; throw e;
     }
+    // Ghi audit khi đánh dấu hoàn (chỉ khi từ false → true)
+    if (req.validatedBody.da_hoan_tien && data.cong_nhan_id) {
+      try {
+        const hoatDongLog = require('../models/hoatDongLogModel');
+        const cnRow = await require('../utils/db').query(
+          `SELECT nguoi_tuyen_id, ho_ten FROM cong_nhan WHERE id = $1`,
+          [data.cong_nhan_id],
+        );
+        await hoatDongLog.create({
+          loai: 'hoan_ung',
+          cong_nhan_id: data.cong_nhan_id,
+          nguoi_tuyen_id: cnRow.rows[0]?.nguoi_tuyen_id ?? null,
+          du_lieu: {
+            giao_dich_id: data.id,
+            loai: data.loai,
+            so_tien: Number(data.so_tien),
+            ngay_hoan: data.ngay_hoan,
+          },
+          ghi_chu: `Hoàn ứng ${Number(data.so_tien).toLocaleString('vi-VN')}đ cho ${cnRow.rows[0]?.ho_ten ?? 'CN'}`,
+          created_by: req.user?.id ?? null,
+        });
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.warn('hoat_dong_log write failed (hoan_ung):', e.message);
+      }
+    }
     sendSuccess(res, data, data.da_hoan_tien ? 'Đã đánh dấu hoàn tiền' : 'Đã bỏ đánh dấu hoàn tiền');
   }),
 );

@@ -7,6 +7,7 @@ import BottomSheet from '../components/BottomSheet';
 import AddCongNhanModal from './CongNhan/AddModal';
 import { useAuth } from '../context/AuthContext';
 import { useDashboard } from '../hooks/useDashboard';
+import { useHoatDongCuaToi } from '../hooks/useHoatDong';
 import useIsMobile from '../hooks/useIsMobile';
 
 const DONUT_COLORS = ['#4f7cff', '#7b5fff', '#2dd4bf', '#22c986', '#ffb344', '#ff5f72', '#545870'];
@@ -29,13 +30,34 @@ function activityToText(a) {
   if (a.loai === 'cong_nhan')  return `${a.title} vừa được thêm vào hệ thống`;
   if (a.loai === 'giao_dich')  return `${a.sub === 'tam_ung' ? 'Tạm ứng' : a.sub === 'luong' ? 'Trả lương' : 'Giao dịch'} ${fmtMoney(a.so_tien)} — ${a.title}`;
   if (a.loai === 'thue_phong') return `${a.title} đã được xếp phòng ${a.sub}`;
-  return a.title;
+  // Audit log từ hoat_dong_log đã có sẵn ghi_chu
+  return a.ghi_chu || a.title || HOAT_DONG_LABEL[a.loai] || a.loai;
 }
+
+const HOAT_DONG_ICON = {
+  chuyen_cong_ty: { icon: '🔄', color: 'var(--accent2)' },
+  chuyen_cho_o:   { icon: '🏠', color: 'var(--teal)'    },
+  hoan_ung:       { icon: '💰', color: 'var(--green)'   },
+  bao_nghi_phep:  { icon: '🌴', color: 'var(--amber)'   },
+  bao_nghi_viec:  { icon: '🚪', color: 'var(--red)'     },
+  doi_trang_thai: { icon: '🔁', color: 'var(--accent)'  },
+  cham_cong_batch:{ icon: '📅', color: 'var(--accent)'  },
+};
+const HOAT_DONG_LABEL = {
+  chuyen_cong_ty: 'Chuyển công ty',
+  chuyen_cho_o:   'Đổi chỗ ở',
+  hoan_ung:       'Hoàn ứng',
+  bao_nghi_phep:  'Báo nghỉ phép',
+  bao_nghi_viec:  'Báo nghỉ việc',
+  doi_trang_thai: 'Đổi trạng thái',
+  cham_cong_batch:'Cập nhật chấm công',
+};
 
 function activityIcon(loai) {
   if (loai === 'cong_nhan') return { icon: '👤', color: 'var(--accent)' };
   if (loai === 'giao_dich') return { icon: '💰', color: 'var(--amber)' };
   if (loai === 'thue_phong') return { icon: '🏠', color: 'var(--teal)' };
+  if (HOAT_DONG_ICON[loai]) return HOAT_DONG_ICON[loai];
   return { icon: '📋', color: 'var(--accent2)' };
 }
 
@@ -134,8 +156,22 @@ function AdminDashboard() {
   const cnTheoCongTy = dash.cn_theo_cong_ty ?? [];
   const cnTheoVender = dash.cn_theo_vender  ?? [];
   const cnMoiNhat    = dash.cn_moi_nhat     ?? [];
-  const hoatDong     = dash.hoat_dong       ?? [];
+  const baseHoatDong = dash.hoat_dong       ?? [];
   const phongKtx     = dash.phong_ktx       ?? [];
+
+  // Hoạt động liên quan đến user đăng nhập (từ hoat_dong_log) — báo nghỉ, chuyển công ty,
+  // hoàn ứng,... cho CN do họ tuyển/quản lý. Gộp với feed chung và sort theo thời gian.
+  const { data: cuaToiRes } = useHoatDongCuaToi(15);
+  const cuaToi = (cuaToiRes?.data ?? []).map((h) => ({
+    loai: h.loai,
+    id: `hdl-${h.id}`,
+    title: h.cong_nhan_ten || '',
+    ts: h.created_at,
+    ghi_chu: h.ghi_chu,
+  }));
+  const hoatDong = [...baseHoatDong, ...cuaToi]
+    .sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime())
+    .slice(0, 15);
 
   const [statCtyId, setStatCtyId] = useState(null);
   const ctyStat = cnTheoCongTy.find((c) => c.id === statCtyId) ?? cnTheoCongTy[0] ?? null;

@@ -1,4 +1,5 @@
 const congNhanModel = require('../models/congNhanModel');
+const hoatDongLog = require('../models/hoatDongLogModel');
 
 async function danhSach(query, scope) {
   const page  = Math.max(1, parseInt(query.page  || '1',  10));
@@ -59,7 +60,7 @@ async function taoMoi(data) {
   return congNhanModel.create(data);
 }
 
-async function capNhat(id, data) {
+async function capNhat(id, data, actorUserId = null) {
   // Nếu có cập nhật CCCD, kiểm tra trùng
   if (data.cccd) {
     const existing = await congNhanModel.findByCccd(data.cccd, id);
@@ -71,6 +72,9 @@ async function capNhat(id, data) {
     }
   }
 
+  // Snapshot trước khi update để so sánh, ghi audit log
+  const before = await congNhanModel.findById(id);
+
   const updated = await congNhanModel.update(id, data);
   if (!updated) {
     const err = new Error('Không tìm thấy công nhân');
@@ -78,6 +82,50 @@ async function capNhat(id, data) {
     err.code = 'NOT_FOUND';
     throw err;
   }
+
+  // Audit log các thay đổi quan trọng — fire-and-forget, không chặn response
+  if (before) {
+    try {
+      if ('cong_ty_id' in data && before.cong_ty_id !== updated.cong_ty_id) {
+        await hoatDongLog.create({
+          loai: 'chuyen_cong_ty',
+          cong_nhan_id: id,
+          nguoi_tuyen_id: updated.nguoi_tuyen_id,
+          du_lieu: { tu_cong_ty_id: before.cong_ty_id, sang_cong_ty_id: updated.cong_ty_id },
+          ghi_chu: `Chuyển công ty (#${before.cong_ty_id ?? '—'} → #${updated.cong_ty_id ?? '—'})`,
+          created_by: actorUserId,
+        });
+      }
+      if ('trang_thai_noi_o' in data && before.trang_thai_noi_o !== updated.trang_thai_noi_o) {
+        await hoatDongLog.create({
+          loai: 'chuyen_cho_o',
+          cong_nhan_id: id,
+          nguoi_tuyen_id: updated.nguoi_tuyen_id,
+          du_lieu: { tu: before.trang_thai_noi_o, sang: updated.trang_thai_noi_o },
+          ghi_chu: `Đổi tình trạng nơi ở: ${before.trang_thai_noi_o} → ${updated.trang_thai_noi_o}`,
+          created_by: actorUserId,
+        });
+      }
+      if ('trang_thai' in data && before.trang_thai !== updated.trang_thai) {
+        const loai = updated.trang_thai === 'nghi_viec' ? 'bao_nghi_viec'
+                    : updated.trang_thai === 'nghi_phep' ? 'bao_nghi_phep'
+                    : 'doi_trang_thai';
+        await hoatDongLog.create({
+          loai,
+          cong_nhan_id: id,
+          nguoi_tuyen_id: updated.nguoi_tuyen_id,
+          du_lieu: { tu: before.trang_thai, sang: updated.trang_thai },
+          ghi_chu: `Trạng thái: ${before.trang_thai} → ${updated.trang_thai}`,
+          created_by: actorUserId,
+        });
+      }
+    } catch (logErr) {
+      // Không làm fail update vì log audit
+      // eslint-disable-next-line no-console
+      console.warn('hoat_dong_log write failed:', logErr.message);
+    }
+  }
+
   return updated;
 }
 

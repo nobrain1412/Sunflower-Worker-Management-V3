@@ -3,6 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useCongNhanDetail, useCapNhatCongNhan, useNoiOCongNhan, useTongUngCongNhan, useNoiOTruyCap } from '../../hooks/useCongNhan';
 import { useGiaoDichCongNhan, useToggleHoanTien } from '../../hooks/useTaiChinh';
 import { useLichSuPhong, usePhongList, useGiuongList } from '../../hooks/useKtx';
+import { useChamCongCongNhan } from '../../hooks/useChamCong';
+import { useHoatDongCongNhan } from '../../hooks/useHoatDong';
 import { useAuth } from '../../context/AuthContext';
 import ProvinceSelect from '../../components/ProvinceSelect';
 import ChuyenKhoanModal from '../../components/ChuyenKhoanModal';
@@ -39,6 +41,29 @@ const TRANG_THAI_NOI_O_LABEL = {
   tu_tuc: 'Tự túc chỗ ở',
   ktx: 'Ở KTX',
   phong_tro: 'Ở nhà trọ',
+};
+
+const WEEKDAYS_LBL = ['CN','T2','T3','T4','T5','T6','T7'];
+
+const HDL_ICON = {
+  chuyen_cong_ty: '🔄',
+  chuyen_cho_o:   '🏠',
+  hoan_ung:       '💰',
+  bao_nghi_phep:  '🌴',
+  bao_nghi_viec:  '🚪',
+  doi_trang_thai: '🔁',
+  cham_cong_batch: '📅',
+  them_cn:        '➕',
+};
+const HDL_LABEL = {
+  chuyen_cong_ty: 'Chuyển công ty',
+  chuyen_cho_o:   'Đổi chỗ ở',
+  hoan_ung:       'Hoàn ứng',
+  bao_nghi_phep:  'Báo nghỉ phép',
+  bao_nghi_viec:  'Báo nghỉ việc',
+  doi_trang_thai: 'Đổi trạng thái',
+  cham_cong_batch: 'Cập nhật chấm công',
+  them_cn:        'Thêm công nhân',
 };
 
 function fmt(n) { return Number(n || 0).toLocaleString('vi-VN') + 'đ'; }
@@ -431,8 +456,15 @@ export default function CongNhanDetail() {
   const { data: ktxRes }   = useLichSuPhong(cn?.id);
   const { data: noiORes }  = useNoiOCongNhan(cn?.id);
   const { data: tongUngRes } = useTongUngCongNhan(cn?.id);
+  const _now = new Date();
+  const [ccThang, setCcThang] = useState(_now.getMonth() + 1);
+  const [ccNam, setCcNam]     = useState(_now.getFullYear());
+  const { data: ccRes }    = useChamCongCongNhan(cn?.id, ccThang, ccNam);
+  const { data: hdlRes }   = useHoatDongCongNhan(cn?.id);
   const gdList  = gdRes?.data  ?? [];
   const ktxList = ktxRes?.data ?? [];
+  const ccPhanCongs = ccRes?.data ?? [];
+  const hdlList     = hdlRes?.data ?? [];
   const currentRoom = ktxList.find((k) => !k.ngay_ra) ?? null;
   const noiO       = noiORes?.data ?? {};
   const phongTroNow = noiO?.phong_tro ?? null;
@@ -792,13 +824,113 @@ export default function CongNhanDetail() {
           )}
         </div>
 
-        {/* Hệ thống */}
-        <div className="cn-detail-card" style={s.card}>
+        {/* Bảng chấm công — 1 section per phan_cong nếu CN từng chuyển công ty */}
+        <div className="cn-detail-card" style={{ ...s.card, gridColumn: 'span 2' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, borderBottom: '1px solid var(--border)', paddingBottom: 12 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text1)' }}>
+              Bảng chấm công {ccThang}/{ccNam}
+            </div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <select className="form-input" style={{ padding: '4px 8px', fontSize: 12 }}
+                value={ccThang} onChange={(e) => setCcThang(Number(e.target.value))}>
+                {[1,2,3,4,5,6,7,8,9,10,11,12].map((m) => <option key={m} value={m}>T{m}</option>)}
+              </select>
+              <select className="form-input" style={{ padding: '4px 8px', fontSize: 12 }}
+                value={ccNam} onChange={(e) => setCcNam(Number(e.target.value))}>
+                {[ccNam - 1, ccNam, ccNam + 1].map((y) => <option key={y} value={y}>{y}</option>)}
+              </select>
+            </div>
+          </div>
+          {ccPhanCongs.length === 0 ? (
+            <div style={{ fontSize: 12, color: 'var(--text3)', fontStyle: 'italic', padding: '20px 0', textAlign: 'center' }}>
+              Chưa có phân công trong tháng {ccThang}/{ccNam}
+            </div>
+          ) : (
+            ccPhanCongs.map((pc) => {
+              const days = new Date(ccNam, ccThang, 0).getDate();
+              const dayMap = Object.fromEntries((pc.cham_cong || []).map((c) => [Number(c.ngay.slice(-2)), c]));
+              const tongGio = (pc.cham_cong || []).reduce((s, c) => s + Number(c.so_gio || 0) + Number(c.so_gio_ot || 0), 0);
+              const tongNgay = (pc.cham_cong || []).filter((c) => c.ca_lam === 'lam' || Number(c.so_gio) > 0).length;
+              return (
+                <div key={pc.id} style={{ marginBottom: 14, border: '1px solid var(--border)', borderRadius: 10, padding: 10, background: 'var(--bg2)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                    <div>
+                      <b style={{ color: 'var(--text1)', fontSize: 13 }}>🏭 {pc.ten_cong_ty || '—'}</b>
+                      <div style={{ fontSize: 11, color: 'var(--text3)' }}>
+                        Từ {new Date(pc.ngay_bat_dau).toLocaleDateString('vi-VN')}
+                        {pc.ngay_ket_thuc ? ` → ${new Date(pc.ngay_ket_thuc).toLocaleDateString('vi-VN')}` : ' → nay'}
+                      </div>
+                    </div>
+                    <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12, color: 'var(--text2)' }}>
+                      {tongNgay} ngày · {tongGio.toFixed(1)}h
+                    </div>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(34px, 1fr))', gap: 3 }}>
+                    {Array.from({ length: days }, (_, i) => i + 1).map((d) => {
+                      const cc = dayMap[d];
+                      const dow = new Date(ccNam, ccThang - 1, d).getDay();
+                      const sty = !cc
+                        ? { color: 'var(--text3)', bg: 'var(--bg3)' }
+                        : cc.ca_lam === 'nghi_phep' ? { color: 'var(--amber)', bg: 'rgba(255,179,68,0.15)' }
+                        : cc.ca_lam === 'nghi_viec' ? { color: 'var(--red)',   bg: 'rgba(255,95,114,0.15)' }
+                        : Number(cc.so_gio_ot || 0) > 0 ? { color: 'var(--accent2)', bg: 'rgba(123,95,255,0.15)' }
+                        : { color: 'var(--accent)', bg: 'rgba(79,124,255,0.12)' };
+                      const label = !cc ? '—'
+                        : cc.ca_lam === 'nghi_phep' ? 'P'
+                        : cc.ca_lam === 'nghi_viec' ? 'V'
+                        : Number(cc.so_gio_ot || 0) > 0 ? `${cc.so_gio}/${cc.so_gio_ot}` : `${cc.so_gio}`;
+                      return (
+                        <div key={d} title={`${d}/${ccThang} (${WEEKDAYS_LBL[dow]})`}
+                          style={{
+                            background: sty.bg, color: sty.color,
+                            borderRadius: 4, padding: '4px 0', textAlign: 'center',
+                            fontSize: 10, fontFamily: "'JetBrains Mono', monospace",
+                            border: dow === 0 ? '1px dashed rgba(255,95,114,0.3)' : '1px solid transparent',
+                          }}>
+                          <div style={{ fontSize: 9, opacity: 0.55 }}>{d}</div>
+                          <div>{label}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })
+          )}
+          {canEdit && (
+            <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text3)' }}>
+              Để sửa: vào trang <a href="/cham-cong" style={{ color: 'var(--accent)' }}>Chấm công</a> hoặc nhập trực tiếp tại đây sau khi mở quyền edit (tính năng đang phát triển).
+            </div>
+          )}
+        </div>
+
+        {/* Hệ thống — timeline + audit */}
+        <div className="cn-detail-card" style={{ ...s.card, gridColumn: 'span 2' }}>
           <div style={s.cardTitle}>Hệ thống</div>
-          <div className="cn-detail-fields" style={s.fields}>
+          <div className="cn-detail-fields" style={{ ...s.fields, marginBottom: 14 }}>
             <Field label="Ngày tạo" value={new Date(cn.created_at).toLocaleString('vi-VN')} />
             <Field label="Cập nhật" value={new Date(cn.updated_at).toLocaleString('vi-VN')} />
           </div>
+          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
+            Timeline hoạt động
+          </div>
+          {hdlList.length === 0 ? (
+            <div style={{ fontSize: 12, color: 'var(--text3)', fontStyle: 'italic' }}>Chưa có hoạt động nào được ghi nhận.</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 360, overflowY: 'auto' }}>
+              {hdlList.map((h) => (
+                <div key={h.id} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '8px 10px', background: 'var(--bg2)', borderRadius: 8, border: '1px solid var(--border)' }}>
+                  <span style={{ fontSize: 16 }}>{HDL_ICON[h.loai] ?? '📌'}</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 12, color: 'var(--text1)' }}>{h.ghi_chu || HDL_LABEL[h.loai] || h.loai}</div>
+                    <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 2 }}>
+                      {h.created_by_ten ? `${h.created_by_ten} · ` : ''}{new Date(h.created_at).toLocaleString('vi-VN')}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
