@@ -146,7 +146,7 @@ async function seed() {
     logPhase('Reset database data');
     await queryWithRetry(
       `TRUNCATE TABLE
-        refresh_tokens, cham_cong, phan_cong, giao_dich_tai_chinh, hoa_don_ktx,
+        refresh_tokens, hoat_dong_log, cham_cong, phan_cong, giao_dich_tai_chinh, hoa_don_ktx,
         thue_phong, giuong, phong, ky_tuc_xa, thue_phong_tro, phong_tro,
         ocr_quet, cong_tac_vien_thanh_toan, quan_ly_cong_ty, cong_nhan, cong_ty, users
        RESTART IDENTITY CASCADE`,
@@ -351,8 +351,58 @@ async function seed() {
       logProgress('workers', i, SEED_SIZE.workers, 10);
     }
 
-    logPhase('Skip attendance');
-    console.log('Skipping cham_cong seeding as requested.');
+    logPhase('Create attendance (cham_cong) — 2 thang gan nhat');
+    // Tao cham_cong cho moi phan_cong, 2 thang gan day, bo qua CN da nghi viec sau ngay do
+    const today = new Date();
+    let ccCount = 0;
+    for (const pc of phanCongRows) {
+      const w = workerRows.find((x) => x.id === pc.cong_nhan_id);
+      if (!w) continue;
+      // Khong cham cong cho CN nghi viec qua lau (skip neu ngay_vao_lam > 90 ngay truoc va status = nghi_viec)
+      if (w.trang_thai === 'nghi_viec' && chance(0.5)) continue;
+
+      // Lay 60 ngay gan nhat
+      for (let dOffset = 60; dOffset >= 0; dOffset -= 1) {
+        const d = new Date(today);
+        d.setDate(d.getDate() - dOffset);
+        const dateStr = toYmd(d);
+        const dow = d.getDay();
+
+        // Skip neu truoc ngay vao lam hoac sau ngay nghi viec
+        if (dateStr < toYmd(new Date(w.ngay_vao_lam))) continue;
+        // ngay_nghi_viec se duoc check rieng vi workerRows khong co field nay
+        // -> bo qua trong demo data, du lieu se duoc enforce o app layer
+
+        // Cuoi tuan: 70% co di lam (chu nhat van cho cham theo yeu cau)
+        if (dow === 0 && chance(0.7)) continue; // skip 70% chu nhat
+        if (dow === 6 && chance(0.3)) continue; // skip 30% thu 7
+
+        const r = Math.random();
+        let entry;
+        if (r < 0.05) {
+          entry = { so_gio: 0, so_gio_ot: 0, ca_lam: 'nghi_phep' };
+        } else if (r < 0.15) {
+          continue; // Bo qua (vang khong ly do)
+        } else if (r < 0.35) {
+          entry = { so_gio: 8, so_gio_ot: rand(1, 4), ca_lam: 'lam' };
+        } else {
+          entry = { so_gio: 8, so_gio_ot: 0, ca_lam: 'lam' };
+        }
+        try {
+          await queryWithRetry(
+            `INSERT INTO cham_cong (phan_cong_id, ngay, so_gio, so_gio_ot, ca_lam, ghi_chu)
+             VALUES ($1, $2, $3, $4, $5, $6)
+             ON CONFLICT (phan_cong_id, ngay) DO NOTHING`,
+            [pc.id, dateStr, entry.so_gio, entry.so_gio_ot, entry.ca_lam, null],
+          );
+          ccCount += 1;
+        } catch (e) {
+          // skip
+        }
+      }
+      logProgress('cham_cong', phanCongRows.indexOf(pc) + 1, phanCongRows.length, 10);
+    }
+    console.log(`[cham_cong] inserted ${ccCount}`);
 
     logPhase('Create KTX / rooms / beds');
     const roomRows = [];
@@ -606,6 +656,62 @@ async function seed() {
       );
       logProgress('ocr_quet', i + 1, 80, 20);
     }
+
+    logPhase('Create hoat_dong_log');
+    // Tao mot vai bao_nghi_phep, chuyen_cong_ty, hoan_ung de timeline + dashboard feed co data
+    const hdlTypes = [
+      { loai: 'bao_nghi_phep', icon: '🌴', label: 'Báo nghỉ phép' },
+      { loai: 'bao_nghi_viec', icon: '🚪', label: 'Báo nghỉ việc' },
+      { loai: 'chuyen_cong_ty', icon: '🔄', label: 'Chuyển công ty' },
+      { loai: 'chuyen_cho_o', icon: '🏠', label: 'Đổi chỗ ở' },
+      { loai: 'hoan_ung', icon: '💰', label: 'Hoàn ứng' },
+    ];
+    let hdlCount = 0;
+    for (let i = 0; i < 60; i += 1) {
+      const w = pick(workerRows);
+      const t = pick(hdlTypes);
+      const daysOld = rand(0, 30);
+      const createdAt = daysAgo(daysOld);
+      let ghiChu, duLieu;
+      if (t.loai === 'bao_nghi_phep') {
+        const ngay = toYmd(daysAgo(daysOld - rand(0, 3)));
+        ghiChu = `Báo nghỉ phép ngày ${ngay}`;
+        duLieu = { ngay, ca_lam: 'nghi_phep' };
+      } else if (t.loai === 'bao_nghi_viec') {
+        const ngay = toYmd(daysAgo(daysOld));
+        ghiChu = `Nghỉ việc từ ${ngay}`;
+        duLieu = { ngay, ca_lam: 'nghi_viec' };
+      } else if (t.loai === 'chuyen_cong_ty') {
+        const old = pick(companyIds);
+        const ne = pick(companyIds.filter((x) => x !== old)) || pick(companyIds);
+        ghiChu = `Chuyển công ty (#${old} → #${ne})`;
+        duLieu = { tu_cong_ty_id: old, sang_cong_ty_id: ne };
+      } else if (t.loai === 'chuyen_cho_o') {
+        const tu = pick(['ktx', 'phong_tro', 'tu_tuc', 'chua_co_phong']);
+        const sang = pick(['ktx', 'phong_tro', 'tu_tuc', 'chua_co_phong'].filter((x) => x !== tu));
+        ghiChu = `Đổi tình trạng nơi ở: ${tu} → ${sang}`;
+        duLieu = { tu, sang };
+      } else {
+        const soTien = rand(200, 3000) * 1000;
+        ghiChu = `Hoàn ứng ${soTien.toLocaleString('vi-VN')}đ`;
+        duLieu = { so_tien: soTien };
+      }
+      await queryWithRetry(
+        `INSERT INTO hoat_dong_log (loai, cong_nhan_id, nguoi_tuyen_id, du_lieu, ghi_chu, created_by, created_at)
+         VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7)`,
+        [
+          t.loai,
+          w.id,
+          w.nguoi_tuyen_id,
+          JSON.stringify(duLieu),
+          ghiChu,
+          pick([adminId, ...managerIds]),
+          createdAt.toISOString(),
+        ],
+      );
+      hdlCount += 1;
+    }
+    console.log(`[hoat_dong_log] inserted ${hdlCount}`);
 
     console.log('\nSeed done.');
     console.log('Accounts:');
