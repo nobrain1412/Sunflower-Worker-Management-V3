@@ -6,9 +6,9 @@ cmds = []
 
 [phases.build]
 cmds = [
-  "npm ci --prefix frontend",
+  "npm ci --prefix frontend --include=dev",
   "npm run build --prefix frontend",
-  "npm ci --prefix backend"
+  "npm ci --prefix backend --omit=dev"
 ]
 
 [start]
