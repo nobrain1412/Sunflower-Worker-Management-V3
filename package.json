@@ -4,7 +4,7 @@
   "private": true,
   "description": "WorkerOS — Quản lý công nhân nội bộ",
   "scripts": {
-    "build": "npm ci --prefix frontend && npm run build --prefix frontend && npm ci --prefix backend",
+    "build": "npm ci --prefix frontend --include=dev && npm run build --prefix frontend && npm ci --prefix backend --omit=dev",
     "start": "npm run migrate --prefix backend && npm start --prefix backend",
     "migrate": "npm run migrate --prefix backend",
     "seed": "npm run seed --prefix backend",
