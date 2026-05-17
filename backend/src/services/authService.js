@@ -105,19 +105,30 @@ async function refreshToken(token, session = {}) {
   let payload;
   try {
     payload = jwt.verify(token, process.env.REFRESH_TOKEN_SECRET);
-  } catch {
+  } catch (verifyErr) {
+    // Phân biệt rõ để log: jwt sai chữ ký / hết hạn / malformed
     const err = new Error('Refresh token không hợp lệ');
     err.statusCode = 401;
     err.code = 'INVALID_REFRESH_TOKEN';
+    err.reason = verifyErr?.name || 'jwt_verify_failed';
     throw err;
   }
 
   const tokenHash = hashToken(token);
   const activeToken = await refreshTokenModel.findActiveByHash(tokenHash);
-  if (!activeToken || activeToken.user_id !== payload.id) {
-    const err = new Error('Refresh token không hợp lệ hoặc đã bị thu hồi');
+  if (!activeToken) {
+    // Không tìm thấy trong DB (hoặc đã revoke quá grace period)
+    const err = new Error('Refresh token đã bị thu hồi hoặc không tồn tại');
     err.statusCode = 401;
     err.code = 'INVALID_REFRESH_TOKEN';
+    err.reason = 'not_found_or_revoked';
+    throw err;
+  }
+  if (activeToken.user_id !== payload.id) {
+    const err = new Error('Refresh token không khớp user');
+    err.statusCode = 401;
+    err.code = 'INVALID_REFRESH_TOKEN';
+    err.reason = 'user_mismatch';
     throw err;
   }
 

@@ -7,7 +7,7 @@ function errorHandler(err, req, res, next) {
 
   // Log lỗi server — không log stack trace ở production log để tránh lộ thông tin
   logger.error({
-    err: isProd ? { message: err.message, code: err.code } : err,
+    err: isProd ? { message: err.message, code: err.code, reason: err.reason } : err,
     method: req.method,
     url: req.originalUrl,
   }, 'Unhandled error');
