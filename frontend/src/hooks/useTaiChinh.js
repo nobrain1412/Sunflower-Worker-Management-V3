@@ -82,6 +82,8 @@ export function useToggleHoanTien() {
     onSuccess:  () => {
       qc.invalidateQueries({ queryKey: ['tai-chinh', 'giao-dich'] });
       qc.invalidateQueries({ queryKey: ['tai-chinh', 'tong'] });
+      qc.invalidateQueries({ queryKey: ['tai-chinh', 'cn'] });
+      qc.invalidateQueries({ queryKey: ['cong-nhan'] });
     },
   });
 }

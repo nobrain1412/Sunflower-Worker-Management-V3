@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useCongNhanDetail, useCapNhatCongNhan, useNoiOCongNhan, useTongUngCongNhan, useNoiOTruyCap } from '../../hooks/useCongNhan';
-import { useGiaoDichCongNhan } from '../../hooks/useTaiChinh';
+import { useGiaoDichCongNhan, useToggleHoanTien } from '../../hooks/useTaiChinh';
 import { useLichSuPhong, usePhongList, useGiuongList } from '../../hooks/useKtx';
 import { useAuth } from '../../context/AuthContext';
 import ProvinceSelect from '../../components/ProvinceSelect';
@@ -443,6 +443,15 @@ export default function CongNhanDetail() {
   const [anhModal,         setAnhModal]         = useState(false);
   const [previewImage, setPreviewImage] = useState(null);
   const capNhatXe = useCapNhatCongNhan(cn?.id);
+  const toggleHoan = useToggleHoanTien();
+
+  async function handleToggleHoan(g) {
+    try {
+      await toggleHoan.mutateAsync({ id: g.id, da_hoan_tien: !g.da_hoan_tien });
+    } catch (e) {
+      alert(e?.response?.data?.error?.message ?? 'Không thể cập nhật trạng thái hoàn');
+    }
+  }
 
   async function toggleXeDaTra(nextValue) {
     try {
@@ -656,6 +665,11 @@ export default function CongNhanDetail() {
               <Field label="Phòng" value={currentRoom.ten_phong} />
               <Field label="Giường số" value={currentRoom.so_thu_tu} />
               <Field label="Ngày vào" value={currentRoom.ngay_vao ? new Date(currentRoom.ngay_vao).toLocaleDateString('vi-VN') : null} />
+              <Field label="Ngày ra">
+                <span style={{ fontSize: 13, color: currentRoom.ngay_ra ? 'var(--text1)' : 'var(--green)', fontWeight: 500 }}>
+                  {currentRoom.ngay_ra ? new Date(currentRoom.ngay_ra).toLocaleDateString('vi-VN') : 'Đang ở'}
+                </span>
+              </Field>
             </div>
           ) : phongTroNow ? (
             <div className="cn-detail-fields" style={s.fields}>
@@ -665,6 +679,11 @@ export default function CongNhanDetail() {
               <Field label="Chủ trọ" value={phongTroNow.chu_tro} />
               <Field label="SĐT chủ trọ" value={phongTroNow.sdt_chu_tro} />
               <Field label="Ngày vào" value={phongTroNow.ngay_vao ? new Date(phongTroNow.ngay_vao).toLocaleDateString('vi-VN') : null} />
+              <Field label="Ngày ra">
+                <span style={{ fontSize: 13, color: phongTroNow.ngay_ra ? 'var(--text1)' : 'var(--green)', fontWeight: 500 }}>
+                  {phongTroNow.ngay_ra ? new Date(phongTroNow.ngay_ra).toLocaleDateString('vi-VN') : 'Đang ở'}
+                </span>
+              </Field>
             </div>
           ) : (
             <div style={{ fontSize: 13, color: 'var(--text3)', fontStyle: 'italic' }}>Chưa được xếp phòng / phòng trọ</div>
@@ -736,9 +755,32 @@ export default function CongNhanDetail() {
                         <td style={{ padding: '8px 10px 8px 0', fontSize: 12, color: 'var(--text2)' }}>{g.ghi_chu ?? '—'}</td>
                         <td style={{ padding: '8px 10px 8px 0' }}>
                           {!isThu && (
-                            <span style={{ fontSize: 11, color: g.da_hoan_tien ? 'var(--green)' : 'var(--text3)' }}>
-                              {g.da_hoan_tien ? '✓ Đã hoàn' : 'Chưa hoàn'}
-                            </span>
+                            canEdit ? (
+                              <button
+                                onClick={() => handleToggleHoan(g)}
+                                disabled={toggleHoan.isPending}
+                                title={g.da_hoan_tien
+                                  ? `Đã hoàn ${g.ngay_hoan ? new Date(g.ngay_hoan).toLocaleDateString('vi-VN') : ''} — bấm để bỏ`
+                                  : 'Bấm để đánh dấu đã hoàn'}
+                                style={{
+                                  background: g.da_hoan_tien ? 'rgba(34,201,134,0.12)' : 'transparent',
+                                  border: `1px solid ${g.da_hoan_tien ? 'var(--green)' : 'var(--border2)'}`,
+                                  borderRadius: 6, padding: '3px 8px', fontSize: 11,
+                                  color: g.da_hoan_tien ? 'var(--green)' : 'var(--text2)',
+                                  cursor: 'pointer', fontFamily: "'Be Vietnam Pro', sans-serif",
+                                }}
+                              >
+                                {g.da_hoan_tien
+                                  ? `✓ Hoàn ${g.ngay_hoan ? new Date(g.ngay_hoan).toLocaleDateString('vi-VN') : ''}`
+                                  : 'Đánh dấu hoàn'}
+                              </button>
+                            ) : (
+                              <span style={{ fontSize: 11, color: g.da_hoan_tien ? 'var(--green)' : 'var(--text3)' }}>
+                                {g.da_hoan_tien
+                                  ? `✓ Hoàn ${g.ngay_hoan ? new Date(g.ngay_hoan).toLocaleDateString('vi-VN') : ''}`
+                                  : 'Chưa hoàn'}
+                              </span>
+                            )
                           )}
                         </td>
                       </tr>

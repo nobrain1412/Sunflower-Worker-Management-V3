@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import { useGiaoDichList, useTongThang, useTaoGiaoDich, useXoaGiaoDich, useDanhMuc, useTaoDanhMuc, useCapNhatDanhMuc } from '../../hooks/useTaiChinh';
+import { useGiaoDichList, useTongThang, useTaoGiaoDich, useXoaGiaoDich, useDanhMuc, useTaoDanhMuc, useCapNhatDanhMuc, useToggleHoanTien } from '../../hooks/useTaiChinh';
 import { useTongTheoThang } from '../../hooks/useDashboard';
 import { useAuth } from '../../context/AuthContext';
 import useIsMobile from '../../hooks/useIsMobile';
@@ -29,7 +29,7 @@ const LOAI_LABEL = {
 
 function fmt(n) { return Number(n || 0).toLocaleString('vi-VN') + 'đ'; }
 
-function MobileGiaoDichCard({ g, isVender, onDelete }) {
+function MobileGiaoDichCard({ g, isVender, onDelete, onToggleHoan, toggling }) {
   const loai = LOAI_LABEL[g.loai];
   const isThu = loai?.type === 'thu';
 
@@ -47,9 +47,32 @@ function MobileGiaoDichCard({ g, isVender, onDelete }) {
         <div style={mobile.metaItem}><span style={mobile.metaLabel}>Danh mục</span><span style={mobile.metaVal}>{g.danh_muc_ten ?? '—'}</span></div>
         <div style={mobile.metaItem}><span style={mobile.metaLabel}>Ngày</span><span style={mobile.metaVal}>{g.ngay ? new Date(g.ngay).toLocaleDateString('vi-VN') : '—'}</span></div>
         <div style={{ ...mobile.metaItem, gridColumn: 'span 2' }}><span style={mobile.metaLabel}>Ghi chú</span><span style={mobile.metaVal}>{g.ghi_chu ?? '—'}</span></div>
+        {!isThu && (
+          <div style={{ ...mobile.metaItem, gridColumn: 'span 2' }}>
+            <span style={mobile.metaLabel}>Trạng thái hoàn</span>
+            <span style={mobile.metaVal}>
+              {g.da_hoan_tien
+                ? `✓ Đã hoàn ${g.ngay_hoan ? new Date(g.ngay_hoan).toLocaleDateString('vi-VN') : ''}`
+                : 'Chưa hoàn'}
+            </span>
+          </div>
+        )}
       </div>
       {!isVender && (
         <div style={mobile.actions}>
+          {!isThu && (
+            <button
+              onClick={() => onToggleHoan(g)}
+              disabled={toggling}
+              style={{
+                ...mobile.deleteBtn,
+                color: g.da_hoan_tien ? 'var(--green)' : 'var(--accent)',
+                borderColor: g.da_hoan_tien ? 'var(--green)' : 'var(--accent)',
+              }}
+            >
+              {g.da_hoan_tien ? '↶ Bỏ hoàn' : '✓ Hoàn'}
+            </button>
+          )}
           <button onClick={() => onDelete(g)} style={mobile.deleteBtn}>🗑 Xoá</button>
         </div>
       )}
@@ -226,6 +249,15 @@ export default function TaiChinh() {
   const { data: tongRes }    = useTongThang(thang, nam);
   const { data: monthlyRes } = useTongTheoThang(5);
   const xoaGd                = useXoaGiaoDich();
+  const toggleHoan           = useToggleHoanTien();
+
+  async function handleToggleHoan(g) {
+    try {
+      await toggleHoan.mutateAsync({ id: g.id, da_hoan_tien: !g.da_hoan_tien });
+    } catch (e) {
+      alert(e?.response?.data?.error?.message ?? 'Không thể cập nhật trạng thái hoàn');
+    }
+  }
 
   // Chia cho 1 triệu để hiển thị đơn vị "tr"
   const MONTHLY = (monthlyRes?.data ?? []).map((m) => ({
@@ -337,7 +369,14 @@ export default function TaiChinh() {
               ) : (
                 <div style={mobile.list}>
                   {gdList.map((g) => (
-                    <MobileGiaoDichCard key={g.id} g={g} isVender={isVender} onDelete={handleXoa} />
+                    <MobileGiaoDichCard
+                      key={g.id}
+                      g={g}
+                      isVender={isVender}
+                      onDelete={handleXoa}
+                      onToggleHoan={handleToggleHoan}
+                      toggling={toggleHoan.isPending}
+                    />
                   ))}
                 </div>
               )}
@@ -351,7 +390,7 @@ export default function TaiChinh() {
               ) : (
                 <table style={s.table}>
                   <thead><tr>
-                    {['Loại','Danh mục','Số tiền','Ngày','Ghi chú',''].map((h, i) => <th key={i} style={s.th}>{h}</th>)}
+                    {['Loại','Danh mục','Số tiền','Ngày','Ghi chú','Hoàn',''].map((h, i) => <th key={i} style={s.th}>{h}</th>)}
                   </tr></thead>
                   <tbody>
                     {gdList.map((g) => {
@@ -368,6 +407,34 @@ export default function TaiChinh() {
                           </td>
                           <td style={s.td}><span style={{ fontSize: 12, color: 'var(--text2)' }}>{g.ngay ? new Date(g.ngay).toLocaleDateString('vi-VN') : '—'}</span></td>
                           <td style={s.td}><span style={{ fontSize: 12, color: 'var(--text2)' }}>{g.ghi_chu ?? '—'}</span></td>
+                          <td style={s.td}>
+                            {isThu ? (
+                              <span style={{ fontSize: 11, color: 'var(--text3)' }}>—</span>
+                            ) : !isVender ? (
+                              <button
+                                onClick={() => handleToggleHoan(g)}
+                                disabled={toggleHoan.isPending}
+                                title={g.da_hoan_tien
+                                  ? `Đã hoàn ${g.ngay_hoan ? new Date(g.ngay_hoan).toLocaleDateString('vi-VN') : ''} — bấm để bỏ`
+                                  : 'Bấm để đánh dấu đã hoàn'}
+                                style={{
+                                  background: g.da_hoan_tien ? 'rgba(34,201,134,0.12)' : 'transparent',
+                                  border: `1px solid ${g.da_hoan_tien ? 'var(--green)' : 'var(--border2)'}`,
+                                  borderRadius: 6, padding: '3px 8px', fontSize: 11,
+                                  color: g.da_hoan_tien ? 'var(--green)' : 'var(--text2)',
+                                  cursor: 'pointer', fontFamily: "'Be Vietnam Pro', sans-serif",
+                                }}
+                              >
+                                {g.da_hoan_tien
+                                  ? `✓ ${g.ngay_hoan ? new Date(g.ngay_hoan).toLocaleDateString('vi-VN') : ''}`
+                                  : 'Đánh dấu hoàn'}
+                              </button>
+                            ) : (
+                              <span style={{ fontSize: 11, color: g.da_hoan_tien ? 'var(--green)' : 'var(--text3)' }}>
+                                {g.da_hoan_tien ? '✓' : '—'}
+                              </span>
+                            )}
+                          </td>
                           <td style={s.td}>
                             {!isVender && (
                               <button

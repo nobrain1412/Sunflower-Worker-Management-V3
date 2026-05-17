@@ -378,6 +378,7 @@ export default function NhanSu() {
                   <div style={m.metaGrid}>
                     <div style={m.metaItem}><span style={m.metaLabel}>SĐT</span><span style={s.sub}>{u.so_dien_thoai ?? '—'}</span></div>
                     <div style={m.metaItem}><span style={m.metaLabel}>Số người tuyển</span><span style={s.mono}>{Number(u.so_cn_tuyen || 0)}</span></div>
+                    <div style={m.metaItem}><span style={m.metaLabel}>Đã thanh toán</span><span style={{ ...s.mono, color: 'var(--teal)', fontWeight: 700 }}>{Number(u.so_cn_da_thanh_toan || 0)} người</span></div>
                     <div style={m.metaItem}><span style={m.metaLabel}>Tiền công/người</span><span style={s.mono}>{fmtMoney(u.tien_cong_moi_nguoi)}</span></div>
                     <div style={m.metaItem}><span style={m.metaLabel}>Hình thức</span><span style={s.sub}>{u.hinh_thuc_thanh_toan === 'hang_thang' ? 'Nhận hàng tháng' : 'Lấy 1 lần'}</span></div>
                     {u.hinh_thuc_thanh_toan !== 'hang_thang' && (
@@ -402,14 +403,20 @@ export default function NhanSu() {
             </div>
           ) : (
             <table style={s.table}>
-              <thead><tr>{['Tên','SĐT','Số người tuyển','Tiền công/người','Hình thức','Đủ điều kiện 1 lần','Dự kiến thanh toán',''].map((h, i) => <th key={i} style={s.th}>{h}</th>)}</tr></thead>
+              <thead><tr>{['Tên','SĐT','Số người tuyển','Đã thanh toán','Tiền công/người','Hình thức','Đủ điều kiện 1 lần','Dự kiến thanh toán',''].map((h, i) => <th key={i} style={s.th}>{h}</th>)}</tr></thead>
               <tbody>
-                {ctvs.length === 0 ? <tr><td colSpan={8} style={s.empty}>Chưa có cộng tác viên</td></tr> :
+                {ctvs.length === 0 ? <tr><td colSpan={9} style={s.empty}>Chưa có cộng tác viên</td></tr> :
                   ctvs.map((u) => (
                     <tr key={u.id} style={s.tr}>
                       <td style={s.td}><b style={{ color: 'var(--text1)' }}>{u.ho_ten}</b></td>
                       <td style={s.td}><span style={s.sub}>{u.so_dien_thoai ?? '—'}</span></td>
                       <td style={s.td}><span style={s.mono}>{Number(u.so_cn_tuyen || 0)}</span></td>
+                      <td style={s.td}>
+                        <span style={{ ...s.mono, color: 'var(--teal)', fontWeight: 700 }}>{Number(u.so_cn_da_thanh_toan || 0)}</span>
+                        {Number(u.tong_da_thanh_toan || 0) > 0 && (
+                          <span style={{ ...s.sub, marginLeft: 6 }}>({fmtMoney(u.tong_da_thanh_toan)})</span>
+                        )}
+                      </td>
                       <td style={s.td}><span style={s.mono}>{fmtMoney(u.tien_cong_moi_nguoi)}</span></td>
                       <td style={s.td}><span style={s.sub}>{u.hinh_thuc_thanh_toan === 'hang_thang' ? 'Nhận hàng tháng' : 'Lấy 1 lần'}</span></td>
                       <td style={s.td}>
@@ -418,7 +425,7 @@ export default function NhanSu() {
                         </span>
                       </td>
                       <td style={s.td}><span style={{ ...s.mono, color: 'var(--green)', fontWeight: 700 }}>{fmtMoney(u.du_kien_thanh_toan)}</span></td>
-                      <td style={s.td}>
+                      <td style={s.td} onClick={(e) => e.stopPropagation()}>
                         <button
                           className="btn-primary"
                           style={{ fontSize: 11, padding: '4px 8px' }}

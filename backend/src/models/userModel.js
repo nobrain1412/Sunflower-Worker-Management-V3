@@ -168,7 +168,13 @@ async function findCongTacVien({ quanLyId } = {}) {
                 JOIN cong_nhan cn ON cn.id = pc.cong_nhan_id
                WHERE cn.nguoi_tuyen_id = u.id
                  AND DATE_TRUNC('month', cc.ngay::timestamp) = DATE_TRUNC('month', NOW())
-            ) AS tong_gio_thang
+            ) AS tong_gio_thang,
+            (SELECT COUNT(DISTINCT cong_nhan_id)
+               FROM cong_tac_vien_thanh_toan
+              WHERE ctv_id = u.id) AS so_cn_da_thanh_toan,
+            (SELECT COALESCE(SUM(so_tien), 0)
+               FROM cong_tac_vien_thanh_toan
+              WHERE ctv_id = u.id) AS tong_da_thanh_toan
      FROM users u
      WHERE ${where}
      ORDER BY u.id DESC`,
@@ -187,6 +193,8 @@ async function findCongTacVien({ quanLyId } = {}) {
     return {
       ...u,
       so_cn_du_dieu_kien_mot_lan: soCnDuDieuKienMotLan,
+      so_cn_da_thanh_toan: Number(u.so_cn_da_thanh_toan || 0),
+      tong_da_thanh_toan: Number(u.tong_da_thanh_toan || 0),
       don_gia_theo_gio: donGiaTheoGio,
       du_kien_mot_lan: duKienMotLan,
       du_kien_thanh_toan: duKienThanhToan,
