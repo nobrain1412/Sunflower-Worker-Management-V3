@@ -47,6 +47,27 @@ router.get('/cong-tac-vien', requireRole('admin', 'quan_ly'), asyncWrapper(async
   sendSuccess(res, rows);
 }));
 
+// GET /api/users/cong-tac-vien/:id/cong-nhan — danh sách CN CTV tuyển kèm stats thanh toán
+router.get('/cong-tac-vien/:id/cong-nhan', requireRole('admin', 'quan_ly'),
+  asyncWrapper(async (req, res) => {
+    const id = toPositiveInt(req.params.id, 'ID cộng tác viên');
+    // Quản lý chỉ xem CTV mình quản lý
+    if (req.user.vai_tro === 'quan_ly') {
+      const own = await db.query(
+        `SELECT 1 FROM users WHERE id = $1 AND quan_ly_id = $2`,
+        [id, req.user.id],
+      );
+      if (!own.rows[0]) {
+        const e = new Error('Bạn không quản lý CTV này');
+        e.statusCode = 403; throw e;
+      }
+    }
+    const data = await userModel.findCongNhanCuaCtv(id);
+    if (!data) { const e = new Error('Không tìm thấy CTV'); e.statusCode = 404; throw e; }
+    sendSuccess(res, data);
+  }),
+);
+
 // POST /api/users/cong-tac-vien/:id/thanh-toan
 router.post('/cong-tac-vien/:id/thanh-toan',
   requireRole('admin', 'quan_ly'),

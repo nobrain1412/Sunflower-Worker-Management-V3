@@ -308,8 +308,102 @@ async function thanhToanCongTacVien({ ctvId, hinhThuc, thang, nam, createdBy, gh
   }
 }
 
+// Danh sách CN do 1 CTV tuyển kèm số liệu thanh toán/giờ làm
+async function findCongNhanCuaCtv(ctvId) {
+  const ctvRes = await db.query(
+    `SELECT id, vai_tro, ho_ten, tien_cong_moi_nguoi, hinh_thuc_thanh_toan
+       FROM users WHERE id = $1`,
+    [ctvId],
+  );
+  const ctv = ctvRes.rows[0];
+  if (!ctv || ctv.vai_tro !== 'cong_tac_vien') return null;
+
+  const tienCong = Number(ctv.tien_cong_moi_nguoi || 0);
+  const donGiaTheoGio = tienCong > 0 ? tienCong / 26 / 8 : 0;
+
+  const cnRes = await db.query(
+    `SELECT cn.id, cn.ho_ten, cn.cccd, cn.so_dien_thoai, cn.trang_thai,
+            cn.ngay_vao_lam, cn.ngay_nghi_viec, cn.cong_ty_id,
+            ct.ten_cong_ty,
+            COALESCE((
+              SELECT SUM(cc.so_gio + cc.so_gio_ot)
+                FROM cham_cong cc
+                JOIN phan_cong pc ON pc.id = cc.phan_cong_id
+               WHERE pc.cong_nhan_id = cn.id
+            ), 0) AS tong_gio,
+            COALESCE((
+              SELECT SUM(cc.so_gio + cc.so_gio_ot)
+                FROM cham_cong cc
+                JOIN phan_cong pc ON pc.id = cc.phan_cong_id
+               WHERE pc.cong_nhan_id = cn.id
+                 AND DATE_TRUNC('month', cc.ngay::timestamp) = DATE_TRUNC('month', NOW())
+            ), 0) AS gio_thang_nay,
+            EXISTS (
+              SELECT 1 FROM cong_tac_vien_thanh_toan t
+               WHERE t.cong_nhan_id = cn.id
+                 AND t.ctv_id = $1
+                 AND t.hinh_thuc = 'mot_lan'
+            ) AS da_thanh_toan_mot_lan,
+            (
+              SELECT COALESCE(json_agg(json_build_object(
+                'thang', t.thang, 'nam', t.nam, 'so_tien', t.so_tien, 'created_at', t.created_at
+              ) ORDER BY t.nam DESC, t.thang DESC), '[]'::json)
+                FROM cong_tac_vien_thanh_toan t
+               WHERE t.cong_nhan_id = cn.id
+                 AND t.ctv_id = $1
+                 AND t.hinh_thuc = 'hang_thang'
+            ) AS thanh_toan_hang_thang
+     FROM cong_nhan cn
+     LEFT JOIN cong_ty ct ON ct.id = cn.cong_ty_id
+     WHERE cn.nguoi_tuyen_id = $1
+       AND cn.deleted_at IS NULL
+     ORDER BY cn.ho_ten ASC`,
+    [ctvId],
+  );
+
+  const danhSach = cnRes.rows.map((cn) => {
+    const tongGio = Number(cn.tong_gio || 0);
+    const gioThang = Number(cn.gio_thang_nay || 0);
+    const ngayCong = tongGio / 8;
+    const duDieuKienMotLan = ngayCong >= 26;
+    const canThanhToanMotLan = duDieuKienMotLan && !cn.da_thanh_toan_mot_lan;
+    const canThanhToanThangNay = ctv.hinh_thuc_thanh_toan === 'hang_thang' && gioThang > 0;
+    return {
+      ...cn,
+      tong_gio: tongGio,
+      gio_thang_nay: gioThang,
+      ngay_cong: ngayCong,
+      du_dieu_kien_mot_lan: duDieuKienMotLan,
+      da_thanh_toan_mot_lan: !!cn.da_thanh_toan_mot_lan,
+      can_thanh_toan_mot_lan: canThanhToanMotLan,
+      can_thanh_toan_thang_nay: canThanhToanThangNay,
+      so_tien_mot_lan: canThanhToanMotLan ? tienCong : 0,
+      so_tien_thang_nay: canThanhToanThangNay ? Math.round(donGiaTheoGio * gioThang) : 0,
+    };
+  });
+
+  return {
+    ctv: {
+      id: ctv.id, ho_ten: ctv.ho_ten,
+      tien_cong_moi_nguoi: tienCong,
+      hinh_thuc_thanh_toan: ctv.hinh_thuc_thanh_toan,
+      don_gia_theo_gio: donGiaTheoGio,
+    },
+    cong_nhan: danhSach,
+    tong: {
+      so_cn: danhSach.length,
+      so_du_dieu_kien_mot_lan: danhSach.filter((x) => x.du_dieu_kien_mot_lan).length,
+      so_can_thanh_toan_mot_lan: danhSach.filter((x) => x.can_thanh_toan_mot_lan).length,
+      so_can_thanh_toan_thang_nay: danhSach.filter((x) => x.can_thanh_toan_thang_nay).length,
+      tong_tien_mot_lan: danhSach.reduce((s, x) => s + x.so_tien_mot_lan, 0),
+      tong_tien_thang_nay: danhSach.reduce((s, x) => s + x.so_tien_thang_nay, 0),
+    },
+  };
+}
+
 module.exports = {
   ROLE_VALUES,
   findByUsername, findById, findCongTyIds, findAll,
   create, update, setCongTyIds, hardDelete, findCongTacVien, thanhToanCongTacVien,
+  findCongNhanCuaCtv,
 };

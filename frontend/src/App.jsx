@@ -18,6 +18,7 @@ import CongTy         from './pages/CongTy/index';
 import BaoCao         from './pages/BaoCao/index';
 import NhanSu         from './pages/NhanSu/index';
 import NhanVienDetail from './pages/NhanSu/Detail';
+import CongTacVienDetail from './pages/NhanSu/CongTacVienDetail';
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
@@ -83,6 +84,9 @@ export default function App() {
             } />
             <Route path="/nhan-su" element={
               <RoleRoute allowedRoles={['admin','quan_ly']}><NhanSu /></RoleRoute>
+            } />
+            <Route path="/cong-tac-vien/:id" element={
+              <RoleRoute allowedRoles={['admin','quan_ly']}><CongTacVienDetail /></RoleRoute>
             } />
             <Route path="/nhan-vien/:id" element={
               <RoleRoute allowedRoles={['admin']}><NhanVienDetail /></RoleRoute>

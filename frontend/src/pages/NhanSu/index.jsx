@@ -370,7 +370,7 @@ export default function NhanSu() {
               {ctvs.length === 0 ? (
                 <div style={s.empty}>Chưa có cộng tác viên</div>
               ) : ctvs.map((u) => (
-                <div key={u.id} style={m.card}>
+                <div key={u.id} style={{ ...m.card, cursor: 'pointer' }} onClick={() => navigate(`/cong-tac-vien/${u.id}`)}>
                   <div style={m.head}>
                     <b style={{ color: 'var(--text1)', fontSize: 14 }}>{u.ho_ten}</b>
                     <span className="pill pill-green">CTV</span>
@@ -386,7 +386,7 @@ export default function NhanSu() {
                     )}
                     <div style={m.metaItem}><span style={m.metaLabel}>Dự kiến thanh toán</span><span style={{ ...s.mono, color: 'var(--green)', fontWeight: 700 }}>{fmtMoney(u.du_kien_thanh_toan)}</span></div>
                   </div>
-                  <div style={m.actions}>
+                  <div style={m.actions} onClick={(e) => e.stopPropagation()}>
                     <button
                       className="btn-primary"
                       style={{ fontSize: 11, padding: '4px 8px' }}
@@ -407,7 +407,7 @@ export default function NhanSu() {
               <tbody>
                 {ctvs.length === 0 ? <tr><td colSpan={9} style={s.empty}>Chưa có cộng tác viên</td></tr> :
                   ctvs.map((u) => (
-                    <tr key={u.id} style={s.tr}>
+                    <tr key={u.id} style={{ ...s.tr, cursor: 'pointer' }} onClick={() => navigate(`/cong-tac-vien/${u.id}`)}>
                       <td style={s.td}><b style={{ color: 'var(--text1)' }}>{u.ho_ten}</b></td>
                       <td style={s.td}><span style={s.sub}>{u.so_dien_thoai ?? '—'}</span></td>
                       <td style={s.td}><span style={s.mono}>{Number(u.so_cn_tuyen || 0)}</span></td>
@@ -426,6 +426,8 @@ export default function NhanSu() {
                       </td>
                       <td style={s.td}><span style={{ ...s.mono, color: 'var(--green)', fontWeight: 700 }}>{fmtMoney(u.du_kien_thanh_toan)}</span></td>
                       <td style={s.td} onClick={(e) => e.stopPropagation()}>
+                        <button className="btn-ghost" style={{ fontSize: 11, padding: '4px 8px', marginRight: 4 }}
+                          onClick={() => navigate(`/cong-tac-vien/${u.id}`)}>📊 Chi tiết</button>
                         <button
                           className="btn-primary"
                           style={{ fontSize: 11, padding: '4px 8px' }}
