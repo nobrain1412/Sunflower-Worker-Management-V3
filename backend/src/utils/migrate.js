@@ -1,5 +1,11 @@
 /**
  * Chạy tất cả file SQL trong thư mục migrations/ theo thứ tự tên file.
+ * Mỗi file chỉ chạy 1 lần — được track trong bảng `schema_migrations`.
+ *
+ * Bootstrap: nếu DB đã có `users` table nhưng chưa có `schema_migrations`
+ * (legacy state), mark tất cả file hiện có là "applied" để TRÁNH chạy lại
+ * `DROP SCHEMA` trong 001_init_schema.sql và xóa mất dữ liệu prod.
+ *
  * Dùng: node src/utils/migrate.js
  */
 require('dotenv').config();
@@ -25,16 +31,67 @@ async function waitForDB() {
   }
 }
 
+async function ensureMigrationsTable() {
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS schema_migrations (
+      filename   TEXT PRIMARY KEY,
+      applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+}
+
+async function bootstrapIfNeeded(files) {
+  const { rows: tracked } = await db.query('SELECT 1 FROM schema_migrations LIMIT 1');
+  if (tracked.length > 0) return; // Đã có tracking → bỏ qua bootstrap.
+
+  // Nếu DB có sẵn `users` table → schema đã được apply lần đầu trước khi có
+  // tracking. Bootstrap bằng cách mark TẤT CẢ file hiện tại là đã applied
+  // để tránh chạy lại DROP SCHEMA và xóa dữ liệu.
+  const { rows: usersExists } = await db.query(`
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema = 'public' AND table_name = 'users'
+  `);
+  if (usersExists.length === 0) return; // DB rỗng → cứ chạy migrations bình thường.
+
+  console.log('⚠ Bootstrap: phát hiện DB có dữ liệu nhưng chưa tracking migration.');
+  console.log('  → Mark tất cả file hiện tại là APPLIED để bảo vệ dữ liệu prod.');
+  for (const f of files) {
+    await db.query(
+      'INSERT INTO schema_migrations (filename) VALUES ($1) ON CONFLICT DO NOTHING',
+      [f],
+    );
+    console.log(`  ↷ marked ${f}`);
+  }
+}
+
 async function run() {
   await waitForDB();
+  await ensureMigrationsTable();
 
   const dir = path.join(__dirname, '../../migrations');
-  const files = fs.readdirSync(dir).filter((f) => f.endsWith('.sql')).sort();
+  const files = fs.readdirSync(dir)
+    .filter((f) => f.endsWith('.sql'))
+    .sort();
+
+  await bootstrapIfNeeded(files);
 
   for (const file of files) {
+    const { rows: applied } = await db.query(
+      'SELECT 1 FROM schema_migrations WHERE filename = $1',
+      [file],
+    );
+    if (applied.length > 0) {
+      console.log(`  ↷ skip ${file} (already applied)`);
+      continue;
+    }
+
     const sql = fs.readFileSync(path.join(dir, file), 'utf8');
     console.log(`Running migration: ${file}`);
     await db.query(sql);
+    await db.query(
+      'INSERT INTO schema_migrations (filename) VALUES ($1)',
+      [file],
+    );
     console.log(`  ✓ ${file}`);
   }
 
