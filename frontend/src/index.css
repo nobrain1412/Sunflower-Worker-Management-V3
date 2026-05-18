@@ -154,6 +154,26 @@ body {
   white-space: nowrap;
 }
 
+/* CongNhan detail — mobile-first grid (1 col mặc định, 2 col từ tablet trở lên) */
+.cn-detail-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+}
+.cn-detail-fields {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+}
+@media (min-width: 900px) {
+  .cn-detail-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .cn-detail-fields {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
 /* ========================================
    MOBILE RESPONSIVE — max-width: 768px
    ======================================== */

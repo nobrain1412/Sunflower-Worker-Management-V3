@@ -87,10 +87,10 @@ export default function App() {
               <RoleRoute allowedRoles={['admin']}><CongTy /></RoleRoute>
             } />
             <Route path="/nhan-su" element={
-              <RoleRoute allowedRoles={['admin','quan_ly']}><NhanSu /></RoleRoute>
+              <RoleRoute allowedRoles={['admin']}><NhanSu /></RoleRoute>
             } />
             <Route path="/cong-tac-vien/:id" element={
-              <RoleRoute allowedRoles={['admin','quan_ly']}><CongTacVienDetail /></RoleRoute>
+              <RoleRoute allowedRoles={['admin']}><CongTacVienDetail /></RoleRoute>
             } />
             <Route path="/nhan-vien/:id" element={
               <RoleRoute allowedRoles={['admin']}><NhanVienDetail /></RoleRoute>

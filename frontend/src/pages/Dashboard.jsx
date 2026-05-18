@@ -7,7 +7,7 @@ import BottomSheet from '../components/BottomSheet';
 import AddCongNhanModal from './CongNhan/AddModal';
 import { useAuth } from '../context/AuthContext';
 import { useDashboard } from '../hooks/useDashboard';
-import { useHoatDongLienQuan } from '../hooks/useHoatDong';
+import { useHoatDongLienQuan, useHoatDongCuaToi } from '../hooks/useHoatDong';
 import useIsMobile from '../hooks/useIsMobile';
 
 const DONUT_COLORS = ['#4f7cff', '#7b5fff', '#2dd4bf', '#22c986', '#ffb344', '#ff5f72', '#545870'];
@@ -536,6 +536,11 @@ function QuanLyDashboard() {
   const cnMoiNhat = dash.cn_moi_nhat ?? [];
   const congTyList = dash.cong_ty_list ?? [];
 
+  const { data: hdRes } = useHoatDongLienQuan(15);
+  const hoatDongQL = (hdRes?.data ?? []).map((h) => ({
+    loai: h.loai, id: `hdl-${h.id}`, title: h.cong_nhan_ten || '', ts: h.created_at, ghi_chu: h.ghi_chu,
+  }));
+
   const KPI_QL = [
     { label: 'Tổng công nhân', value: kData.tong_cong_nhan ?? 0, sub: 'Trong công ty này', color: 'var(--accent)', icon: 'users' },
     { label: 'Vào hôm nay',    value: kData.cn_moi_hom_nay ?? 0, sub: '', color: 'var(--green)', icon: 'new' },
@@ -648,6 +653,29 @@ function QuanLyDashboard() {
         )}
       </div>
 
+      {/* Hoạt động gần đây — liên quan đến CN trong công ty user quản lý */}
+      <div style={s.card}>
+        <div style={s.cardHeader}>
+          <div style={s.cardTitle}>Hoạt động gần đây</div>
+        </div>
+        <div style={s.activityList}>
+          {hoatDongQL.length === 0 ? (
+            <div style={{ padding: 16, fontSize: 12, color: 'var(--text3)' }}>Chưa có hoạt động</div>
+          ) : hoatDongQL.map((a, i) => {
+            const ic = activityIcon(a.loai);
+            return (
+              <div key={`${a.loai}-${a.id}-${i}`} style={s.actItem}>
+                <div style={{ ...s.actDot, background: ic.color }} />
+                <div style={s.actBody}>
+                  <div style={s.actText}><span style={{ marginRight: 6 }}>{ic.icon}</span>{activityToText(a)}</div>
+                  <div style={s.actTime}>{timeAgo(a.ts)}</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
       {/* FAB mobile */}
       <button style={s.fab} onClick={() => setShowAddSheet(true)} className="fab-mobile">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
@@ -690,6 +718,11 @@ function VenderDashboard() {
   const dash = dashRes?.data ?? {};
   const kData = dash.kpi ?? {};
   const cnMoiNhat = dash.cn_moi_nhat ?? [];
+
+  const { data: hdRes } = useHoatDongCuaToi(15);
+  const hoatDongV = (hdRes?.data ?? []).map((h) => ({
+    loai: h.loai, id: `hdl-${h.id}`, title: h.cong_nhan_ten || '', ts: h.created_at, ghi_chu: h.ghi_chu,
+  }));
 
   const tong = Number(kData.tong_cong_nhan ?? 0);
   const dangLam = Number(kData.dang_lam ?? 0);
@@ -774,6 +807,29 @@ function VenderDashboard() {
             </tbody>
           </table>
         )}
+      </div>
+
+      {/* Hoạt động của tôi */}
+      <div style={s.card}>
+        <div style={s.cardHeader}>
+          <div style={s.cardTitle}>Hoạt động gần đây</div>
+        </div>
+        <div style={s.activityList}>
+          {hoatDongV.length === 0 ? (
+            <div style={{ padding: 16, fontSize: 12, color: 'var(--text3)' }}>Chưa có hoạt động</div>
+          ) : hoatDongV.map((a, i) => {
+            const ic = activityIcon(a.loai);
+            return (
+              <div key={`${a.loai}-${a.id}-${i}`} style={s.actItem}>
+                <div style={{ ...s.actDot, background: ic.color }} />
+                <div style={s.actBody}>
+                  <div style={s.actText}><span style={{ marginRight: 6 }}>{ic.icon}</span>{activityToText(a)}</div>
+                  <div style={s.actTime}>{timeAgo(a.ts)}</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       {/* FAB mobile */}

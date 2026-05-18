@@ -71,7 +71,7 @@ const NAV = [
   },
   {
     to: '/nhan-su', label: 'Nhân sự',
-    roles: ['admin', 'quan_ly'],
+    roles: ['admin'],
     icon: (
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
         <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>

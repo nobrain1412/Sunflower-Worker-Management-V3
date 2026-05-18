@@ -975,10 +975,10 @@ const s = {
   profileName: { fontSize: 18, fontWeight: 700, color: 'var(--text1)' },
   profileMeta: { display: 'flex', alignItems: 'center', marginTop: 4, flexWrap: 'wrap', gap: 4 },
   profileActions: { display: 'flex', gap: 8, flexWrap: 'wrap' },
-  grid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 },
+  grid: { gap: 14 },
   card: { background: 'var(--bg1)', border: '1px solid var(--border)', borderRadius: 14, padding: '18px 20px' },
   cardTitle: { fontSize: 13, fontWeight: 700, color: 'var(--text1)', marginBottom: 16, paddingBottom: 12, borderBottom: '1px solid var(--border)' },
-  fields: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 },
+  fields: { gap: 16 },
 };
 
 const M = {
