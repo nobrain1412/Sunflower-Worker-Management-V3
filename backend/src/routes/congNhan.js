@@ -96,6 +96,7 @@ router.use(authenticate, scopeByRole);
 router.get('/',    ctrl.getDanhSach);
 router.get('/noi-o/truy-cap', asyncWrapper(async (req, res) => {
   const vaiTro = req.user?.vai_tro;
+  // Kế toán không cần biết CN ở phòng nào — chỉ cần số tiền để trừ lương
   const ktx = vaiTro === 'admin' ? await ktxModel.findAllKtx() : [];
   const phongTro = await phongTroModel.findAll({ active: true });
   sendSuccess(res, { ktx, phong_tro: phongTro });
@@ -171,7 +172,11 @@ router.post('/:id/upload-anh',
 );
 
 // ─── Tổng hợp cho trang chi tiết: nơi ở (KTX + phòng trọ) + tổng tạm ứng ────
+// Kế toán không thấy chỗ ở cụ thể — chỉ cần biết tiền trọ qua endpoint khác.
 router.get('/:id/noi-o', asyncWrapper(async (req, res) => {
+  if (req.user?.vai_tro === 'ke_toan') {
+    return sendSuccess(res, { ktx: null, phong_tro: null });
+  }
   const id = toPositiveInt(req.params.id, 'ID công nhân');
   const [ktxRow, ptRow] = await Promise.all([
     db.query(

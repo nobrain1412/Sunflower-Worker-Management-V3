@@ -1,12 +1,22 @@
 /**
- * Tài chính routes — giao_dich_tai_chinh, danh_muc_giao_dich
+ * Tài chính routes — sổ thu/chi cá nhân của từng user.
+ *
+ * Quy tắc:
+ *   - Mỗi user có sổ riêng → chỉ thấy/sửa/xoá giao dịch do chính mình tạo.
+ *   - Admin/quan_ly/ke_toan KHÔNG can thiệp sổ của user khác.
+ *   - Danh mục thu/chi: dùng chung danh mục mặc định hệ thống + danh mục riêng của
+ *     từng user. User chỉ sửa/xoá được danh mục của chính mình.
+ *   - Vender chỉ tạo được khoản 'tam_ung' và chỉ với CN do mình tuyển.
+ *
+ * Vì là sổ cá nhân, route chặn cong_tac_vien (đã bị blockVender) — các role còn lại
+ * đều được vào sổ của mình. Riêng ke_toan: không tham gia ghi sổ tài chính cá nhân.
  */
 const { Router } = require('express');
 const { z } = require('zod');
 const validate       = require('../middleware/validate');
-const { requireRole } = require('../middleware/auth');
+const { authenticate } = require('../middleware/auth');
 const asyncWrapper   = require('../utils/asyncWrapper');
-const { sendSuccess, sendCreated } = require('../utils/response');
+const { sendSuccess, sendCreated, sendForbidden } = require('../utils/response');
 const model = require('../models/taiChinhModel');
 
 const router = Router();
@@ -22,6 +32,16 @@ function toPositiveInt(value, fieldName) {
   return parsed;
 }
 
+// Chỉ user có sổ tài chính cá nhân được vào (admin, quan_ly, vender).
+// cong_tac_vien + ke_toan không có sổ riêng — không liên quan đến module này.
+function allowOwnLedger(req, res, next) {
+  const v = req.user?.vai_tro;
+  if (v === 'admin' || v === 'quan_ly' || v === 'vender') return next();
+  return sendForbidden(res, 'Bạn không có sổ tài chính cá nhân');
+}
+
+router.use(authenticate, allowOwnLedger);
+
 const LOAI_VALUES = [
   // Mới: 3 nhóm chính
   'thu','chi','tieu',
@@ -31,25 +51,26 @@ const LOAI_VALUES = [
   'bao_hiem','dong_phuc','phat_nghi','khac',
 ];
 
-// ─── DANH MỤC ─────────────────────────────────────────────
-router.get('/danh-muc', requireRole('admin', 'quan_ly', 'vender'), asyncWrapper(async (req, res) => {
-  const data = await model.findAllDanhMuc(req.query.loai);
+// ─── DANH MỤC (riêng từng user) ───────────────────────────
+// Trả về danh mục hệ thống + của chính user
+router.get('/danh-muc', asyncWrapper(async (req, res) => {
+  const data = await model.findAllDanhMuc(req.query.loai, req.user.id);
   sendSuccess(res, data);
 }));
 
-router.post('/danh-muc', requireRole('admin'),
+router.post('/danh-muc',
   validate(z.object({
     ten:   z.string().min(1).max(100),
     loai:  z.enum(['thu', 'chi', 'tieu']),
     mo_ta: z.string().optional(),
   })),
   asyncWrapper(async (req, res) => {
-    const data = await model.createDanhMuc(req.validatedBody);
+    const data = await model.createDanhMuc(req.validatedBody, req.user.id);
     sendCreated(res, data, 'Tạo danh mục thành công');
   }),
 );
 
-router.put('/danh-muc/:id', requireRole('admin'),
+router.put('/danh-muc/:id',
   validate(z.object({
     ten:    z.string().min(1).max(100).optional(),
     loai:   z.enum(['thu', 'chi', 'tieu']).optional(),
@@ -57,61 +78,54 @@ router.put('/danh-muc/:id', requireRole('admin'),
     active: z.boolean().optional(),
   })),
   asyncWrapper(async (req, res) => {
-    const data = await model.updateDanhMuc(toPositiveInt(req.params.id, 'ID danh mục'), req.validatedBody);
-    if (!data) { const e = new Error('Không tìm thấy danh mục'); e.statusCode = 404; throw e; }
+    const id = toPositiveInt(req.params.id, 'ID danh mục');
+    const existing = await model.findDanhMucById(id);
+    if (!existing) { const e = new Error('Không tìm thấy danh mục'); e.statusCode = 404; throw e; }
+    // Chỉ chủ danh mục mới được sửa; không ai được sửa danh mục hệ thống
+    if (existing.user_id !== req.user.id) {
+      return sendForbidden(res, 'Bạn chỉ có thể sửa danh mục của chính mình');
+    }
+    const data = await model.updateDanhMuc(id, req.validatedBody);
     sendSuccess(res, data, 'Cập nhật thành công');
   }),
 );
 
+router.delete('/danh-muc/:id', asyncWrapper(async (req, res) => {
+  const id = toPositiveInt(req.params.id, 'ID danh mục');
+  const existing = await model.findDanhMucById(id);
+  if (!existing) { const e = new Error('Không tìm thấy danh mục'); e.statusCode = 404; throw e; }
+  if (existing.user_id !== req.user.id) {
+    return sendForbidden(res, 'Bạn chỉ có thể xoá danh mục của chính mình');
+  }
+  await model.deleteDanhMuc(id);
+  sendSuccess(res, null, 'Đã xoá danh mục');
+}));
+
 // ─── GIAO DỊCH ────────────────────────────────────────────
-router.get('/', requireRole('admin', 'quan_ly', 'vender'), asyncWrapper(async (req, res) => {
+// LUÔN filter theo created_by = user hiện tại — kể cả admin.
+router.get('/', asyncWrapper(async (req, res) => {
   const page  = Math.max(1, toPositiveInt(req.query.page || '1', 'Trang'));
   const limit = Math.min(100, Math.max(1, toPositiveInt(req.query.limit || '50', 'Giới hạn')));
-  const createdBy = req.user.vai_tro === 'vender' ? req.user.id : undefined;
   const { rows, total } = await model.findAll({
     page, limit,
     thang:       req.query.thang ? toPositiveInt(req.query.thang, 'Tháng') : undefined,
     nam:         req.query.nam   ? toPositiveInt(req.query.nam, 'Năm')   : undefined,
     loai:        req.query.loai,
     cong_nhan_id: req.query.cong_nhan_id ? toPositiveInt(req.query.cong_nhan_id, 'ID công nhân') : undefined,
-    created_by: createdBy,
+    created_by: req.user.id,
   });
   sendSuccess(res, rows, 'Thành công', 200, {
     page, limit, total, total_pages: Math.ceil(total / limit),
   });
 }));
 
-router.get('/tong-theo-thang', requireRole('admin', 'quan_ly', 'vender'), asyncWrapper(async (req, res) => {
+router.get('/tong-theo-thang', asyncWrapper(async (req, res) => {
   const soThang = Math.min(24, Math.max(1, toPositiveInt(req.query.so_thang || '5', 'Số tháng')));
-  if (req.user.vai_tro === 'vender') {
-    const now = new Date();
-    const data = [];
-    for (let i = soThang - 1; i >= 0; i -= 1) {
-      const current = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const thang = current.getMonth() + 1;
-      const nam = current.getFullYear();
-      const { rows } = await model.findAll({
-        page: 1,
-        limit: 1000,
-        thang,
-        nam,
-        created_by: req.user.id,
-      });
-      const thu = rows
-        .filter((g) => model.LOAI_THU.includes(g.loai))
-        .reduce((sum, g) => sum + Number(g.so_tien || 0), 0);
-      const chi = rows
-        .filter((g) => model.LOAI_CHI.includes(g.loai) && !g.da_hoan_tien)
-        .reduce((sum, g) => sum + Number(g.so_tien || 0), 0);
-      data.push({ thang, nam, thu, chi });
-    }
-    return sendSuccess(res, data);
-  }
-  const data = await model.tongTheoThang(soThang);
+  const data = await model.tongTheoThang(soThang, req.user.id);
   sendSuccess(res, data);
 }));
 
-router.get('/tong-thang', requireRole('admin', 'quan_ly', 'vender'), asyncWrapper(async (req, res) => {
+router.get('/tong-thang', asyncWrapper(async (req, res) => {
   const thang = toPositiveInt(req.query.thang || String(new Date().getMonth() + 1), 'Tháng');
   const nam   = toPositiveInt(req.query.nam   || String(new Date().getFullYear()),  'Năm');
   if (thang < 1 || thang > 12) {
@@ -120,26 +134,7 @@ router.get('/tong-thang', requireRole('admin', 'quan_ly', 'vender'), asyncWrappe
     e.code = 'VALIDATION_ERROR';
     throw e;
   }
-  if (req.user.vai_tro === 'vender') {
-    const { rows } = await model.findAll({
-      page: 1,
-      limit: 1000,
-      thang,
-      nam,
-      created_by: req.user.id,
-    });
-    const tong_thu = rows
-      .filter((g) => model.LOAI_THU.includes(g.loai))
-      .reduce((sum, g) => sum + Number(g.so_tien || 0), 0);
-    const tong_chi = rows
-      .filter((g) => model.LOAI_CHI.includes(g.loai) && !g.da_hoan_tien)
-      .reduce((sum, g) => sum + Number(g.so_tien || 0), 0);
-    const da_hoan = rows
-      .filter((g) => model.LOAI_CHI.includes(g.loai) && g.da_hoan_tien)
-      .reduce((sum, g) => sum + Number(g.so_tien || 0), 0);
-    return sendSuccess(res, { tong_thu, tong_chi, da_hoan });
-  }
-  const data  = await model.tinhTongThang(thang, nam);
+  const data = await model.tinhTongThang(thang, nam, req.user.id);
   sendSuccess(res, data);
 }));
 
@@ -152,7 +147,7 @@ const taoMoiSchema = z.object({
   ghi_chu:      z.string().max(500).optional(),
 });
 
-router.post('/', requireRole('admin', 'quan_ly', 'vender'),
+router.post('/',
   validate(taoMoiSchema),
   asyncWrapper(async (req, res) => {
     const { vai_tro, id: userId } = req.user;
@@ -164,7 +159,6 @@ router.post('/', requireRole('admin', 'quan_ly', 'vender'),
         e.statusCode = 403; throw e;
       }
       if (req.validatedBody.cong_nhan_id) {
-        // Kiểm tra CN có phải do vender này tuyển không
         const db = require('../utils/db');
         const check = await db.query(
           `SELECT id FROM cong_nhan WHERE id = $1 AND nguoi_tuyen_id = $2 AND deleted_at IS NULL`,
@@ -177,6 +171,15 @@ router.post('/', requireRole('admin', 'quan_ly', 'vender'),
       }
     }
 
+    // Nếu user chỉ định danh_muc_id, danh mục đó phải là của chính họ hoặc danh mục hệ thống
+    if (req.validatedBody.danh_muc_id) {
+      const dm = await model.findDanhMucById(req.validatedBody.danh_muc_id);
+      if (!dm || (dm.user_id !== null && dm.user_id !== userId)) {
+        const e = new Error('Danh mục không thuộc sổ của bạn');
+        e.statusCode = 403; throw e;
+      }
+    }
+
     const data = await model.create({
       ...req.validatedBody,
       created_by: userId,
@@ -185,8 +188,8 @@ router.post('/', requireRole('admin', 'quan_ly', 'vender'),
   }),
 );
 
-// Xem giao dịch của 1 CN (vender chỉ được xem CN mình tuyển)
-router.get('/cong-nhan/:congNhanId', requireRole('admin', 'quan_ly', 'vender'), asyncWrapper(async (req, res) => {
+// Giao dịch của 1 CN trong SỔ CỦA TÔI — chỉ trả entries do tôi tạo.
+router.get('/cong-nhan/:congNhanId', asyncWrapper(async (req, res) => {
   const cnId   = toPositiveInt(req.params.congNhanId, 'ID công nhân');
   const { vai_tro, id: userId } = req.user;
 
@@ -201,23 +204,28 @@ router.get('/cong-nhan/:congNhanId', requireRole('admin', 'quan_ly', 'vender'), 
     }
   }
 
-  const { rows, total } = await model.findAll({ cong_nhan_id: cnId, limit: 50 });
+  const { rows, total } = await model.findAll({
+    cong_nhan_id: cnId, limit: 50, created_by: userId,
+  });
   sendSuccess(res, rows, 'Thành công', 200, { total });
 }));
 
-// Toggle đã hoàn tiền
-router.patch('/:id/hoan-tien', requireRole('admin', 'quan_ly'),
+// Toggle đã hoàn tiền — chỉ chủ giao dịch.
+router.patch('/:id/hoan-tien',
   validate(z.object({ da_hoan_tien: z.boolean() })),
   asyncWrapper(async (req, res) => {
-    const data = await model.toggleHoanTien(
-      toPositiveInt(req.params.id, 'ID giao dịch'),
-      req.validatedBody.da_hoan_tien,
-    );
-    if (!data) {
-      const e = new Error('Không tìm thấy giao dịch chi hoặc không thể toggle');
-      e.statusCode = 404; throw e;
+    const id = toPositiveInt(req.params.id, 'ID giao dịch');
+    const existing = await model.findById(id);
+    if (!existing) { const e = new Error('Không tìm thấy giao dịch'); e.statusCode = 404; throw e; }
+    if (existing.created_by !== req.user.id) {
+      return sendForbidden(res, 'Bạn chỉ có thể chỉnh sổ của chính mình');
     }
-    // Ghi audit khi đánh dấu hoàn (chỉ khi từ false → true)
+    const data = await model.toggleHoanTien(id, req.validatedBody.da_hoan_tien);
+    if (!data) {
+      const e = new Error('Giao dịch không phải khoản chi — không thể toggle');
+      e.statusCode = 400; throw e;
+    }
+    // Audit khi đánh dấu hoàn (chỉ false → true) — muc_do 'thuong' vì là sổ cá nhân
     if (req.validatedBody.da_hoan_tien && data.cong_nhan_id) {
       try {
         const hoatDongLog = require('../models/hoatDongLogModel');
@@ -227,6 +235,7 @@ router.patch('/:id/hoan-tien', requireRole('admin', 'quan_ly'),
         );
         await hoatDongLog.create({
           loai: 'hoan_ung',
+          muc_do: 'thuong',
           cong_nhan_id: data.cong_nhan_id,
           nguoi_tuyen_id: cnRow.rows[0]?.nguoi_tuyen_id ?? null,
           du_lieu: {
@@ -247,15 +256,16 @@ router.patch('/:id/hoan-tien', requireRole('admin', 'quan_ly'),
   }),
 );
 
-// Xoá giao dịch (admin/quan_ly)
-router.delete('/:id', requireRole('admin', 'quan_ly'),
-  asyncWrapper(async (req, res) => {
-    const data = await model.deleteOne(toPositiveInt(req.params.id, 'ID giao dịch'));
-    if (!data) {
-      const e = new Error('Không tìm thấy giao dịch'); e.statusCode = 404; throw e;
-    }
-    sendSuccess(res, null, 'Đã xoá giao dịch');
-  }),
-);
+// Xoá giao dịch — chỉ chủ giao dịch.
+router.delete('/:id', asyncWrapper(async (req, res) => {
+  const id = toPositiveInt(req.params.id, 'ID giao dịch');
+  const existing = await model.findById(id);
+  if (!existing) { const e = new Error('Không tìm thấy giao dịch'); e.statusCode = 404; throw e; }
+  if (existing.created_by !== req.user.id) {
+    return sendForbidden(res, 'Bạn chỉ có thể xoá khỏi sổ của chính mình');
+  }
+  await model.deleteOne(id);
+  sendSuccess(res, null, 'Đã xoá giao dịch');
+}));
 
 module.exports = router;

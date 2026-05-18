@@ -31,7 +31,7 @@ function toPositiveInt(value, fieldName) {
 router.use(authenticate, scopeByRole);
 
 // GET /api/cham-cong?thang=&nam=&cong_ty_id=&nguoi_tuyen_id=
-router.get('/', requireRole('admin', 'quan_ly'),
+router.get('/', requireRole('admin', 'quan_ly', 'ke_toan'),
   asyncWrapper(async (req, res) => {
     const thang = toPositiveInt(req.query.thang, 'Tháng');
     const nam   = toPositiveInt(req.query.nam,   'Năm');
@@ -101,9 +101,10 @@ router.post('/batch', requireRole('admin', 'quan_ly'),
 
     const result = await chamCongModel.upsertBatch(phan_cong_id, entries);
 
-    // Ghi 1 activity log cho cả batch
+    // Ghi 1 activity log cho cả batch — log thường, không cần làm phiền admin
     await hoatDongLog.create({
       loai: 'cham_cong_batch',
+      muc_do: 'thuong',
       cong_nhan_id,
       nguoi_tuyen_id,
       du_lieu: {
@@ -119,12 +120,15 @@ router.post('/batch', requireRole('admin', 'quan_ly'),
 
     // Nếu có báo nghỉ phép / nghỉ việc → 1 log riêng cho từng ngày
     for (const nghi of result.baoNghi) {
+      const isNghiViec = nghi.ca_lam === 'nghi_viec';
       await hoatDongLog.create({
-        loai: nghi.ca_lam === 'nghi_viec' ? 'bao_nghi_viec' : 'bao_nghi_phep',
+        loai: isNghiViec ? 'bao_nghi_viec' : 'bao_nghi_phep',
+        // Nghỉ việc là sự kiện đáng chú ý, nghỉ phép thì là routine
+        muc_do: isNghiViec ? 'quan_trong' : 'thuong',
         cong_nhan_id,
         nguoi_tuyen_id,
         du_lieu: { ngay: nghi.ngay, ca_lam: nghi.ca_lam, cong_ty: ten_cong_ty },
-        ghi_chu: `${ho_ten} ${nghi.ca_lam === 'nghi_viec' ? 'nghỉ việc' : 'nghỉ phép'} ngày ${nghi.ngay}`,
+        ghi_chu: `${ho_ten} ${isNghiViec ? 'nghỉ việc' : 'nghỉ phép'} ngày ${nghi.ngay}`,
         created_by: req.user.id,
       });
     }

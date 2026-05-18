@@ -62,11 +62,15 @@ export default function App() {
             <Route path="/cong-nhan/:id" element={<PrivateRoute><CongNhanDetail /></PrivateRoute>} />
             <Route path="/cham-cong"     element={<PrivateRoute><ChamCong /></PrivateRoute>} />
 
-            {/* OCR: tất cả role (vender cần để tuyển) */}
-            <Route path="/ocr/cccd"      element={<PrivateRoute><ScanCCCD /></PrivateRoute>} />
-            <Route path="/ocr/danh-sach" element={<PrivateRoute><BulkReview /></PrivateRoute>} />
+            {/* OCR: vender/quản lý/admin (ke_toan không tham gia tuyển) */}
+            <Route path="/ocr/cccd" element={
+              <RoleRoute allowedRoles={['admin','quan_ly','vender']}><ScanCCCD /></RoleRoute>
+            } />
+            <Route path="/ocr/danh-sach" element={
+              <RoleRoute allowedRoles={['admin','quan_ly','vender']}><BulkReview /></RoleRoute>
+            } />
 
-            {/* Admin / quản lý / vender */}
+            {/* Tài chính: sổ cá nhân — chỉ admin/quan_ly/vender, ke_toan không có sổ */}
             <Route path="/tai-chinh" element={
               <RoleRoute allowedRoles={['admin','quan_ly','vender']}><TaiChinh /></RoleRoute>
             } />
@@ -92,7 +96,7 @@ export default function App() {
               <RoleRoute allowedRoles={['admin']}><NhanVienDetail /></RoleRoute>
             } />
             <Route path="/bao-cao" element={
-              <RoleRoute allowedRoles={['admin','quan_ly']}><BaoCao /></RoleRoute>
+              <RoleRoute allowedRoles={['admin','quan_ly','ke_toan']}><BaoCao /></RoleRoute>
             } />
 
               <Route path="*" element={<Navigate to="/" replace />} />

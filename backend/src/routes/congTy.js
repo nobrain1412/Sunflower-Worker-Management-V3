@@ -54,9 +54,9 @@ const capNhatSchema = taoMoiSchema.extend({
 // Vender không được xem thông tin công ty
 router.use(blockVender);
 
-// Xem: admin và quan_ly
-router.get('/',    requireRole('admin', 'quan_ly'), ctrl.getDanhSach);
-router.get('/:id', requireRole('admin', 'quan_ly'), ctrl.getChiTiet);
+// Xem: admin, quan_ly, ke_toan (kế toán cần biết cấu hình lương để chốt công)
+router.get('/',    requireRole('admin', 'quan_ly', 'ke_toan'), ctrl.getDanhSach);
+router.get('/:id', requireRole('admin', 'quan_ly', 'ke_toan'), ctrl.getChiTiet);
 
 // Tạo/sửa: chỉ admin
 router.post('/',    requireRole('admin'), validate(taoMoiSchema),  ctrl.postTaoMoi);

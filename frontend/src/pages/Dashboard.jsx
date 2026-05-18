@@ -7,7 +7,7 @@ import BottomSheet from '../components/BottomSheet';
 import AddCongNhanModal from './CongNhan/AddModal';
 import { useAuth } from '../context/AuthContext';
 import { useDashboard } from '../hooks/useDashboard';
-import { useHoatDongCuaToi } from '../hooks/useHoatDong';
+import { useHoatDongLienQuan } from '../hooks/useHoatDong';
 import useIsMobile from '../hooks/useIsMobile';
 
 const DONUT_COLORS = ['#4f7cff', '#7b5fff', '#2dd4bf', '#22c986', '#ffb344', '#ff5f72', '#545870'];
@@ -161,7 +161,7 @@ function AdminDashboard() {
 
   // Hoạt động liên quan đến user đăng nhập (từ hoat_dong_log) — báo nghỉ, chuyển công ty,
   // hoàn ứng,... cho CN do họ tuyển/quản lý. Gộp với feed chung và sort theo thời gian.
-  const { data: cuaToiRes } = useHoatDongCuaToi(15);
+  const { data: cuaToiRes } = useHoatDongLienQuan(15);
   const cuaToi = (cuaToiRes?.data ?? []).map((h) => ({
     loai: h.loai,
     id: `hdl-${h.id}`,

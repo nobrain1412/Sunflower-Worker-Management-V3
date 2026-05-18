@@ -8,21 +8,35 @@ const LOAI_CHI = ['chi','khau_tru','tam_ung','tien_phong_ktx','bao_hiem','dong_p
 const LOAI_THU = ['thu','luong','thuong','phu_cap','hoan_ung'];
 
 // ─── DANH_MUC ─────────────────────────────────────────────
-async function findAllDanhMuc(loai) {
-  const params = [], conditions = ['active = TRUE'];
+// Mỗi user có danh mục thu/chi riêng + danh mục mặc định hệ thống (user_id IS NULL).
+// userId = null → chỉ trả danh mục mặc định (dùng cho khi không cần lọc theo user).
+async function findAllDanhMuc(loai, userId) {
+  const params = [];
+  const conditions = ['active = TRUE'];
   if (loai) { params.push(loai); conditions.push(`loai = $${params.length}`); }
+  if (userId) {
+    params.push(userId);
+    conditions.push(`(user_id IS NULL OR user_id = $${params.length})`);
+  } else {
+    conditions.push('user_id IS NULL');
+  }
   const result = await db.query(
-    `SELECT * FROM danh_muc_giao_dich WHERE ${conditions.join(' AND ')} ORDER BY loai, ten`,
+    `SELECT * FROM danh_muc_giao_dich WHERE ${conditions.join(' AND ')} ORDER BY user_id NULLS FIRST, loai, ten`,
     params,
   );
   return result.rows;
 }
 
-async function createDanhMuc(data) {
+async function findDanhMucById(id) {
+  const result = await db.query(`SELECT * FROM danh_muc_giao_dich WHERE id = $1`, [id]);
+  return result.rows[0] || null;
+}
+
+async function createDanhMuc(data, userId) {
   const result = await db.query(
-    `INSERT INTO danh_muc_giao_dich (ten, loai, mo_ta)
-     VALUES ($1, $2, $3) RETURNING *`,
-    [data.ten, data.loai, data.mo_ta ?? null],
+    `INSERT INTO danh_muc_giao_dich (ten, loai, mo_ta, user_id)
+     VALUES ($1, $2, $3, $4) RETURNING *`,
+    [data.ten, data.loai, data.mo_ta ?? null, userId ?? null],
   );
   return result.rows[0];
 }
@@ -38,6 +52,14 @@ async function updateDanhMuc(id, data) {
   const result = await db.query(
     `UPDATE danh_muc_giao_dich SET ${fields.join(', ')} WHERE id = $${params.length} RETURNING *`,
     params,
+  );
+  return result.rows[0] || null;
+}
+
+async function deleteDanhMuc(id) {
+  const result = await db.query(
+    `DELETE FROM danh_muc_giao_dich WHERE id = $1 RETURNING id`,
+    [id],
   );
   return result.rows[0] || null;
 }
@@ -125,8 +147,10 @@ async function toggleHoanTien(id, daHoanTien) {
   return result.rows[0] || null;
 }
 
-// Tổng thu/chi N tháng gần nhất (cho biểu đồ)
-async function tongTheoThang(soThang = 5) {
+// Tổng thu/chi N tháng gần nhất (cho biểu đồ).
+// Mỗi user có sổ riêng → bắt buộc filter theo userId (created_by).
+async function tongTheoThang(soThang = 5, userId) {
+  if (!userId) return [];
   const result = await db.query(
     `WITH thang_series AS (
        SELECT generate_series(
@@ -143,9 +167,10 @@ async function tongTheoThang(soThang = 5) {
      FROM thang_series ts
      LEFT JOIN giao_dich_tai_chinh g
        ON date_trunc('month', g.ngay) = ts.m
+       AND g.created_by = $4
      GROUP BY ts.m
      ORDER BY ts.m`,
-    [soThang, LOAI_THU, LOAI_CHI],
+    [soThang, LOAI_THU, LOAI_CHI, userId],
   );
   return result.rows;
 }
@@ -163,16 +188,19 @@ async function tinhTongDaUng(congNhanId) {
   return result.rows[0];
 }
 
-// Tổng thu/chi/tiêu trong tháng (dùng cho KPI)
-async function tinhTongThang(thang, nam) {
+// Tổng thu/chi/tiêu trong tháng (dùng cho KPI).
+// Mỗi user có sổ riêng → bắt buộc filter theo userId (created_by).
+async function tinhTongThang(thang, nam, userId) {
+  if (!userId) return { tong_thu: 0, tong_chi: 0, da_hoan: 0 };
   const result = await db.query(
     `SELECT
        SUM(CASE WHEN loai = ANY($3::text[]) THEN so_tien ELSE 0 END)                              AS tong_thu,
        SUM(CASE WHEN loai = ANY($4::text[]) AND da_hoan_tien = FALSE THEN so_tien ELSE 0 END)     AS tong_chi,
        SUM(CASE WHEN loai = ANY($4::text[]) AND da_hoan_tien = TRUE  THEN so_tien ELSE 0 END)     AS da_hoan
      FROM giao_dich_tai_chinh
-     WHERE EXTRACT(MONTH FROM ngay) = $1 AND EXTRACT(YEAR FROM ngay) = $2`,
-    [thang, nam, LOAI_THU, LOAI_CHI],
+     WHERE EXTRACT(MONTH FROM ngay) = $1 AND EXTRACT(YEAR FROM ngay) = $2
+       AND created_by = $5`,
+    [thang, nam, LOAI_THU, LOAI_CHI, userId],
   );
   return result.rows[0];
 }
@@ -186,7 +214,7 @@ async function deleteOne(id) {
 }
 
 module.exports = {
-  findAllDanhMuc, createDanhMuc, updateDanhMuc,
+  findAllDanhMuc, findDanhMucById, createDanhMuc, updateDanhMuc, deleteDanhMuc,
   findAll, findById, create, toggleHoanTien, deleteOne,
   tinhTongThang, tongTheoThang, tinhTongDaUng,
   LOAI_CHI, LOAI_THU,

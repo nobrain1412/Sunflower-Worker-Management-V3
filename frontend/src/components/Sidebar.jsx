@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext';
 const NAV = [
   {
     to: '/', label: 'Dashboard', exact: true,
-    roles: ['admin','quan_ly','vender'],
+    roles: ['admin','quan_ly','vender','ke_toan'],
     icon: (
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
         <rect x="3" y="3" width="7" height="7" rx="1" stroke="currentColor" strokeWidth="2"/>
@@ -17,7 +17,7 @@ const NAV = [
   },
   {
     to: '/cong-nhan', label: 'Công nhân',
-    roles: ['admin','quan_ly','vender'],
+    roles: ['admin','quan_ly','vender','ke_toan'],
     icon: (
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
         <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
@@ -28,7 +28,7 @@ const NAV = [
   },
   {
     to: '/cham-cong', label: 'Chấm công',
-    roles: ['admin','quan_ly','vender'],
+    roles: ['admin','quan_ly','vender','ke_toan'],
     icon: (
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
         <rect x="3" y="4" width="18" height="18" rx="2" stroke="currentColor" strokeWidth="2"/>
@@ -92,7 +92,7 @@ const NAV = [
   },
   {
     to: '/bao-cao', label: 'Báo cáo',
-    roles: ['admin','quan_ly'],
+    roles: ['admin','quan_ly','ke_toan'],
     icon: (
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>

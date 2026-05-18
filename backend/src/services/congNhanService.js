@@ -1,7 +1,8 @@
 const congNhanModel = require('../models/congNhanModel');
 const hoatDongLog = require('../models/hoatDongLogModel');
+const { sanitizeForRole, sanitizeListForRole } = require('../utils/sanitizeCongNhan');
 
-async function danhSach(query, scope) {
+async function danhSach(query, scope, vaiTro) {
   const page  = Math.max(1, parseInt(query.page  || '1',  10));
   const limit = Math.min(100, Math.max(1, parseInt(query.limit || '20', 10)));
 
@@ -23,12 +24,12 @@ async function danhSach(query, scope) {
   });
 
   return {
-    data: rows,
+    data: sanitizeListForRole(rows, vaiTro),
     meta: { page, limit, total, total_pages: Math.ceil(total / limit) },
   };
 }
 
-async function chiTiet(id, scope) {
+async function chiTiet(id, scope, vaiTro) {
   const congNhan = await congNhanModel.findById(id);
   if (!congNhan) {
     const err = new Error('Không tìm thấy công nhân');
@@ -43,7 +44,7 @@ async function chiTiet(id, scope) {
     err.code = 'FORBIDDEN';
     throw err;
   }
-  return congNhan;
+  return sanitizeForRole(congNhan, vaiTro);
 }
 
 async function taoMoi(data) {
@@ -89,6 +90,7 @@ async function capNhat(id, data, actorUserId = null) {
       if ('cong_ty_id' in data && before.cong_ty_id !== updated.cong_ty_id) {
         await hoatDongLog.create({
           loai: 'chuyen_cong_ty',
+          muc_do: 'quan_trong',
           cong_nhan_id: id,
           nguoi_tuyen_id: updated.nguoi_tuyen_id,
           du_lieu: { tu_cong_ty_id: before.cong_ty_id, sang_cong_ty_id: updated.cong_ty_id },
@@ -99,6 +101,7 @@ async function capNhat(id, data, actorUserId = null) {
       if ('trang_thai_noi_o' in data && before.trang_thai_noi_o !== updated.trang_thai_noi_o) {
         await hoatDongLog.create({
           loai: 'chuyen_cho_o',
+          muc_do: 'thuong',
           cong_nhan_id: id,
           nguoi_tuyen_id: updated.nguoi_tuyen_id,
           du_lieu: { tu: before.trang_thai_noi_o, sang: updated.trang_thai_noi_o },
@@ -112,6 +115,8 @@ async function capNhat(id, data, actorUserId = null) {
                     : 'doi_trang_thai';
         await hoatDongLog.create({
           loai,
+          // Nghỉ việc là sự kiện quan trọng cần admin biết; nghỉ phép/đổi trạng thái khác là thường
+          muc_do: loai === 'bao_nghi_viec' ? 'quan_trong' : 'thuong',
           cong_nhan_id: id,
           nguoi_tuyen_id: updated.nguoi_tuyen_id,
           du_lieu: { tu: before.trang_thai, sang: updated.trang_thai },
