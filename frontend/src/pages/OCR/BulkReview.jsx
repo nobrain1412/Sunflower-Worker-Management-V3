@@ -1,6 +1,19 @@
 import { useState, useRef } from 'react';
 import api from '../../hooks/useApi';
 
+// "DD/MM/YYYY" → "YYYY-MM-DD" (DB format)
+function ddmmyyyyToIso(s) {
+  if (!s) return null;
+  const m = String(s).match(/^(\d{2})[\/\-.](\d{2})[\/\-.](\d{4})$/);
+  if (!m) return null;
+  return `${m[3]}-${m[2]}-${m[1]}`;
+}
+function cleanCccd(s) {
+  if (!s) return null;
+  const d = String(s).replace(/\D/g, '');
+  return /^\d{12}$/.test(d) ? d : null;
+}
+
 export default function BulkReview() {
   const [stage, setStage]       = useState('upload');
   const [preview, setPreview]   = useState(null);
@@ -9,6 +22,8 @@ export default function BulkReview() {
   const [editRow, setEditRow]   = useState(null);
   const [ocrId, setOcrId]       = useState(null);
   const [error, setError]       = useState(null);
+  const [createdCount, setCreatedCount] = useState(0);
+  const [skipped, setSkipped]   = useState([]); // [{ ho_ten, reason }]
   const fileRef = useRef();
 
   async function handleFile(e) {
@@ -61,9 +76,29 @@ export default function BulkReview() {
   }
 
   async function handleApprove() {
-    try {
-      if (ocrId) await api.post(`/ocr/${ocrId}/approve`);
-    } catch { /* bỏ qua */ }
+    setError(null);
+    setStage('creating');
+    const toCreate = rows.filter((r) => selected.has(r.id) && r.ho_ten);
+    let ok = 0;
+    const fails = [];
+    for (const r of toCreate) {
+      try {
+        await api.post('/cong-nhan', {
+          ho_ten:    String(r.ho_ten).trim(),
+          cccd:      cleanCccd(r.cccd),
+          ngay_sinh: ddmmyyyyToIso(r.ngay_sinh),
+          gioi_tinh: ['Nam','Nữ','Khác'].includes(r.gioi_tinh) ? r.gioi_tinh : null,
+          que_quan:  r.que_quan || null,
+        });
+        ok += 1;
+      } catch (err) {
+        fails.push({ ho_ten: r.ho_ten, reason: err?.response?.data?.error?.message ?? err?.message ?? 'Không rõ' });
+      }
+    }
+    setCreatedCount(ok);
+    setSkipped(fails);
+    // Approve OCR record gốc (best-effort) — danh sách viết tay là 1 ảnh gốc duy nhất
+    if (ocrId) await api.post(`/ocr/${ocrId}/approve`).catch(() => {});
     setStage('done');
   }
 
@@ -207,13 +242,31 @@ export default function BulkReview() {
         </div>
       )}
 
+      {stage === 'creating' && (
+        <div style={{ background: 'var(--bg1)', border: '1px solid var(--border)', borderRadius: 14, padding: '56px 24px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 12 }}>
+          <div style={s.spinner} />
+          <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text1)' }}>Đang thêm {selected.size} công nhân...</div>
+          <div style={{ fontSize: 12, color: 'var(--text2)' }}>Hệ thống tạo từng hồ sơ, đừng đóng tab</div>
+        </div>
+      )}
+
       {stage === 'done' && (
-        <div style={{ background: 'var(--bg1)', border: '1px solid var(--border)', borderRadius: 14, padding: '56px 24px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 8 }}>
-          <div style={{ fontSize: 52 }}>✅</div>
-          <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--text1)' }}>Duyệt thành công!</div>
-          <div style={{ fontSize: 13, color: 'var(--text2)' }}><b>{selected.size}</b> công nhân đã được thêm vào hệ thống</div>
+        <div style={{ background: 'var(--bg1)', border: '1px solid var(--border)', borderRadius: 14, padding: '40px 24px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 8 }}>
+          <div style={{ fontSize: 52 }}>{createdCount > 0 ? '✅' : '⚠️'}</div>
+          <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--text1)' }}>
+            {createdCount > 0 ? `Đã thêm ${createdCount} công nhân` : 'Không thêm được công nhân nào'}
+          </div>
+          {skipped.length > 0 && (
+            <div style={{ marginTop: 6, padding: '10px 14px', background: 'rgba(255,179,68,0.12)', borderRadius: 10, fontSize: 12, color: 'var(--amber)', maxWidth: 520, textAlign: 'left' }}>
+              <div style={{ fontWeight: 700, marginBottom: 4 }}>Bỏ qua {skipped.length} dòng:</div>
+              {skipped.slice(0, 5).map((sk, i) => (
+                <div key={i}>• <b>{sk.ho_ten || '(không tên)'}</b> — {sk.reason}</div>
+              ))}
+              {skipped.length > 5 && <div style={{ marginTop: 4 }}>… và {skipped.length - 5} dòng khác</div>}
+            </div>
+          )}
           <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
-            <button className="btn-ghost" onClick={() => { setStage('upload'); setRows([]); setSelected(new Set()); }}>Quét tiếp</button>
+            <button className="btn-ghost" onClick={() => { setStage('upload'); setRows([]); setSelected(new Set()); setCreatedCount(0); setSkipped([]); }}>Quét tiếp</button>
             <a href="/cong-nhan" className="btn-primary" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 8, padding: '7px 14px', fontSize: 12, fontWeight: 600, borderRadius: 8, background: 'linear-gradient(135deg, var(--accent), var(--accent2))', color: '#fff' }}>
               Xem danh sách
             </a>
