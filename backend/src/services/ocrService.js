@@ -1,6 +1,62 @@
 const { createWorker } = require('tesseract.js');
 const logger = require('../utils/logger');
 
+// ─── FPT.AI CCCD recognition ─────────────────────────────────────────────────
+// Endpoint nhận diện CCCD/CMND VN, tự detect mặt trước/sau, trả JSON parsed sẵn.
+// Doc: https://docs.fpt.ai/docs/api-recognition/cmnd-cccd
+const FPT_AI_ENDPOINT = 'https://api.fpt.ai/vision/idr/vnm';
+
+function mapFptSex(sex) {
+  if (!sex) return '';
+  const s = String(sex).toLowerCase();
+  if (s.includes('nam')) return 'Nam';
+  if (s.includes('n')) return 'Nữ';
+  return '';
+}
+
+async function recognizeCCCDViaFPT(imageBuffer, apiKey) {
+  const blob = new Blob([imageBuffer]);
+  const fd = new FormData();
+  fd.append('image', blob, 'cccd.jpg');
+
+  const res = await fetch(FPT_AI_ENDPOINT, {
+    method: 'POST',
+    headers: { 'api-key': apiKey },
+    body: fd,
+  });
+
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '');
+    throw new Error(`FPT.AI HTTP ${res.status}: ${txt.slice(0, 200)}`);
+  }
+
+  const json = await res.json();
+  if (json.errorCode !== 0 || !Array.isArray(json.data) || json.data.length === 0) {
+    throw new Error(`FPT.AI ${json.errorCode}: ${json.errorMessage || 'Không nhận diện được CCCD'}`);
+  }
+
+  const d = json.data[0];
+  logger.info({
+    type: d.type_new || d.type,
+    has_id: !!d.id, has_name: !!d.name, has_dob: !!d.dob,
+    has_issue: !!d.issue_date,
+  }, 'FPT.AI CCCD parsed');
+
+  // Map sang schema cũ — giữ tương thích frontend OCR review.
+  return {
+    ho_ten:   d.name      ?? '',
+    cccd:     d.id        ?? '',
+    ngay_sinh:d.dob       ?? '',
+    gioi_tinh:mapFptSex(d.sex),
+    que_quan: d.home      ?? '',
+    dia_chi:  d.address   ?? '',
+    ngay_cap: d.issue_date ?? '',
+    noi_cap:  d.issue_loc  ?? '',
+    _provider: 'fpt_ai',
+    _type:     d.type_new || d.type || '',
+  };
+}
+
 // Nhận Buffer trực tiếp — không cần đọc từ disk
 async function recognize(imageBuffer) {
   const worker = await createWorker(['vie', 'eng'], 1, {
@@ -124,8 +180,17 @@ function parseDanhSach(textLines) {
 // ─── Public API ──────────────────────────────────────────────────────────────
 
 async function scanCCCD(imageBuffer) {
+  const apiKey = process.env.FPT_AI_API_KEY;
+  if (apiKey) {
+    try {
+      return await recognizeCCCDViaFPT(imageBuffer, apiKey);
+    } catch (err) {
+      // FPT.AI fail → log và fallback sang Tesseract để không vỡ luồng demo.
+      logger.warn({ err: err.message }, 'FPT.AI CCCD failed, fallback to Tesseract');
+    }
+  }
   const data = await recognize(imageBuffer);
-  return parseCCCD(data.text ?? '');
+  return { ...parseCCCD(data.text ?? ''), _provider: 'tesseract' };
 }
 
 async function scanDanhSach(imageBuffer) {
