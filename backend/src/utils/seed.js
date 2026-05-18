@@ -144,14 +144,29 @@ async function seed() {
     await queryWithRetry(`SET idle_in_transaction_session_timeout = '5min'`, [], 'set idle timeout');
 
     logPhase('Reset database data');
+    // Note: TRUNCATE ... CASCADE cascades qua MỌI FK (kể cả danh_muc_giao_dich.user_id
+    // mới thêm ở migration 008). Vì vậy ta truncate luôn danh_muc_giao_dich rồi
+    // re-insert 12 danh mục mặc định bên dưới để giữ chúng làm system default.
     await queryWithRetry(
       `TRUNCATE TABLE
         refresh_tokens, hoat_dong_log, cham_cong, phan_cong, giao_dich_tai_chinh, hoa_don_ktx,
         thue_phong, giuong, phong, ky_tuc_xa, thue_phong_tro, phong_tro,
-        ocr_quet, cong_tac_vien_thanh_toan, quan_ly_cong_ty, cong_nhan, cong_ty, users
+        ocr_quet, cong_tac_vien_thanh_toan, quan_ly_cong_ty, cong_nhan, cong_ty,
+        danh_muc_giao_dich, users
        RESTART IDENTITY CASCADE`,
       [],
       'truncate all tables',
+    );
+
+    // Re-insert 12 danh mục thu/chi mặc định hệ thống (user_id NULL)
+    await queryWithRetry(
+      `INSERT INTO danh_muc_giao_dich (ten, loai) VALUES
+        ('Lương','thu'),('Thưởng','thu'),('Phụ cấp','thu'),('Hoàn ứng','thu'),
+        ('Khấu trừ','chi'),('Tạm ứng','chi'),('Tiền phòng KTX','chi'),
+        ('Bảo hiểm','chi'),('Đồng phục','chi'),('Phạt nghỉ','chi'),
+        ('Chi phí lương','tieu'),('Khác','chi')`,
+      [],
+      'reinsert default danh_muc',
     );
 
     logPhase('Hash passwords');
