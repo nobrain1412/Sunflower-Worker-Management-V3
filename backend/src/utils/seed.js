@@ -351,38 +351,43 @@ async function seed() {
       logProgress('workers', i, SEED_SIZE.workers, 10);
     }
 
-    logPhase('Create attendance (cham_cong) — 2 thang gan nhat');
-    // Tao cham_cong cho moi phan_cong, 2 thang gan day, bo qua CN da nghi viec sau ngay do
-    const today = new Date();
-    let ccCount = 0;
-    for (const pc of phanCongRows) {
-      const w = workerRows.find((x) => x.id === pc.cong_nhan_id);
-      if (!w) continue;
-      // Khong cham cong cho CN nghi viec qua lau (skip neu ngay_vao_lam > 90 ngay truoc va status = nghi_viec)
-      if (w.trang_thai === 'nghi_viec' && chance(0.5)) continue;
+    logPhase('Create attendance (cham_cong) — 60 ngay gan nhat');
+    // Query lại phan_cong từ DB để chắc chắn có id và ngay_bat_dau đúng kiểu
+    const pcMetaRes = await queryWithRetry(
+      `SELECT pc.id, pc.cong_nhan_id, pc.ngay_bat_dau, cn.trang_thai, cn.ngay_nghi_viec
+       FROM phan_cong pc JOIN cong_nhan cn ON cn.id = pc.cong_nhan_id
+       ORDER BY pc.id`,
+      [],
+      'fetch phan_cong meta',
+    );
+    const pcList = pcMetaRes.rows;
+    const todayStr = toYmd(new Date());
+    let ccCount = 0, ccErrors = 0;
+    for (let idx = 0; idx < pcList.length; idx += 1) {
+      const pc = pcList[idx];
+      // Skip 30% CN đã nghỉ việc
+      if (pc.trang_thai === 'nghi_viec' && chance(0.3)) continue;
 
-      // Lay 60 ngay gan nhat
+      const startStr = toYmd(new Date(pc.ngay_bat_dau));
+      const endStr   = pc.ngay_nghi_viec ? toYmd(new Date(pc.ngay_nghi_viec)) : todayStr;
+
       for (let dOffset = 60; dOffset >= 0; dOffset -= 1) {
-        const d = new Date(today);
+        const d = new Date();
+        d.setHours(0, 0, 0, 0);
         d.setDate(d.getDate() - dOffset);
         const dateStr = toYmd(d);
+        if (dateStr < startStr || dateStr > endStr) continue;
+
         const dow = d.getDay();
-
-        // Skip neu truoc ngay vao lam hoac sau ngay nghi viec
-        if (dateStr < toYmd(new Date(w.ngay_vao_lam))) continue;
-        // ngay_nghi_viec se duoc check rieng vi workerRows khong co field nay
-        // -> bo qua trong demo data, du lieu se duoc enforce o app layer
-
-        // Cuoi tuan: 70% co di lam (chu nhat van cho cham theo yeu cau)
-        if (dow === 0 && chance(0.7)) continue; // skip 70% chu nhat
-        if (dow === 6 && chance(0.3)) continue; // skip 30% thu 7
+        if (dow === 0 && chance(0.7)) continue;
+        if (dow === 6 && chance(0.3)) continue;
 
         const r = Math.random();
         let entry;
         if (r < 0.05) {
           entry = { so_gio: 0, so_gio_ot: 0, ca_lam: 'nghi_phep' };
         } else if (r < 0.15) {
-          continue; // Bo qua (vang khong ly do)
+          continue;
         } else if (r < 0.35) {
           entry = { so_gio: 8, so_gio_ot: rand(1, 4), ca_lam: 'lam' };
         } else {
@@ -394,15 +399,17 @@ async function seed() {
              VALUES ($1, $2, $3, $4, $5, $6)
              ON CONFLICT (phan_cong_id, ngay) DO NOTHING`,
             [pc.id, dateStr, entry.so_gio, entry.so_gio_ot, entry.ca_lam, null],
+            'insert cham_cong',
           );
           ccCount += 1;
         } catch (e) {
-          // skip
+          ccErrors += 1;
+          if (ccErrors <= 3) console.warn(`  cham_cong err: ${e.message}`);
         }
       }
-      logProgress('cham_cong', phanCongRows.indexOf(pc) + 1, phanCongRows.length, 10);
+      logProgress('cham_cong', idx + 1, pcList.length, 10);
     }
-    console.log(`[cham_cong] inserted ${ccCount}`);
+    console.log(`[cham_cong] inserted ${ccCount}, errors ${ccErrors}`);
 
     logPhase('Create KTX / rooms / beds');
     const roomRows = [];
@@ -475,7 +482,9 @@ async function seed() {
 
     logPhase('Assign workers to KTX beds');
     const activeWorkers = workerRows.filter((w) => w.trang_thai !== 'nghi_viec');
-    const ktxWorkers = activeWorkers.slice(0, Math.min(activeWorkers.length, bedRows.length));
+    // Chia 70/30: ~70% vao KTX, ~30% vao phong tro de demo ca 2 module
+    const ktxQuota = Math.min(Math.floor(activeWorkers.length * 0.7), bedRows.length);
+    const ktxWorkers = activeWorkers.slice(0, ktxQuota);
     for (let i = 0; i < ktxWorkers.length; i += 1) {
       const w = ktxWorkers[i];
       const bed = bedRows[i];
