@@ -1,6 +1,7 @@
 [phases.setup]
-# postgresql để có binary `pg_dump` cho backup trước migration (utils/backup.js)
-nixPkgs = ["nodejs_20", "postgresql"]
+# postgresql_18 để có pg_dump match server version (Railway Postgres 18.x).
+# pg_dump cũ hơn server → từ chối dump. Update con số này khi Railway nâng cấp PG.
+nixPkgs = ["nodejs_20", "postgresql_18"]
 
 [phases.install]
 cmds = []
