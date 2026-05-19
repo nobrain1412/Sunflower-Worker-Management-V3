@@ -341,6 +341,14 @@ export default function CongNhan() {
                 window.location.href = '/ocr/cccd';
               },
             },
+            ...(canFilterAll ? [{
+              icon: '📊',
+              label: 'Import từ Excel',
+              sub: 'Tải file .xlsx danh sách, nhiều CN cùng lúc',
+              action: () => {
+                navigate('/cong-nhan/import-excel');
+              },
+            }] : []),
             {
               icon: '📋',
               label: 'Quét danh sách viết tay',

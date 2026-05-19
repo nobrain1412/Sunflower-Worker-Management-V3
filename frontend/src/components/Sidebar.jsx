@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import DoiMatKhauModal from './DoiMatKhauModal';
 
 // Nav items có thêm `roles` để lọc theo quyền
 const NAV = [
@@ -116,11 +118,17 @@ export default function Sidebar({ onClose }) {
   const { user, logout, isQuanLy, selectedCongTyId, chonCongTy } = useAuth();
   const navigate = useNavigate();
   const vaiTro = user?.vai_tro ?? 'vender';
+  const [openDoiMatKhau, setOpenDoiMatKhau] = useState(false);
 
   async function handleLogout() {
     await logout();
     if (onClose) onClose();
     navigate('/login');
+  }
+
+  function handleOpenDoiMatKhau() {
+    setOpenDoiMatKhau(true);
+    if (onClose) onClose(); // đóng sidebar mobile nếu đang mở
   }
 
   const visibleNav = NAV.filter((item) => item.roles.includes(vaiTro));
@@ -171,13 +179,19 @@ export default function Sidebar({ onClose }) {
       <div style={s.bottom}>
         <div style={s.divider} />
         <div style={s.userRow}>
-          <div style={s.avatar}>
-            {user?.ho_ten?.[0]?.toUpperCase() ?? 'A'}
-          </div>
-          <div style={s.userInfo}>
-            <div style={s.userName}>{user?.ho_ten ?? 'Người dùng'}</div>
-            <div style={s.userRole}>{ROLE_LABELS[vaiTro] ?? vaiTro}</div>
-          </div>
+          <button
+            onClick={handleOpenDoiMatKhau}
+            style={s.userBtn}
+            title="Đổi mật khẩu"
+          >
+            <div style={s.avatar}>
+              {user?.ho_ten?.[0]?.toUpperCase() ?? 'A'}
+            </div>
+            <div style={s.userInfo}>
+              <div style={s.userName}>{user?.ho_ten ?? 'Người dùng'}</div>
+              <div style={s.userRole}>{ROLE_LABELS[vaiTro] ?? vaiTro}</div>
+            </div>
+          </button>
           <button onClick={handleLogout} style={s.logoutBtn} title="Đăng xuất">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
               <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
@@ -187,6 +201,10 @@ export default function Sidebar({ onClose }) {
           </button>
         </div>
       </div>
+
+      {openDoiMatKhau && (
+        <DoiMatKhauModal onClose={() => setOpenDoiMatKhau(false)} />
+      )}
     </aside>
   );
 }
@@ -249,7 +267,15 @@ const s = {
   linkIcon: { display: 'flex', alignItems: 'center', flexShrink: 0 },
   bottom: { padding: '0 10px 12px' },
   divider: { height: 1, background: 'var(--border)', margin: '8px 10px 12px' },
-  userRow: { display: 'flex', alignItems: 'center', gap: 9, padding: '0 2px' },
+  userRow: { display: 'flex', alignItems: 'center', gap: 6, padding: '0 2px' },
+  userBtn: {
+    flex: 1, minWidth: 0,
+    display: 'flex', alignItems: 'center', gap: 9,
+    background: 'transparent', border: 'none', padding: '4px 4px',
+    borderRadius: 8, cursor: 'pointer', textAlign: 'left',
+    fontFamily: "'Be Vietnam Pro', sans-serif",
+    transition: 'background 0.15s',
+  },
   avatar: {
     width: 32, height: 32, borderRadius: 8, flexShrink: 0,
     background: 'linear-gradient(135deg, var(--accent), var(--accent2))',

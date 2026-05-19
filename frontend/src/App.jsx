@@ -9,9 +9,11 @@ import Login          from './pages/Login';
 import Dashboard      from './pages/Dashboard';
 import CongNhan       from './pages/CongNhan/index';
 import CongNhanDetail from './pages/CongNhan/Detail';
+import ImportExcel    from './pages/CongNhan/ImportExcel';
 import ScanCCCD       from './pages/OCR/ScanCCCD';
 import BulkReview     from './pages/OCR/BulkReview';
 import ChamCong       from './pages/ChamCong/index';
+import ImportChamCong from './pages/ChamCong/ImportExcel';
 import TaiChinh       from './pages/TaiChinh/index';
 import KTX            from './pages/KTX/index';
 import CongTy         from './pages/CongTy/index';
@@ -59,8 +61,14 @@ export default function App() {
             {/* Tất cả role */}
             <Route path="/"              element={<PrivateRoute><Dashboard /></PrivateRoute>} />
             <Route path="/cong-nhan"     element={<PrivateRoute><CongNhan /></PrivateRoute>} />
+            <Route path="/cong-nhan/import-excel" element={
+              <RoleRoute allowedRoles={['admin','quan_ly']}><ImportExcel /></RoleRoute>
+            } />
             <Route path="/cong-nhan/:id" element={<PrivateRoute><CongNhanDetail /></PrivateRoute>} />
             <Route path="/cham-cong"     element={<PrivateRoute><ChamCong /></PrivateRoute>} />
+            <Route path="/cham-cong/import-excel" element={
+              <RoleRoute allowedRoles={['admin','quan_ly']}><ImportChamCong /></RoleRoute>
+            } />
 
             {/* OCR: vender/quản lý/admin (ke_toan không tham gia tuyển) */}
             <Route path="/ocr/cccd" element={

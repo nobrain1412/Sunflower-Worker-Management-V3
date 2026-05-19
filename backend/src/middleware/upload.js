@@ -31,4 +31,22 @@ const uploadAnhCongNhan = upload.fields([
 // Generic 1-file uploader cho ảnh KTX, phòng trọ, công ty — field name "file"
 const uploadSingleImage = upload.single('file');
 
-module.exports = { uploadAnhCongNhan, uploadSingleImage };
+// Upload file Excel (.xlsx) cho import danh sách công nhân
+const EXCEL_MIME = [
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-excel',
+  'application/octet-stream', // fallback khi browser không nhận diện được
+];
+const uploadExcel = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter(_req, file, cb) {
+    const okMime = EXCEL_MIME.includes(file.mimetype);
+    const okExt  = /\.(xlsx|xlsm)$/i.test(file.originalname);
+    (okMime || okExt)
+      ? cb(null, true)
+      : cb(new Error('Chỉ chấp nhận file Excel (.xlsx)'), false);
+  },
+}).single('file');
+
+module.exports = { uploadAnhCongNhan, uploadSingleImage, uploadExcel };

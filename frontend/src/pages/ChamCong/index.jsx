@@ -9,6 +9,7 @@
  * - Chủ nhật cho phép chấm bình thường
  */
 import { useMemo, useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useChamCongThang, useUpsertChamCong } from '../../hooks/useChamCong';
 import { useCongTyList, useVenders } from '../../hooks/useCongNhan';
 import { useAuth } from '../../context/AuthContext';
@@ -61,7 +62,9 @@ function cellColor(cc) {
 }
 
 export default function ChamCong() {
-  const { isAdmin } = useAuth();
+  const { isAdmin, isQuanLy } = useAuth();
+  const navigate = useNavigate();
+  const canImport = isAdmin || isQuanLy;
   const now = new Date();
   const [thang, setThang] = useState(now.getMonth() + 1);
   const [nam, setNam]     = useState(now.getFullYear());
@@ -183,6 +186,15 @@ export default function ChamCong() {
             Số: số giờ (vd 8 hoặc 8/2 = 8 thường + 2 OT). P = nghỉ phép. V = nghỉ việc. Trống = bỏ chấm.
           </div>
         </div>
+        {canImport && (
+          <button
+            className="btn-primary"
+            onClick={() => navigate('/cham-cong/import-excel')}
+            style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+          >
+            📊 Import vân tay
+          </button>
+        )}
       </div>
 
       <div style={s.toolbar}>

@@ -23,6 +23,8 @@ const ocrRoutes       = require('./routes/ocr');
 const uploadRoutes    = require('./routes/upload');
 const chamCongRoutes  = require('./routes/chamCong');
 const hoatDongRoutes  = require('./routes/hoatDong');
+const importCongNhanRoutes = require('./routes/importCongNhan');
+const importChamCongRoutes = require('./routes/importChamCong');
 
 const app = express();
 
@@ -75,6 +77,8 @@ app.use((req, _res, next) => {
 
 // --- Routes ---
 app.use('/api/auth',      authRoutes);
+// Import Excel phải đặt TRƯỚC congNhanRoutes vì path overlap (/api/cong-nhan/import-excel)
+app.use('/api/cong-nhan/import-excel', importCongNhanRoutes);
 app.use('/api/cong-nhan', congNhanRoutes);
 app.use('/api/cong-ty',   congTyRoutes);
 app.use('/api/dashboard', dashboardRoutes);
@@ -84,6 +88,8 @@ app.use('/api/phong-tro', phongTroRoutes);
 app.use('/api/tai-chinh', taiChinhRoutes);
 app.use('/api/ocr',       ocrRoutes);
 app.use('/api/upload',    uploadRoutes);
+// Import chấm công từ Excel — phải đặt TRƯỚC chamCongRoutes vì overlap path
+app.use('/api/cham-cong/import-excel', importChamCongRoutes);
 app.use('/api/cham-cong', chamCongRoutes);
 app.use('/api/hoat-dong', hoatDongRoutes);
 

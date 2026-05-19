@@ -1,6 +1,7 @@
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
+const db = require('../utils/db');
 const userModel = require('../models/userModel');
 const refreshTokenModel = require('../models/refreshTokenModel');
 
@@ -158,4 +159,49 @@ async function logout(refreshToken) {
   await refreshTokenModel.revokeByHash(tokenHash);
 }
 
-module.exports = { login, refreshToken, logout };
+// Đổi mật khẩu cho user đang đăng nhập. Yêu cầu nhập đúng mật khẩu cũ để xác thực.
+async function changePassword(userId, matKhauCu, matKhauMoi) {
+  const user = await userModel.findById(userId);
+  if (!user) {
+    const err = new Error('Không tìm thấy user');
+    err.statusCode = 404;
+    err.code = 'USER_NOT_FOUND';
+    throw err;
+  }
+
+  // findById không trả mat_khau_hash → query thẳng để có hash
+  const { rows } = await db.query(
+    `SELECT mat_khau_hash FROM users WHERE id = $1`,
+    [userId],
+  );
+  const matKhauHash = rows[0]?.mat_khau_hash;
+  if (!matKhauHash) {
+    const err = new Error('Không tìm thấy user');
+    err.statusCode = 404;
+    err.code = 'USER_NOT_FOUND';
+    throw err;
+  }
+
+  const dung = await bcrypt.compare(matKhauCu, matKhauHash);
+  if (!dung) {
+    const err = new Error('Mật khẩu hiện tại không đúng');
+    err.statusCode = 401;
+    err.code = 'WRONG_CURRENT_PASSWORD';
+    throw err;
+  }
+
+  if (matKhauCu === matKhauMoi) {
+    const err = new Error('Mật khẩu mới phải khác mật khẩu hiện tại');
+    err.statusCode = 400;
+    err.code = 'SAME_PASSWORD';
+    throw err;
+  }
+
+  const newHash = await bcrypt.hash(matKhauMoi, 10);
+  await db.query(
+    `UPDATE users SET mat_khau_hash = $1 WHERE id = $2`,
+    [newHash, userId],
+  );
+}
+
+module.exports = { login, refreshToken, logout, changePassword };

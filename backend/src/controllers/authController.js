@@ -65,4 +65,10 @@ const postLogout = asyncWrapper(async (req, res) => {
   sendSuccess(res, null, 'Đăng xuất thành công');
 });
 
-module.exports = { postLogin, postRefresh, postLogout };
+const postDoiMatKhau = asyncWrapper(async (req, res) => {
+  const { mat_khau_cu, mat_khau_moi } = req.validatedBody;
+  await authService.changePassword(req.user.id, mat_khau_cu, mat_khau_moi);
+  sendSuccess(res, null, 'Đổi mật khẩu thành công');
+});
+
+module.exports = { postLogin, postRefresh, postLogout, postDoiMatKhau };
