@@ -137,6 +137,16 @@ async function createUser(ten_dang_nhap, ho_ten, vai_tro, hash, extra = {}) {
 }
 
 async function seed() {
+  // GUARD: chặn TRUNCATE nhầm trên production. Phải set ALLOW_SEED=yes_i_know_this_wipes_data
+  // để override (vd: khi cố tình reset DB demo).
+  if (process.env.NODE_ENV === 'production'
+      && process.env.ALLOW_SEED !== 'yes_i_know_this_wipes_data') {
+    console.error('✗ Từ chối seed trên production (NODE_ENV=production).');
+    console.error('  Script này TRUNCATE toàn bộ users/cong_nhan/cong_ty/... → MẤT DỮ LIỆU.');
+    console.error('  Nếu thực sự muốn chạy: set ALLOW_SEED=yes_i_know_this_wipes_data');
+    process.exit(1);
+  }
+
   console.log('Seeding demo data...');
   try {
     await queryWithRetry(`SET lock_timeout = '12s'`, [], 'set lock_timeout');

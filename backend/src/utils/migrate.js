@@ -13,6 +13,7 @@ require('dotenv').config();
 const fs   = require('fs');
 const path = require('path');
 const db   = require('./db');
+const { runBackup, pruneOldBackups } = require('./backup');
 
 const MAX_RETRIES = 10;
 const RETRY_DELAY_MS = 5000;
@@ -74,6 +75,41 @@ async function run() {
     .sort();
 
   await bootstrapIfNeeded(files);
+
+  // Xác định migration nào còn pending (chỉ để log)
+  const pending = [];
+  for (const file of files) {
+    const { rows } = await db.query(
+      'SELECT 1 FROM schema_migrations WHERE filename = $1',
+      [file],
+    );
+    if (rows.length === 0) pending.push(file);
+  }
+  if (pending.length > 0) {
+    console.log(`Có ${pending.length} migration pending: ${pending.join(', ')}`);
+  }
+
+  // Backup TRƯỚC mỗi lần deploy (mỗi lần migrate.js chạy = mỗi lần Railway start).
+  // Nếu có migration pending → backup là pre-migrate, đặc biệt quan trọng.
+  // Nếu không có pending → vẫn backup vì code mới có thể chứa bug làm hỏng data.
+  // Nếu backup fail VÀ có migration pending → ABORT để bảo vệ dữ liệu.
+  // Nếu backup fail nhưng không có migration → chỉ warning, vẫn cho start (vì không sửa schema).
+  try {
+    const reason = pending.length > 0 ? 'pre-migrate' : 'deploy';
+    const backupPath = await runBackup({ reason });
+    if (!backupPath && process.env.REQUIRE_BACKUP === 'true') {
+      throw new Error('REQUIRE_BACKUP=true nhưng backup bị skip (volume chưa mount?)');
+    }
+    if (backupPath) pruneOldBackups();
+  } catch (err) {
+    if (pending.length > 0) {
+      console.error(`✗ Backup thất bại trước migration: ${err.message}`);
+      console.error('  → Hủy migration để bảo vệ dữ liệu. Sửa lỗi backup rồi deploy lại.');
+      throw err;
+    }
+    console.warn(`⚠ Backup thất bại: ${err.message}`);
+    console.warn('  → Không có migration pending nên vẫn tiếp tục start. Hãy fix backup sớm.');
+  }
 
   for (const file of files) {
     const { rows: applied } = await db.query(

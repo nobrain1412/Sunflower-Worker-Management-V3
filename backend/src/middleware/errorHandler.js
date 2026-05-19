@@ -5,12 +5,31 @@ const { sendError } = require('../utils/response');
 function errorHandler(err, req, res, next) {
   const isProd = process.env.NODE_ENV === 'production';
 
-  // Log lỗi server — không log stack trace ở production log để tránh lộ thông tin
-  logger.error({
-    err: isProd ? { message: err.message, code: err.code, reason: err.reason } : err,
-    method: req.method,
-    url: req.originalUrl,
-  }, 'Unhandled error');
+  // Map PostgreSQL error code sang HTTP status để phân loại log đúng
+  let statusCode = err.statusCode;
+  if (!statusCode) {
+    if (err.code === '23505') statusCode = 409;
+    else if (err.code === '23503') statusCode = 400;
+    else statusCode = 500;
+  }
+
+  // 4xx = lỗi client (sai mật khẩu, validate fail, hết hạn token...) → log warn, gọn.
+  // 5xx = bug thật → log error kèm stack để điều tra.
+  if (statusCode >= 500) {
+    logger.error({
+      err: isProd ? { message: err.message, code: err.code, reason: err.reason } : err,
+      method: req.method,
+      url: req.originalUrl,
+    }, 'Unhandled error');
+  } else {
+    logger.warn({
+      code: err.code,
+      reason: err.reason,
+      message: err.message,
+      method: req.method,
+      url: req.originalUrl,
+    }, 'Client error');
+  }
 
   // PostgreSQL duplicate key
   if (err.code === '23505') {
@@ -22,7 +41,6 @@ function errorHandler(err, req, res, next) {
     return sendError(res, 400, 'FOREIGN_KEY_ERROR', 'Dữ liệu liên kết không hợp lệ');
   }
 
-  const statusCode = err.statusCode || 500;
   const message = isProd && statusCode === 500
     ? 'Lỗi hệ thống, vui lòng thử lại sau'
     : err.message || 'Lỗi không xác định';
