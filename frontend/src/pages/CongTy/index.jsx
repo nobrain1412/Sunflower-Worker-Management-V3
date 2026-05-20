@@ -4,6 +4,7 @@ import api from '../../hooks/useApi';
 import { useAuth } from '../../context/AuthContext';
 import { isEmbeddableMapUrl, normalizeMapUrl } from '../../constants/mapUrl';
 import MediaUploader from '../../components/MediaUploader';
+import RateCongTyPanel from './RateCongTyPanel';
 
 function toMediaArray(v) { return Array.isArray(v) ? v : []; }
 
@@ -60,7 +61,6 @@ function LuongConfig({ ct }) {
     ['Tiền phạt nghỉ',        fmt(ct.tien_phat_nghi ?? 0), 'var(--red)'],
   ];
   const bangVender = [
-    ['Đơn giá / giờ (vender)', fmt(ct.don_gia_theo_gio_vender ?? 0), 'var(--accent)'],
     ['Trợ cấp',                fmt(ct.tro_cap ?? 0),                 'var(--green)'],
     ['Chuyên cần',             fmt(ct.chuyen_can ?? 0),              'var(--teal)'],
     ['Ngày chốt công',         `Ngày ${ct.ngay_chot_cong ?? 25}`,    'var(--text2)'],
@@ -119,7 +119,6 @@ const numberFields = [
   ['luong_ngay_le',  'Ngày lễ (VNĐ/giờ)'],
   ['tien_dong_phuc', 'Tiền khấu trừ đồng phục (VNĐ)'],
   ['tien_phat_nghi', 'Tiền phạt nghỉ không đơn (VNĐ)'],
-  ['don_gia_theo_gio_vender', 'Đơn giá theo giờ trả vender (VNĐ/giờ)'],
   ['tro_cap',                 'Trợ cấp (VNĐ/tháng)'],
   ['chuyen_can',              'Chuyên cần (VNĐ/tháng)'],
   ['ngay_chot_cong',          'Ngày chốt công (1-31)'],
@@ -130,7 +129,7 @@ const EMPTY_FORM = {
   luong_co_ban: '', luong_theo_gio: '', ngay_lam_chuan: '26',
   luong_tc_ngay: '', luong_hc_dem: '', luong_tc_dem: '', luong_chu_nhat: '', luong_ngay_le: '',
   tien_dong_phuc: '0', tien_phat_nghi: '0',
-  don_gia_theo_gio_vender: '0', tro_cap: '0', chuyen_can: '0', ngay_chot_cong: '25',
+  tro_cap: '0', chuyen_can: '0', ngay_chot_cong: '25',
 };
 
 export default function CongTy() {
@@ -169,7 +168,6 @@ export default function CongTy() {
       luong_ngay_le:  selected.luong_ngay_le  ?? 0,
       tien_dong_phuc: selected.tien_dong_phuc ?? 0,
       tien_phat_nghi: selected.tien_phat_nghi ?? 0,
-      don_gia_theo_gio_vender: selected.don_gia_theo_gio_vender ?? 0,
       tro_cap:                 selected.tro_cap ?? 0,
       chuyen_can:              selected.chuyen_can ?? 0,
       ngay_chot_cong:          selected.ngay_chot_cong ?? 25,
@@ -350,6 +348,13 @@ export default function CongTy() {
                 </>
               )}
             </div>
+            {/* Đơn giá thưởng vender / CTV — chỉ admin xem & sửa */}
+            {isAdmin && (
+              <div style={s.card}>
+                <RateCongTyPanel congTyId={selected.id} canEdit />
+              </div>
+            )}
+
             {selected.map_url && (
               <div style={s.card}>
                 <div style={s.cardTitle}>Vị trí công ty</div>

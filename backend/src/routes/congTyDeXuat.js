@@ -48,7 +48,6 @@ const congTyDataSchema = z.object({
   luong_ngay_le:  z.number().nonnegative().optional(),
   tien_dong_phuc: z.number().nonnegative().optional(),
   tien_phat_nghi: z.number().nonnegative().optional(),
-  don_gia_theo_gio_vender: z.number().nonnegative().optional(),
   tro_cap:                 z.number().nonnegative().optional(),
   chuyen_can:              z.number().nonnegative().optional(),
   ngay_chot_cong:          z.number().int().min(1).max(31).optional(),

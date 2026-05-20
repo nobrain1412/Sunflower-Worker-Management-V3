@@ -48,7 +48,6 @@ const SECTIONS = [
       { key: 'tien_phat_nghi', label: 'Tiền phạt nghỉ', type: 'number' },
       { key: 'tro_cap',        label: 'Trợ cấp',        type: 'number' },
       { key: 'chuyen_can',     label: 'Chuyên cần',     type: 'number' },
-      { key: 'don_gia_theo_gio_vender', label: 'Đơn giá theo giờ Vender', type: 'number' },
     ],
   },
 ];

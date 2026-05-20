@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useUserDetail } from '../../hooks/useUsers';
 import QRModal from '../../components/QRModal';
+import UserRatesPanel from './UserRatesPanel';
 
 const ROLE_LABEL = {
   admin: 'Quản trị', quan_ly: 'Quản lý', vender: 'Vender',
@@ -9,8 +10,6 @@ const ROLE_LABEL = {
 };
 
 const CO_QR_ROLES = ['vender', 'cong_tac_vien'];
-
-function fmtMoney(n) { return Number(n || 0).toLocaleString('vi-VN') + 'đ'; }
 
 export default function NhanVienDetail() {
   const { id } = useParams();
@@ -49,11 +48,14 @@ export default function NhanVienDetail() {
           <Field label="Ngân hàng" value={u.ngan_hang} />
           <Field label="Số tài khoản" value={u.so_tai_khoan} mono />
           <Field label="Tên chủ TK" value={u.ten_chu_tk} />
-          {u.vai_tro === 'cong_tac_vien' && (
-            <Field label="Tiền công/người" value={fmtMoney(u.tien_cong_moi_nguoi)} mono />
-          )}
         </div>
       </div>
+
+      {(u.vai_tro === 'vender' || u.vai_tro === 'cong_tac_vien') && (
+        <div style={s.card}>
+          <UserRatesPanel userId={u.id} vaiTro={u.vai_tro} />
+        </div>
+      )}
 
       {qrModal && (
         <QRModal

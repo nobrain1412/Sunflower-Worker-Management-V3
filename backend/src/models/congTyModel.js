@@ -25,7 +25,7 @@ async function findAll({ page = 1, limit = 20, sort = 'ten_cong_ty', order = 'as
             luong_co_ban, luong_theo_gio, he_so_ot, ngay_lam_chuan,
             luong_tc_ngay, luong_hc_dem, luong_tc_dem, luong_chu_nhat, luong_ngay_le,
             tien_dong_phuc, tien_phat_nghi,
-            don_gia_theo_gio_vender, tro_cap, chuyen_can, ngay_chot_cong,
+            tro_cap, chuyen_can, ngay_chot_cong,
             mo_ta_cong_viec, media_urls,
             active, created_at
      FROM cong_ty ${where}
@@ -47,7 +47,7 @@ async function create(data) {
           luong_co_ban, luong_theo_gio, he_so_ot, ngay_lam_chuan,
           luong_tc_ngay, luong_hc_dem, luong_tc_dem, luong_chu_nhat, luong_ngay_le,
           tien_dong_phuc, tien_phat_nghi,
-          don_gia_theo_gio_vender, tro_cap, chuyen_can, ngay_chot_cong,
+          tro_cap, chuyen_can, ngay_chot_cong,
           mo_ta_cong_viec, media_urls,
           ghi_chu } = data;
 
@@ -57,16 +57,16 @@ async function create(data) {
         luong_co_ban, luong_theo_gio, he_so_ot, ngay_lam_chuan,
         luong_tc_ngay, luong_hc_dem, luong_tc_dem, luong_chu_nhat, luong_ngay_le,
         tien_dong_phuc, tien_phat_nghi,
-        don_gia_theo_gio_vender, tro_cap, chuyen_can, ngay_chot_cong,
+        tro_cap, chuyen_can, ngay_chot_cong,
         mo_ta_cong_viec, media_urls,
         ghi_chu)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
      RETURNING *`,
     [ten_cong_ty, dia_chi ?? null, map_url ?? null, so_dien_thoai ?? null, email ?? null,
      luong_co_ban ?? 0, luong_theo_gio ?? 0, he_so_ot ?? 1.5, ngay_lam_chuan ?? 26,
      luong_tc_ngay ?? 0, luong_hc_dem ?? 0, luong_tc_dem ?? 0, luong_chu_nhat ?? 0, luong_ngay_le ?? 0,
      tien_dong_phuc ?? 0, tien_phat_nghi ?? 0,
-     don_gia_theo_gio_vender ?? 0, tro_cap ?? 0, chuyen_can ?? 0, ngay_chot_cong ?? 25,
+     tro_cap ?? 0, chuyen_can ?? 0, ngay_chot_cong ?? 25,
      mo_ta_cong_viec ?? null, JSON.stringify(media_urls ?? []),
      ghi_chu ?? null],
   );
@@ -78,7 +78,7 @@ async function update(id, data) {
                    'luong_co_ban', 'luong_theo_gio', 'he_so_ot', 'ngay_lam_chuan',
                    'luong_tc_ngay', 'luong_hc_dem', 'luong_tc_dem', 'luong_chu_nhat', 'luong_ngay_le',
                    'tien_dong_phuc', 'tien_phat_nghi',
-                   'don_gia_theo_gio_vender', 'tro_cap', 'chuyen_can', 'ngay_chot_cong',
+                   'tro_cap', 'chuyen_can', 'ngay_chot_cong',
                    'mo_ta_cong_viec', 'media_urls',
                    'active', 'ghi_chu'];
   const fields = [];
@@ -135,4 +135,61 @@ async function removeQuanLy(congTyId, userId) {
   return result.rows[0] || null;
 }
 
-module.exports = { findAll, findById, create, update, findQuanLy, assignQuanLy, removeQuanLy };
+// ─── Đơn giá thưởng theo (user × công ty) ─────────────────────
+// Danh sách rate của 1 công ty cho mọi vender/CTV (kèm thông tin user)
+async function findRatesByCongTy(congTyId) {
+  const result = await db.query(
+    `SELECT r.id, r.user_id, r.cong_ty_id,
+            r.don_gia_theo_gio, r.tien_cong_moi_nguoi,
+            u.ho_ten, u.ten_dang_nhap, u.vai_tro
+       FROM user_cong_ty_rate r
+       JOIN users u ON u.id = r.user_id
+      WHERE r.cong_ty_id = $1
+      ORDER BY u.vai_tro, u.ho_ten`,
+    [congTyId],
+  );
+  return result.rows;
+}
+
+// Danh sách rate của 1 user ở mọi công ty (kèm tên công ty)
+async function findRatesByUser(userId) {
+  const result = await db.query(
+    `SELECT r.id, r.user_id, r.cong_ty_id,
+            r.don_gia_theo_gio, r.tien_cong_moi_nguoi,
+            ct.ten_cong_ty
+       FROM user_cong_ty_rate r
+       JOIN cong_ty ct ON ct.id = r.cong_ty_id
+      WHERE r.user_id = $1
+      ORDER BY ct.ten_cong_ty`,
+    [userId],
+  );
+  return result.rows;
+}
+
+// Upsert rate cho cặp (user, cong_ty)
+async function upsertRate({ user_id, cong_ty_id, don_gia_theo_gio, tien_cong_moi_nguoi }) {
+  const result = await db.query(
+    `INSERT INTO user_cong_ty_rate (user_id, cong_ty_id, don_gia_theo_gio, tien_cong_moi_nguoi)
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT (user_id, cong_ty_id) DO UPDATE
+       SET don_gia_theo_gio    = EXCLUDED.don_gia_theo_gio,
+           tien_cong_moi_nguoi = EXCLUDED.tien_cong_moi_nguoi
+     RETURNING *`,
+    [user_id, cong_ty_id, don_gia_theo_gio ?? 0, tien_cong_moi_nguoi ?? 0],
+  );
+  return result.rows[0];
+}
+
+async function deleteRate(userId, congTyId) {
+  const result = await db.query(
+    `DELETE FROM user_cong_ty_rate WHERE user_id = $1 AND cong_ty_id = $2 RETURNING id`,
+    [userId, congTyId],
+  );
+  return result.rows[0] || null;
+}
+
+module.exports = {
+  findAll, findById, create, update,
+  findQuanLy, assignQuanLy, removeQuanLy,
+  findRatesByCongTy, findRatesByUser, upsertRate, deleteRate,
+};

@@ -47,7 +47,6 @@ function UserModal({ user, onClose }) {
     ngan_hang: user?.ngan_hang ?? '',
     so_tai_khoan: user?.so_tai_khoan ?? '',
     ten_chu_tk: user?.ten_chu_tk ?? '',
-    tien_cong_moi_nguoi: user?.tien_cong_moi_nguoi ?? 0,
     hinh_thuc_thanh_toan: user?.hinh_thuc_thanh_toan ?? 'mot_lan',
     cong_ty_ids: user?.cong_ty_ids ?? [],
   });
@@ -83,7 +82,6 @@ function UserModal({ user, onClose }) {
       ngan_hang: form.ngan_hang || undefined,
       so_tai_khoan: form.so_tai_khoan || undefined,
       ten_chu_tk: form.ten_chu_tk || undefined,
-      tien_cong_moi_nguoi: Number(form.tien_cong_moi_nguoi || 0),
       hinh_thuc_thanh_toan: form.vai_tro === 'cong_tac_vien' ? form.hinh_thuc_thanh_toan : undefined,
       cong_ty_ids: form.vai_tro === 'quan_ly' ? form.cong_ty_ids : [],
     };
@@ -131,10 +129,10 @@ function UserModal({ user, onClose }) {
             <input className="form-input" name="so_dien_thoai" value={form.so_dien_thoai} onChange={handleChange} />
           </div>
           {form.vai_tro === 'cong_tac_vien' && (
-            <div style={F.col}>
-              <label className="form-label">Tiền công mỗi người tuyển</label>
-              <input className="form-input" type="number" name="tien_cong_moi_nguoi"
-                value={form.tien_cong_moi_nguoi} onChange={handleChange} />
+            <div style={{ ...F.col, gridColumn: 'span 2' }}>
+              <div style={{ fontSize: 11, color: 'var(--text3)', padding: '4px 0' }}>
+                Tiền công / người tuyển nay đặt riêng theo từng công ty — chỉnh trong trang Công ty hoặc Chi tiết user.
+              </div>
             </div>
           )}
           {form.vai_tro === 'cong_tac_vien' && (
@@ -379,7 +377,6 @@ export default function NhanSu() {
                     <div style={m.metaItem}><span style={m.metaLabel}>SĐT</span><span style={s.sub}>{u.so_dien_thoai ?? '—'}</span></div>
                     <div style={m.metaItem}><span style={m.metaLabel}>Số người tuyển</span><span style={s.mono}>{Number(u.so_cn_tuyen || 0)}</span></div>
                     <div style={m.metaItem}><span style={m.metaLabel}>Đã thanh toán</span><span style={{ ...s.mono, color: 'var(--teal)', fontWeight: 700 }}>{Number(u.so_cn_da_thanh_toan || 0)} người</span></div>
-                    <div style={m.metaItem}><span style={m.metaLabel}>Tiền công/người</span><span style={s.mono}>{fmtMoney(u.tien_cong_moi_nguoi)}</span></div>
                     <div style={m.metaItem}><span style={m.metaLabel}>Hình thức</span><span style={s.sub}>{u.hinh_thuc_thanh_toan === 'hang_thang' ? 'Nhận hàng tháng' : 'Lấy 1 lần'}</span></div>
                     {u.hinh_thuc_thanh_toan !== 'hang_thang' && (
                       <div style={m.metaItem}><span style={m.metaLabel}>Đủ điều kiện 1 lần</span><span style={s.mono}>{Number(u.so_cn_du_dieu_kien_mot_lan || 0)} người</span></div>
@@ -403,9 +400,9 @@ export default function NhanSu() {
             </div>
           ) : (
             <table style={s.table}>
-              <thead><tr>{['Tên','SĐT','Số người tuyển','Đã thanh toán','Tiền công/người','Hình thức','Đủ điều kiện 1 lần','Dự kiến thanh toán',''].map((h, i) => <th key={i} style={s.th}>{h}</th>)}</tr></thead>
+              <thead><tr>{['Tên','SĐT','Số người tuyển','Đã thanh toán','Hình thức','Đủ điều kiện 1 lần','Dự kiến thanh toán',''].map((h, i) => <th key={i} style={s.th}>{h}</th>)}</tr></thead>
               <tbody>
-                {ctvs.length === 0 ? <tr><td colSpan={9} style={s.empty}>Chưa có cộng tác viên</td></tr> :
+                {ctvs.length === 0 ? <tr><td colSpan={8} style={s.empty}>Chưa có cộng tác viên</td></tr> :
                   ctvs.map((u) => (
                     <tr key={u.id} style={{ ...s.tr, cursor: 'pointer' }} onClick={() => navigate(`/cong-tac-vien/${u.id}`)}>
                       <td style={s.td}><b style={{ color: 'var(--text1)' }}>{u.ho_ten}</b></td>
@@ -417,7 +414,6 @@ export default function NhanSu() {
                           <span style={{ ...s.sub, marginLeft: 6 }}>({fmtMoney(u.tong_da_thanh_toan)})</span>
                         )}
                       </td>
-                      <td style={s.td}><span style={s.mono}>{fmtMoney(u.tien_cong_moi_nguoi)}</span></td>
                       <td style={s.td}><span style={s.sub}>{u.hinh_thuc_thanh_toan === 'hang_thang' ? 'Nhận hàng tháng' : 'Lấy 1 lần'}</span></td>
                       <td style={s.td}>
                         <span style={s.mono}>

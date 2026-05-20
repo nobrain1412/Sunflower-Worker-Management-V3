@@ -7,6 +7,7 @@ const validate = require('../middleware/validate');
 const { authenticate, requireRole } = require('../middleware/auth');
 const { sendSuccess, sendCreated } = require('../utils/response');
 const userModel = require('../models/userModel');
+const congTyModel = require('../models/congTyModel');
 
 const router = Router();
 
@@ -114,6 +115,44 @@ router.get('/:id', requireRole('admin'), asyncWrapper(async (req, res) => {
   sendSuccess(res, user);
 }));
 
+// GET /api/users/:id/rates — đơn giá thưởng theo từng công ty
+router.get('/:id/rates', requireRole('admin', 'quan_ly', 'ke_toan'),
+  asyncWrapper(async (req, res) => {
+    const id = toPositiveInt(req.params.id, 'ID user');
+    const rows = await congTyModel.findRatesByUser(id);
+    sendSuccess(res, rows);
+  }),
+);
+
+// PUT /api/users/:id/rates/:congTyId — set rate
+const rateSchema = z.object({
+  don_gia_theo_gio:    z.number().nonnegative().optional(),
+  tien_cong_moi_nguoi: z.number().nonnegative().optional(),
+});
+router.put('/:id/rates/:congTyId', requireRole('admin'),
+  validate(rateSchema),
+  asyncWrapper(async (req, res) => {
+    const userId   = toPositiveInt(req.params.id, 'ID user');
+    const congTyId = toPositiveInt(req.params.congTyId, 'ID công ty');
+    const row = await congTyModel.upsertRate({
+      user_id: userId,
+      cong_ty_id: congTyId,
+      don_gia_theo_gio:    req.validatedBody.don_gia_theo_gio    ?? 0,
+      tien_cong_moi_nguoi: req.validatedBody.tien_cong_moi_nguoi ?? 0,
+    });
+    sendSuccess(res, row, 'Cập nhật đơn giá thành công');
+  }),
+);
+router.delete('/:id/rates/:congTyId', requireRole('admin'),
+  asyncWrapper(async (req, res) => {
+    const userId   = toPositiveInt(req.params.id, 'ID user');
+    const congTyId = toPositiveInt(req.params.congTyId, 'ID công ty');
+    const r = await congTyModel.deleteRate(userId, congTyId);
+    if (!r) { const e = new Error('Không tìm thấy rate'); e.statusCode = 404; throw e; }
+    sendSuccess(res, null, 'Đã xoá đơn giá');
+  }),
+);
+
 const createSchema = z.object({
   ten_dang_nhap:        z.string().min(3).max(50),
   mat_khau:             z.string().min(6).max(100),
@@ -123,7 +162,6 @@ const createSchema = z.object({
   ngan_hang:            z.string().max(100).optional(),
   so_tai_khoan:         z.string().max(50).optional(),
   ten_chu_tk:           z.string().max(100).optional(),
-  tien_cong_moi_nguoi:  z.number().nonnegative().optional(),
   hinh_thuc_thanh_toan: z.enum(['mot_lan', 'hang_thang']).optional(),
   cong_ty_ids:          z.array(z.number().int().positive()).optional(),
 });
@@ -159,7 +197,6 @@ const updateSchema = z.object({
   ngan_hang:            z.string().max(100).optional(),
   so_tai_khoan:         z.string().max(50).optional(),
   ten_chu_tk:           z.string().max(100).optional(),
-  tien_cong_moi_nguoi:  z.number().nonnegative().optional(),
   hinh_thuc_thanh_toan: z.enum(['mot_lan', 'hang_thang']).optional(),
   mat_khau:             z.string().min(6).max(100).optional(),
   cong_ty_ids:          z.array(z.number().int().positive()).optional(),

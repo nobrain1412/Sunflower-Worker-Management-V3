@@ -14,7 +14,7 @@ async function findById(id) {
   const result = await db.query(
     `SELECT id, ten_dang_nhap, ho_ten, vai_tro, active, created_at,
             so_dien_thoai, ngan_hang, so_tai_khoan, ten_chu_tk,
-            tien_cong_moi_nguoi, hinh_thuc_thanh_toan, quan_ly_id
+            hinh_thuc_thanh_toan, quan_ly_id
      FROM users WHERE id = $1`,
     [id],
   );
@@ -40,7 +40,7 @@ async function findAll({ vai_tro } = {}) {
   const result = await db.query(
     `SELECT u.id, u.ten_dang_nhap, u.ho_ten, u.vai_tro, u.active,
             u.so_dien_thoai, u.ngan_hang, u.so_tai_khoan, u.ten_chu_tk,
-            u.tien_cong_moi_nguoi, u.hinh_thuc_thanh_toan, u.quan_ly_id, u.created_at,
+            u.hinh_thuc_thanh_toan, u.quan_ly_id, u.created_at,
             -- Tổng CN người này tuyển (đang còn)
             (SELECT COUNT(*) FROM cong_nhan cn
               WHERE cn.nguoi_tuyen_id = u.id
@@ -69,20 +69,20 @@ async function findAll({ vai_tro } = {}) {
 async function create({
   ten_dang_nhap, mat_khau_hash, ho_ten, vai_tro,
   so_dien_thoai, ngan_hang, so_tai_khoan, ten_chu_tk,
-  tien_cong_moi_nguoi, hinh_thuc_thanh_toan, quan_ly_id,
+  hinh_thuc_thanh_toan, quan_ly_id,
 }) {
   const result = await db.query(
     `INSERT INTO users
        (ten_dang_nhap, mat_khau_hash, ho_ten, vai_tro,
         so_dien_thoai, ngan_hang, so_tai_khoan, ten_chu_tk,
-        tien_cong_moi_nguoi, hinh_thuc_thanh_toan, quan_ly_id)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+        hinh_thuc_thanh_toan, quan_ly_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
      RETURNING id, ten_dang_nhap, ho_ten, vai_tro, active, so_dien_thoai,
-               ngan_hang, so_tai_khoan, ten_chu_tk, tien_cong_moi_nguoi,
+               ngan_hang, so_tai_khoan, ten_chu_tk,
                hinh_thuc_thanh_toan, quan_ly_id`,
     [ten_dang_nhap, mat_khau_hash, ho_ten, vai_tro,
      so_dien_thoai ?? null, ngan_hang ?? null, so_tai_khoan ?? null,
-     ten_chu_tk ?? null, tien_cong_moi_nguoi ?? 0,
+     ten_chu_tk ?? null,
      hinh_thuc_thanh_toan ?? 'mot_lan', quan_ly_id ?? null],
   );
   return result.rows[0];
@@ -91,7 +91,7 @@ async function create({
 async function update(id, data) {
   const allowed = ['ho_ten', 'vai_tro', 'active',
     'so_dien_thoai', 'ngan_hang', 'so_tai_khoan', 'ten_chu_tk',
-    'tien_cong_moi_nguoi', 'hinh_thuc_thanh_toan', 'quan_ly_id'];
+    'hinh_thuc_thanh_toan', 'quan_ly_id'];
   const fields = [], params = [];
   for (const f of allowed) {
     if (f in data) { params.push(data[f]); fields.push(`${f} = $${params.length}`); }
@@ -135,14 +135,16 @@ async function findCongTacVien({ quanLyId } = {}) {
   }
 
   const where = conditions.join(' AND ');
+  // Tổng tiền dự kiến tính theo rate riêng từng công ty của từng CN.
   const result = await db.query(
     `SELECT u.id, u.ten_dang_nhap, u.ho_ten, u.vai_tro, u.active,
             u.so_dien_thoai, u.ngan_hang, u.so_tai_khoan, u.ten_chu_tk,
-            u.tien_cong_moi_nguoi, u.hinh_thuc_thanh_toan, u.quan_ly_id, u.created_at,
+            u.hinh_thuc_thanh_toan, u.quan_ly_id, u.created_at,
             (SELECT COUNT(*)
                FROM cong_nhan cn
               WHERE cn.nguoi_tuyen_id = u.id
                 AND cn.deleted_at IS NULL) AS so_cn_tuyen,
+            -- Số CN đủ điều kiện 1 lần (>=26 ngày công) & chưa thanh toán mot_lan
             (
               SELECT COUNT(*) FROM (
                 SELECT cn.id AS cong_nhan_id,
@@ -161,6 +163,47 @@ async function findCongTacVien({ quanLyId } = {}) {
                      AND tt.hinh_thuc = 'mot_lan'
                 )
             ) AS so_cn_du_dieu_kien_mot_lan,
+            -- Tổng tiền mot_lan dự kiến: sum rate(u, cn.cong_ty) cho CN đủ điều kiện chưa thanh toán
+            (
+              SELECT COALESCE(SUM(r.tien_cong_moi_nguoi), 0)
+                FROM (
+                  SELECT cn.id AS cong_nhan_id, cn.cong_ty_id,
+                         COALESCE(SUM((cc.so_gio + cc.so_gio_ot) / 8.0), 0) AS tong_ngay_cong
+                    FROM cong_nhan cn
+                    LEFT JOIN phan_cong pc ON pc.cong_nhan_id = cn.id
+                    LEFT JOIN cham_cong  cc ON cc.phan_cong_id = pc.id
+                   WHERE cn.nguoi_tuyen_id = u.id
+                     AND cn.deleted_at IS NULL
+                   GROUP BY cn.id, cn.cong_ty_id
+                ) s
+                LEFT JOIN user_cong_ty_rate r
+                       ON r.user_id = u.id AND r.cong_ty_id = s.cong_ty_id
+               WHERE s.tong_ngay_cong >= 26
+                 AND NOT EXISTS (
+                   SELECT 1 FROM cong_tac_vien_thanh_toan tt
+                    WHERE tt.cong_nhan_id = s.cong_nhan_id
+                      AND tt.hinh_thuc = 'mot_lan'
+                 )
+            ) AS du_kien_mot_lan,
+            -- Tổng tiền hang_thang dự kiến (tháng hiện tại): sum(gio * rate/26/8) theo cong_ty của CN
+            (
+              SELECT COALESCE(SUM(
+                       (s.tong_gio) * (COALESCE(r.tien_cong_moi_nguoi, 0) / 26.0 / 8.0)
+                     ), 0)
+                FROM (
+                  SELECT cn.id AS cong_nhan_id, cn.cong_ty_id,
+                         COALESCE(SUM(cc.so_gio + cc.so_gio_ot), 0) AS tong_gio
+                    FROM cong_nhan cn
+                    JOIN phan_cong pc ON pc.cong_nhan_id = cn.id
+                    JOIN cham_cong  cc ON cc.phan_cong_id = pc.id
+                   WHERE cn.nguoi_tuyen_id = u.id
+                     AND cn.deleted_at IS NULL
+                     AND DATE_TRUNC('month', cc.ngay::timestamp) = DATE_TRUNC('month', NOW())
+                   GROUP BY cn.id, cn.cong_ty_id
+                ) s
+                LEFT JOIN user_cong_ty_rate r
+                       ON r.user_id = u.id AND r.cong_ty_id = s.cong_ty_id
+            ) AS du_kien_hang_thang,
             (
               SELECT COALESCE(SUM(cc.so_gio + cc.so_gio_ot), 0)
                 FROM cham_cong cc
@@ -182,22 +225,19 @@ async function findCongTacVien({ quanLyId } = {}) {
   );
 
   return result.rows.map((u) => {
-    const tienCong = Number(u.tien_cong_moi_nguoi || 0);
-    const tongGioThang = Number(u.tong_gio_thang || 0);
-    const soCnDuDieuKienMotLan = Number(u.so_cn_du_dieu_kien_mot_lan || 0);
-    const donGiaTheoGio = tienCong > 0 ? tienCong / 26 / 8 : 0;
-    const duKienMotLan = soCnDuDieuKienMotLan * tienCong;
+    const duKienMotLan    = Number(u.du_kien_mot_lan || 0);
+    const duKienHangThang = Number(u.du_kien_hang_thang || 0);
     const duKienThanhToan = u.hinh_thuc_thanh_toan === 'hang_thang'
-      ? donGiaTheoGio * tongGioThang
+      ? duKienHangThang
       : duKienMotLan;
     return {
       ...u,
-      so_cn_du_dieu_kien_mot_lan: soCnDuDieuKienMotLan,
+      so_cn_du_dieu_kien_mot_lan: Number(u.so_cn_du_dieu_kien_mot_lan || 0),
       so_cn_da_thanh_toan: Number(u.so_cn_da_thanh_toan || 0),
-      tong_da_thanh_toan: Number(u.tong_da_thanh_toan || 0),
-      don_gia_theo_gio: donGiaTheoGio,
-      du_kien_mot_lan: duKienMotLan,
-      du_kien_thanh_toan: duKienThanhToan,
+      tong_da_thanh_toan:  Number(u.tong_da_thanh_toan || 0),
+      du_kien_mot_lan:     duKienMotLan,
+      du_kien_hang_thang:  duKienHangThang,
+      du_kien_thanh_toan:  duKienThanhToan,
     };
   });
 }
@@ -210,9 +250,7 @@ async function thanhToanCongTacVien({ ctvId, hinhThuc, thang, nam, createdBy, gh
   await db.query('BEGIN');
   try {
     const ctvRes = await db.query(
-      `SELECT id, vai_tro, tien_cong_moi_nguoi
-         FROM users
-        WHERE id = $1`,
+      `SELECT id, vai_tro FROM users WHERE id = $1`,
       [ctvId],
     );
     const ctv = ctvRes.rows[0];
@@ -222,11 +260,11 @@ async function thanhToanCongTacVien({ ctvId, hinhThuc, thang, nam, createdBy, gh
       throw e;
     }
 
-    const tienCongMoiNguoi = Number(ctv.tien_cong_moi_nguoi || 0);
     if (hinhThuc === 'mot_lan') {
+      // Mỗi CN đủ điều kiện được tính theo rate(ctv, cong_ty của CN).
       const inserted = await db.query(
         `WITH eligible AS (
-           SELECT cn.id AS cong_nhan_id
+           SELECT cn.id AS cong_nhan_id, cn.cong_ty_id
              FROM cong_nhan cn
              LEFT JOIN phan_cong pc ON pc.cong_nhan_id = cn.id
              LEFT JOIN cham_cong cc ON cc.phan_cong_id = pc.id
@@ -238,8 +276,12 @@ async function thanhToanCongTacVien({ ctvId, hinhThuc, thang, nam, createdBy, gh
         inserted AS (
           INSERT INTO cong_tac_vien_thanh_toan
             (ctv_id, cong_nhan_id, hinh_thuc, so_tien, ghi_chu, created_by)
-          SELECT $1, e.cong_nhan_id, 'mot_lan', $2, $3, $4
+          SELECT $1, e.cong_nhan_id, 'mot_lan',
+                 COALESCE(r.tien_cong_moi_nguoi, 0),
+                 $2, $3
             FROM eligible e
+            LEFT JOIN user_cong_ty_rate r
+                   ON r.user_id = $1 AND r.cong_ty_id = e.cong_ty_id
            WHERE NOT EXISTS (
              SELECT 1 FROM cong_tac_vien_thanh_toan t
               WHERE t.cong_nhan_id = e.cong_nhan_id
@@ -249,21 +291,21 @@ async function thanhToanCongTacVien({ ctvId, hinhThuc, thang, nam, createdBy, gh
         )
         SELECT COUNT(*)::int AS so_luong, COALESCE(SUM(so_tien), 0) AS tong_tien
           FROM inserted`,
-        [ctvId, tienCongMoiNguoi, ghiChu ?? null, createdBy ?? null],
+        [ctvId, ghiChu ?? null, createdBy ?? null],
       );
 
       await db.query('COMMIT');
       return {
         hinh_thuc: 'mot_lan',
-        so_luong: Number(inserted.rows[0].so_luong || 0),
+        so_luong:  Number(inserted.rows[0].so_luong || 0),
         tong_tien: Number(inserted.rows[0].tong_tien || 0),
       };
     }
 
-    const donGiaTheoGio = tienCongMoiNguoi > 0 ? tienCongMoiNguoi / 26 / 8 : 0;
+    // hang_thang: tien = gio * (rate(ctv, cong_ty CN) / 26 / 8)
     const inserted = await db.query(
       `WITH hours_by_worker AS (
-         SELECT cn.id AS cong_nhan_id,
+         SELECT cn.id AS cong_nhan_id, cn.cong_ty_id,
                 COALESCE(SUM(cc.so_gio + cc.so_gio_ot), 0) AS tong_gio
            FROM cong_nhan cn
            JOIN phan_cong pc ON pc.cong_nhan_id = cn.id
@@ -272,13 +314,17 @@ async function thanhToanCongTacVien({ ctvId, hinhThuc, thang, nam, createdBy, gh
             AND cn.deleted_at IS NULL
             AND EXTRACT(MONTH FROM cc.ngay) = $2
             AND EXTRACT(YEAR  FROM cc.ngay) = $3
-          GROUP BY cn.id
+          GROUP BY cn.id, cn.cong_ty_id
         ),
         inserted AS (
           INSERT INTO cong_tac_vien_thanh_toan
             (ctv_id, cong_nhan_id, hinh_thuc, thang, nam, so_tien, ghi_chu, created_by)
-          SELECT $1, h.cong_nhan_id, 'hang_thang', $2, $3, h.tong_gio * $4, $5, $6
+          SELECT $1, h.cong_nhan_id, 'hang_thang', $2, $3,
+                 ROUND(h.tong_gio * (COALESCE(r.tien_cong_moi_nguoi, 0) / 26.0 / 8.0)),
+                 $4, $5
             FROM hours_by_worker h
+            LEFT JOIN user_cong_ty_rate r
+                   ON r.user_id = $1 AND r.cong_ty_id = h.cong_ty_id
            WHERE h.tong_gio > 0
              AND NOT EXISTS (
                SELECT 1 FROM cong_tac_vien_thanh_toan t
@@ -291,7 +337,7 @@ async function thanhToanCongTacVien({ ctvId, hinhThuc, thang, nam, createdBy, gh
         )
         SELECT COUNT(*)::int AS so_luong, COALESCE(SUM(so_tien), 0) AS tong_tien
           FROM inserted`,
-      [ctvId, targetThang, targetNam, donGiaTheoGio, ghiChu ?? null, createdBy ?? null],
+      [ctvId, targetThang, targetNam, ghiChu ?? null, createdBy ?? null],
     );
 
     await db.query('COMMIT');
@@ -299,7 +345,7 @@ async function thanhToanCongTacVien({ ctvId, hinhThuc, thang, nam, createdBy, gh
       hinh_thuc: 'hang_thang',
       thang: targetThang,
       nam: targetNam,
-      so_luong: Number(inserted.rows[0].so_luong || 0),
+      so_luong:  Number(inserted.rows[0].so_luong || 0),
       tong_tien: Number(inserted.rows[0].tong_tien || 0),
     };
   } catch (error) {
@@ -311,20 +357,18 @@ async function thanhToanCongTacVien({ ctvId, hinhThuc, thang, nam, createdBy, gh
 // Danh sách CN do 1 CTV tuyển kèm số liệu thanh toán/giờ làm
 async function findCongNhanCuaCtv(ctvId) {
   const ctvRes = await db.query(
-    `SELECT id, vai_tro, ho_ten, tien_cong_moi_nguoi, hinh_thuc_thanh_toan
+    `SELECT id, vai_tro, ho_ten, hinh_thuc_thanh_toan
        FROM users WHERE id = $1`,
     [ctvId],
   );
   const ctv = ctvRes.rows[0];
   if (!ctv || ctv.vai_tro !== 'cong_tac_vien') return null;
 
-  const tienCong = Number(ctv.tien_cong_moi_nguoi || 0);
-  const donGiaTheoGio = tienCong > 0 ? tienCong / 26 / 8 : 0;
-
   const cnRes = await db.query(
     `SELECT cn.id, cn.ho_ten, cn.cccd, cn.so_dien_thoai, cn.trang_thai,
             cn.ngay_vao_lam, cn.ngay_nghi_viec, cn.cong_ty_id,
             ct.ten_cong_ty,
+            COALESCE(r.tien_cong_moi_nguoi, 0) AS tien_cong_moi_nguoi,
             COALESCE((
               SELECT SUM(cc.so_gio + cc.so_gio_ot)
                 FROM cham_cong cc
@@ -355,6 +399,8 @@ async function findCongNhanCuaCtv(ctvId) {
             ) AS thanh_toan_hang_thang
      FROM cong_nhan cn
      LEFT JOIN cong_ty ct ON ct.id = cn.cong_ty_id
+     LEFT JOIN user_cong_ty_rate r
+            ON r.user_id = $1 AND r.cong_ty_id = cn.cong_ty_id
      WHERE cn.nguoi_tuyen_id = $1
        AND cn.deleted_at IS NULL
      ORDER BY cn.ho_ten ASC`,
@@ -365,6 +411,8 @@ async function findCongNhanCuaCtv(ctvId) {
     const tongGio = Number(cn.tong_gio || 0);
     const gioThang = Number(cn.gio_thang_nay || 0);
     const ngayCong = tongGio / 8;
+    const tienCong = Number(cn.tien_cong_moi_nguoi || 0);
+    const donGiaTheoGio = tienCong > 0 ? tienCong / 26 / 8 : 0;
     const duDieuKienMotLan = ngayCong >= 26;
     const canThanhToanMotLan = duDieuKienMotLan && !cn.da_thanh_toan_mot_lan;
     const canThanhToanThangNay = ctv.hinh_thuc_thanh_toan === 'hang_thang' && gioThang > 0;
@@ -373,11 +421,13 @@ async function findCongNhanCuaCtv(ctvId) {
       tong_gio: tongGio,
       gio_thang_nay: gioThang,
       ngay_cong: ngayCong,
+      tien_cong_moi_nguoi: tienCong,
+      don_gia_theo_gio: donGiaTheoGio,
       du_dieu_kien_mot_lan: duDieuKienMotLan,
       da_thanh_toan_mot_lan: !!cn.da_thanh_toan_mot_lan,
       can_thanh_toan_mot_lan: canThanhToanMotLan,
       can_thanh_toan_thang_nay: canThanhToanThangNay,
-      so_tien_mot_lan: canThanhToanMotLan ? tienCong : 0,
+      so_tien_mot_lan:   canThanhToanMotLan ? tienCong : 0,
       so_tien_thang_nay: canThanhToanThangNay ? Math.round(donGiaTheoGio * gioThang) : 0,
     };
   });
@@ -385,9 +435,7 @@ async function findCongNhanCuaCtv(ctvId) {
   return {
     ctv: {
       id: ctv.id, ho_ten: ctv.ho_ten,
-      tien_cong_moi_nguoi: tienCong,
       hinh_thuc_thanh_toan: ctv.hinh_thuc_thanh_toan,
-      don_gia_theo_gio: donGiaTheoGio,
     },
     cong_nhan: danhSach,
     tong: {
@@ -395,7 +443,7 @@ async function findCongNhanCuaCtv(ctvId) {
       so_du_dieu_kien_mot_lan: danhSach.filter((x) => x.du_dieu_kien_mot_lan).length,
       so_can_thanh_toan_mot_lan: danhSach.filter((x) => x.can_thanh_toan_mot_lan).length,
       so_can_thanh_toan_thang_nay: danhSach.filter((x) => x.can_thanh_toan_thang_nay).length,
-      tong_tien_mot_lan: danhSach.reduce((s, x) => s + x.so_tien_mot_lan, 0),
+      tong_tien_mot_lan:   danhSach.reduce((s, x) => s + x.so_tien_mot_lan, 0),
       tong_tien_thang_nay: danhSach.reduce((s, x) => s + x.so_tien_thang_nay, 0),
     },
   };

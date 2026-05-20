@@ -38,8 +38,7 @@ CREATE TABLE users (
   ngan_hang            VARCHAR(100),
   so_tai_khoan         VARCHAR(50),
   ten_chu_tk           VARCHAR(100),
-  -- Cộng tác viên: tiền công mỗi người tuyển
-  tien_cong_moi_nguoi  NUMERIC(12,2) NOT NULL DEFAULT 0,
+  -- CTV: hình thức thanh toán (đơn giá theo công ty nằm ở user_cong_ty_rate)
   hinh_thuc_thanh_toan VARCHAR(20) NOT NULL DEFAULT 'mot_lan'
                        CHECK (hinh_thuc_thanh_toan IN ('mot_lan', 'hang_thang')),
   quan_ly_id           INT REFERENCES users(id) ON DELETE RESTRICT,
@@ -76,8 +75,7 @@ CREATE TABLE cong_ty (
   -- Khấu trừ mặc định
   tien_dong_phuc  NUMERIC(12,2) NOT NULL DEFAULT 0,
   tien_phat_nghi  NUMERIC(12,2) NOT NULL DEFAULT 0,
-  -- Vender / trợ cấp
-  don_gia_theo_gio_vender NUMERIC(10,2) NOT NULL DEFAULT 0,
+  -- Trợ cấp (đơn giá vender theo công ty nằm ở user_cong_ty_rate)
   tro_cap                 NUMERIC(12,2) NOT NULL DEFAULT 0,
   chuyen_can              NUMERIC(12,2) NOT NULL DEFAULT 0,
   ngay_chot_cong          SMALLINT      NOT NULL DEFAULT 25
@@ -106,6 +104,26 @@ CREATE TABLE quan_ly_cong_ty (
 );
 CREATE INDEX idx_qlct_user ON quan_ly_cong_ty(user_id);
 CREATE INDEX idx_qlct_cty  ON quan_ly_cong_ty(cong_ty_id);
+
+-- ═════════════════════════════════════════════════════════════
+-- 3.1. USER_CONG_TY_RATE — đơn giá thưởng (user × công ty)
+-- - Vender: don_gia_theo_gio (VNĐ/giờ) khi tính lương vender
+-- - CTV   : tien_cong_moi_nguoi (VNĐ/người tuyển đủ điều kiện)
+-- ═════════════════════════════════════════════════════════════
+CREATE TABLE user_cong_ty_rate (
+  id                   SERIAL PRIMARY KEY,
+  user_id              INT NOT NULL REFERENCES users(id)   ON DELETE CASCADE,
+  cong_ty_id           INT NOT NULL REFERENCES cong_ty(id) ON DELETE CASCADE,
+  don_gia_theo_gio     NUMERIC(10,2) NOT NULL DEFAULT 0,
+  tien_cong_moi_nguoi  NUMERIC(12,2) NOT NULL DEFAULT 0,
+  created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(user_id, cong_ty_id)
+);
+CREATE INDEX idx_uctr_user ON user_cong_ty_rate(user_id);
+CREATE INDEX idx_uctr_cty  ON user_cong_ty_rate(cong_ty_id);
+CREATE TRIGGER trg_uctr_updated_at BEFORE UPDATE ON user_cong_ty_rate
+  FOR EACH ROW EXECUTE FUNCTION fn_update_updated_at();
 
 -- ═════════════════════════════════════════════════════════════
 -- 4. CONG_NHAN — hồ sơ công nhân

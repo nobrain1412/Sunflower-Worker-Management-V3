@@ -115,8 +115,8 @@ async function createUser(ten_dang_nhap, ho_ten, vai_tro, hash, extra = {}) {
     `INSERT INTO users
       (ten_dang_nhap, mat_khau_hash, ho_ten, vai_tro, active,
        so_dien_thoai, ngan_hang, so_tai_khoan, ten_chu_tk,
-       tien_cong_moi_nguoi, hinh_thuc_thanh_toan, quan_ly_id)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+       hinh_thuc_thanh_toan, quan_ly_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
      RETURNING id`,
     [
       ten_dang_nhap,
@@ -128,7 +128,6 @@ async function createUser(ten_dang_nhap, ho_ten, vai_tro, hash, extra = {}) {
       extra.ngan_hang || null,
       extra.so_tai_khoan || null,
       extra.ten_chu_tk || null,
-      extra.tien_cong_moi_nguoi || 0,
       extra.hinh_thuc_thanh_toan || 'mot_lan',
       extra.quan_ly_id || null,
     ],
@@ -161,7 +160,7 @@ async function seed() {
       `TRUNCATE TABLE
         refresh_tokens, hoat_dong_log, cham_cong, phan_cong, giao_dich_tai_chinh, hoa_don_ktx,
         thue_phong, giuong, phong, ky_tuc_xa, thue_phong_tro, phong_tro,
-        ocr_quet, cong_tac_vien_thanh_toan, quan_ly_cong_ty, cong_nhan, cong_ty,
+        ocr_quet, cong_tac_vien_thanh_toan, user_cong_ty_rate, quan_ly_cong_ty, cong_nhan, cong_ty,
         danh_muc_giao_dich, users
        RESTART IDENTITY CASCADE`,
       [],
@@ -230,7 +229,6 @@ async function seed() {
         ngan_hang: pick(BANKS),
         so_tai_khoan: accountNo(300 + i),
         ten_chu_tk: `CTV ${i}`,
-        tien_cong_moi_nguoi: 120000 + i * 10000,
         hinh_thuc_thanh_toan: i % 2 ? 'mot_lan' : 'hang_thang',
         quan_ly_id: managerIds[(i - 1) % managerIds.length],
       }));
@@ -248,10 +246,10 @@ async function seed() {
            luong_co_ban, luong_theo_gio, he_so_ot, ngay_lam_chuan,
            luong_tc_ngay, luong_hc_dem, luong_tc_dem, luong_chu_nhat, luong_ngay_le,
            tien_dong_phuc, tien_phat_nghi,
-           don_gia_theo_gio_vender, tro_cap, chuyen_can, ngay_chot_cong,
+           tro_cap, chuyen_can, ngay_chot_cong,
            mo_ta_cong_viec, media_urls, ghi_chu, active)
          VALUES
-          ($1,$2,$3,$4,$5,$6,$7,$8,26,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,25,$19,$20::jsonb,$21,true)
+          ($1,$2,$3,$4,$5,$6,$7,$8,26,$9,$10,$11,$12,$13,$14,$15,$16,$17,25,$18,$19::jsonb,$20,true)
          RETURNING id, luong_co_ban, luong_theo_gio`,
         [
           ten,
@@ -267,7 +265,6 @@ async function seed() {
           52000 + i * 350,
           65000 + i * 200,
           90000 + i * 300,
-          250000 + i * 10000,
           180000 + i * 12000,
           20000 + i * 1500,
           250000 + i * 12000,
@@ -281,6 +278,31 @@ async function seed() {
       logProgress('companies', i, SEED_SIZE.companies, 2);
     }
     const companyIds = companyRows.map((r) => r.id);
+
+    logPhase('Seed đơn giá thưởng (user × công ty)');
+    // Mỗi vender và CTV được seed đơn giá ở MỌI công ty với mức ngẫu nhiên nhẹ.
+    for (const venderId of venderIds) {
+      for (let i = 0; i < companyIds.length; i += 1) {
+        await queryWithRetry(
+          `INSERT INTO user_cong_ty_rate (user_id, cong_ty_id, don_gia_theo_gio, tien_cong_moi_nguoi)
+           VALUES ($1,$2,$3,0)
+           ON CONFLICT (user_id, cong_ty_id) DO NOTHING`,
+          [venderId, companyIds[i], 25000 + (venderId * 1000 + i * 500) % 15000],
+          'seed vender rate',
+        );
+      }
+    }
+    for (const ctvId of ctvIds) {
+      for (let i = 0; i < companyIds.length; i += 1) {
+        await queryWithRetry(
+          `INSERT INTO user_cong_ty_rate (user_id, cong_ty_id, don_gia_theo_gio, tien_cong_moi_nguoi)
+           VALUES ($1,$2,0,$3)
+           ON CONFLICT (user_id, cong_ty_id) DO NOTHING`,
+          [ctvId, companyIds[i], 100000 + (ctvId * 5000 + i * 2000) % 80000],
+          'seed ctv rate',
+        );
+      }
+    }
 
     logPhase('Assign managers to companies');
     for (let i = 0; i < managerIds.length; i += 1) {

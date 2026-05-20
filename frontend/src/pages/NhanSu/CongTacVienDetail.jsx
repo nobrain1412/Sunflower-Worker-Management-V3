@@ -54,10 +54,7 @@ export default function CongTacVienDetail() {
             <div style={s.name}>{ctv.ho_ten}</div>
             <div style={s.sub}>
               {ctv.hinh_thuc_thanh_toan === 'hang_thang' ? '💸 Nhận hàng tháng' : '💰 Lấy 1 lần'}
-              {' · '}Tiền công/người: <b>{fmt(ctv.tien_cong_moi_nguoi)}</b>
-              {ctv.hinh_thuc_thanh_toan === 'hang_thang' && (
-                <> · Đơn giá theo giờ: <b>{fmt(Math.round(ctv.don_gia_theo_gio))}</b></>
-              )}
+              {' · '}Tiền công/người: <b>theo công ty</b>
             </div>
           </div>
         </div>

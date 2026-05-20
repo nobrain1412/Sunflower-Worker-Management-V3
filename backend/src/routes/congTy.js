@@ -36,8 +36,7 @@ const taoMoiSchema = z.object({
   // Khấu trừ mặc định
   tien_dong_phuc: z.number().nonnegative().optional(),
   tien_phat_nghi: z.number().nonnegative().optional(),
-  // Vender / trợ cấp
-  don_gia_theo_gio_vender: z.number().nonnegative().optional(),
+  // Trợ cấp (đơn giá vender theo từng cặp user×công ty nằm ở /api/cong-ty/:id/rates)
   tro_cap:                 z.number().nonnegative().optional(),
   chuyen_can:              z.number().nonnegative().optional(),
   ngay_chot_cong:          z.number().int().min(1).max(31).optional(),
@@ -75,5 +74,50 @@ router.delete('/:id', requireRole('admin'), asyncWrapper(async (req, res) => {
 // Quản lý phân công: chỉ admin
 router.post('/:id/quan-ly',           requireRole('admin'), ctrl.postGanQuanLy);
 router.delete('/:id/quan-ly/:userId', requireRole('admin'), ctrl.deleteGoQuanLy);
+
+// ─── Đơn giá thưởng theo (user × công ty) ────────────────────
+// GET    /api/cong-ty/:id/rates              — danh sách rate của 1 công ty
+// PUT    /api/cong-ty/:id/rates/:userId      — set/update rate
+// DELETE /api/cong-ty/:id/rates/:userId      — xoá rate
+const rateSchema = z.object({
+  don_gia_theo_gio:    z.number().nonnegative().optional(),
+  tien_cong_moi_nguoi: z.number().nonnegative().optional(),
+});
+
+router.get('/:id/rates',
+  requireRole('admin', 'quan_ly', 'ke_toan'),
+  asyncWrapper(async (req, res) => {
+    const id = toPositiveInt(req.params.id, 'ID công ty');
+    const rows = await congTyModel.findRatesByCongTy(id);
+    sendSuccess(res, rows);
+  }),
+);
+
+router.put('/:id/rates/:userId',
+  requireRole('admin'),
+  validate(rateSchema),
+  asyncWrapper(async (req, res) => {
+    const congTyId = toPositiveInt(req.params.id, 'ID công ty');
+    const userId   = toPositiveInt(req.params.userId, 'ID user');
+    const row = await congTyModel.upsertRate({
+      user_id: userId,
+      cong_ty_id: congTyId,
+      don_gia_theo_gio:    req.validatedBody.don_gia_theo_gio    ?? 0,
+      tien_cong_moi_nguoi: req.validatedBody.tien_cong_moi_nguoi ?? 0,
+    });
+    sendSuccess(res, row, 'Cập nhật đơn giá thành công');
+  }),
+);
+
+router.delete('/:id/rates/:userId',
+  requireRole('admin'),
+  asyncWrapper(async (req, res) => {
+    const congTyId = toPositiveInt(req.params.id, 'ID công ty');
+    const userId   = toPositiveInt(req.params.userId, 'ID user');
+    const r = await congTyModel.deleteRate(userId, congTyId);
+    if (!r) { const e = new Error('Không tìm thấy rate'); e.statusCode = 404; throw e; }
+    sendSuccess(res, null, 'Đã xoá đơn giá');
+  }),
+);
 
 module.exports = router;
