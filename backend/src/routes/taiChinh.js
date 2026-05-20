@@ -32,11 +32,11 @@ function toPositiveInt(value, fieldName) {
   return parsed;
 }
 
-// Chỉ user có sổ tài chính cá nhân được vào (admin, quan_ly, vender).
-// cong_tac_vien + ke_toan không có sổ riêng — không liên quan đến module này.
+// User có sổ tài chính cá nhân: admin, quan_ly, vender, cong_tac_vien.
+// (CTV cần ghi sổ tạm ứng cho CN mình tuyển.) ke_toan không có sổ riêng.
 function allowOwnLedger(req, res, next) {
   const v = req.user?.vai_tro;
-  if (v === 'admin' || v === 'quan_ly' || v === 'vender') return next();
+  if (v === 'admin' || v === 'quan_ly' || v === 'vender' || v === 'cong_tac_vien') return next();
   return sendForbidden(res, 'Bạn không có sổ tài chính cá nhân');
 }
 
@@ -152,23 +152,42 @@ router.post('/',
   asyncWrapper(async (req, res) => {
     const { vai_tro, id: userId } = req.user;
 
-    // Vender chỉ được tạo khoản tạm ứng (tam_ung) cho CN mình tuyển
-    if (vai_tro === 'vender') {
-      if (req.validatedBody.loai !== 'tam_ung') {
-        const e = new Error('Vender chỉ được tạo khoản tạm ứng');
-        e.statusCode = 403; throw e;
-      }
-      if (req.validatedBody.cong_nhan_id) {
-        const db = require('../utils/db');
+    // Phân quyền cho khoản tạm ứng theo CN cụ thể:
+    // - vender / cong_tac_vien : chỉ CN mình tuyển
+    // - quan_ly                : chỉ CN thuộc công ty mình quản lý
+    // - admin                  : không giới hạn
+    if (req.validatedBody.loai === 'tam_ung' && req.validatedBody.cong_nhan_id) {
+      const db = require('../utils/db');
+      const cnId = req.validatedBody.cong_nhan_id;
+
+      if (vai_tro === 'vender' || vai_tro === 'cong_tac_vien') {
         const check = await db.query(
           `SELECT id FROM cong_nhan WHERE id = $1 AND nguoi_tuyen_id = $2 AND deleted_at IS NULL`,
-          [req.validatedBody.cong_nhan_id, userId],
+          [cnId, userId],
         );
         if (!check.rows.length) {
-          const e = new Error('Bạn không có quyền tạo ứng tiền cho công nhân này');
+          const e = new Error('Bạn chỉ được cho ứng công nhân do mình tuyển');
+          e.statusCode = 403; throw e;
+        }
+      } else if (vai_tro === 'quan_ly') {
+        const check = await db.query(
+          `SELECT cn.id FROM cong_nhan cn
+             JOIN quan_ly_cong_ty qlct ON qlct.cong_ty_id = cn.cong_ty_id
+            WHERE cn.id = $1 AND qlct.user_id = $2 AND cn.deleted_at IS NULL`,
+          [cnId, userId],
+        );
+        if (!check.rows.length) {
+          const e = new Error('Bạn chỉ được cho ứng công nhân thuộc công ty mình quản lý');
           e.statusCode = 403; throw e;
         }
       }
+    }
+
+    // Vender / CTV chỉ được tạo khoản tạm ứng (không các loại khác)
+    if ((vai_tro === 'vender' || vai_tro === 'cong_tac_vien')
+        && req.validatedBody.loai !== 'tam_ung') {
+      const e = new Error('Bạn chỉ được tạo khoản tạm ứng');
+      e.statusCode = 403; throw e;
     }
 
     // Nếu user chỉ định danh_muc_id, danh mục đó phải là của chính họ hoặc danh mục hệ thống
@@ -193,10 +212,21 @@ router.get('/cong-nhan/:congNhanId', asyncWrapper(async (req, res) => {
   const cnId   = toPositiveInt(req.params.congNhanId, 'ID công nhân');
   const { vai_tro, id: userId } = req.user;
 
-  if (vai_tro === 'vender') {
+  if (vai_tro === 'vender' || vai_tro === 'cong_tac_vien') {
     const db = require('../utils/db');
     const check = await db.query(
       `SELECT id FROM cong_nhan WHERE id = $1 AND nguoi_tuyen_id = $2 AND deleted_at IS NULL`,
+      [cnId, userId],
+    );
+    if (!check.rows.length) {
+      const e = new Error('Không có quyền xem'); e.statusCode = 403; throw e;
+    }
+  } else if (vai_tro === 'quan_ly') {
+    const db = require('../utils/db');
+    const check = await db.query(
+      `SELECT cn.id FROM cong_nhan cn
+         JOIN quan_ly_cong_ty qlct ON qlct.cong_ty_id = cn.cong_ty_id
+        WHERE cn.id = $1 AND qlct.user_id = $2 AND cn.deleted_at IS NULL`,
       [cnId, userId],
     );
     if (!check.rows.length) {

@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useCongNhanDetail, useCapNhatCongNhan, useNoiOCongNhan, useTongUngCongNhan, useNoiOTruyCap } from '../../hooks/useCongNhan';
-import { useGiaoDichCongNhan, useToggleHoanTien } from '../../hooks/useTaiChinh';
+import { useGiaoDichCongNhan, useToggleHoanTien, useTaoGiaoDich } from '../../hooks/useTaiChinh';
 import { useLichSuPhong, usePhongList, useGiuongList } from '../../hooks/useKtx';
 import { useChamCongCongNhan } from '../../hooks/useChamCong';
 import { useHoatDongCongNhan } from '../../hooks/useHoatDong';
@@ -448,7 +448,7 @@ function EditModal({ cn, onClose, noiOHienTai, isAdmin }) {
 export default function CongNhanDetail() {
   const { id }     = useParams();
   const navigate   = useNavigate();
-  const { isAdmin, isQuanLy } = useAuth();
+  const { user, isAdmin, isQuanLy } = useAuth();
   const { data, isLoading, isError } = useCongNhanDetail(id);
   const cn = data?.data;
 
@@ -474,6 +474,7 @@ export default function CongNhanDetail() {
   const [chuyenKhoanModal, setChuyenKhoanModal] = useState(false);
   const [anhModal,         setAnhModal]         = useState(false);
   const [previewImage, setPreviewImage] = useState(null);
+  const [choUngModal, setChoUngModal] = useState(false);
   const capNhatXe = useCapNhatCongNhan(cn?.id);
   const toggleHoan = useToggleHoanTien();
 
@@ -504,6 +505,22 @@ export default function CongNhanDetail() {
 
   const pill = TRANG_THAI_PILL[cn.trang_thai] ?? TRANG_THAI_PILL.moi_vao;
   const canEdit = isAdmin || isQuanLy;
+
+  // Quyền cho ứng (tạm ứng):
+  // - admin   : luôn được
+  // - quan_ly : CN thuộc công ty mình quản lý
+  // - vender / cong_tac_vien : CN do mình tuyển
+  const canChoUng = (() => {
+    if (!user || !cn) return false;
+    if (user.vai_tro === 'admin') return true;
+    if (user.vai_tro === 'quan_ly') {
+      return Array.isArray(user.cong_ty_ids) && user.cong_ty_ids.includes(cn.cong_ty_id);
+    }
+    if (user.vai_tro === 'vender' || user.vai_tro === 'cong_tac_vien') {
+      return cn.nguoi_tuyen_id === user.id;
+    }
+    return false;
+  })();
 
   const daNghi = cn.trang_thai === 'nghi_viec' || !!cn.ngay_nghi_viec;
   const khauTruDongPhuc = daNghi && !cn.da_tra_dong_phuc ? Number(cn.tien_dong_phuc ?? 0) : 0;
@@ -740,7 +757,15 @@ export default function CongNhanDetail() {
 
         {/* Tổng tạm ứng */}
         <div className="cn-detail-card" style={s.card}>
-          <div style={s.cardTitle}>Tạm ứng</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <div style={s.cardTitle}>Tạm ứng</div>
+            {canChoUng && (
+              <button className="btn-primary" onClick={() => setChoUngModal(true)}
+                style={{ padding: '6px 12px', fontSize: 12 }}>
+                + Cho ứng
+              </button>
+            )}
+          </div>
           <div className="cn-detail-fields" style={s.fields}>
             <Field label="Tổng đã ứng">
               <span style={{ fontSize: 16, fontWeight: 700, color: 'var(--amber)', fontFamily: "'JetBrains Mono', monospace" }}>{fmt(tongUng.tong_ung)}</span>
@@ -937,6 +962,7 @@ export default function CongNhanDetail() {
       {editModal        && <EditModal          cn={cn} noiOHienTai={noiO} isAdmin={isAdmin} onClose={() => setEditModal(false)} />}
       {chuyenKhoanModal && <ChuyenKhoanModal   cn={cn} onClose={() => setChuyenKhoanModal(false)} />}
       {anhModal         && <UploadAnhModal      cn={cn} onClose={() => setAnhModal(false)} />}
+      {choUngModal      && <ChoUngModal         cn={cn} onClose={() => setChoUngModal(false)} />}
       {previewImage && (
         <ImageViewer
           src={previewImage.src}
@@ -944,6 +970,63 @@ export default function CongNhanDetail() {
           onClose={() => setPreviewImage(null)}
         />
       )}
+    </div>
+  );
+}
+
+function ChoUngModal({ cn, onClose }) {
+  const tao = useTaoGiaoDich();
+  const [soTien, setSoTien] = useState('');
+  const [ngay, setNgay]     = useState(new Date().toISOString().slice(0, 10));
+  const [ghiChu, setGhiChu] = useState('');
+  const [err, setErr]       = useState('');
+
+  async function submit() {
+    setErr('');
+    const n = Number(soTien);
+    if (!Number.isFinite(n) || n <= 0) { setErr('Số tiền phải > 0'); return; }
+    try {
+      await tao.mutateAsync({
+        cong_nhan_id: cn.id,
+        loai: 'tam_ung',
+        so_tien: n,
+        ngay,
+        ghi_chu: ghiChu || undefined,
+      });
+      onClose();
+    } catch (e) {
+      setErr(e?.response?.data?.error?.message ?? 'Không tạo được giao dịch');
+    }
+  }
+
+  return (
+    <div style={M.overlay} onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div style={{ ...M.modal, maxWidth: 460 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text1)' }}>
+            Cho ứng — {cn.ho_ten}
+          </div>
+          <button onClick={onClose}
+            style={{ background: 'transparent', border: 'none', fontSize: 22, color: 'var(--text2)', cursor: 'pointer' }}>×</button>
+        </div>
+        <div style={{ display: 'grid', gap: 10 }}>
+          <label className="form-label">Số tiền (VNĐ) *</label>
+          <input className="form-input" type="number" autoFocus value={soTien}
+            onChange={(e) => setSoTien(e.target.value)} placeholder="500000" />
+          <label className="form-label">Ngày ứng</label>
+          <input className="form-input" type="date" value={ngay} onChange={(e) => setNgay(e.target.value)} />
+          <label className="form-label">Ghi chú</label>
+          <input className="form-input" value={ghiChu} onChange={(e) => setGhiChu(e.target.value)}
+            placeholder="Vd: ứng tiền xăng" />
+        </div>
+        {err && <div style={{ color: 'var(--red)', fontSize: 12, marginTop: 8 }}>{err}</div>}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 14 }}>
+          <button className="btn-ghost"   onClick={onClose}>Hủy</button>
+          <button className="btn-primary" onClick={submit} disabled={tao.isPending}>
+            {tao.isPending ? 'Đang lưu...' : 'Cho ứng'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

@@ -35,6 +35,16 @@ router.get('/venders', requireRole('admin', 'quan_ly'), asyncWrapper(async (_req
   sendSuccess(res, result.rows);
 }));
 
+// GET /api/users/assignable — danh sách user tối thiểu (id, ho_ten, vai_tro)
+// Dùng cho dropdown gán việc todo. Mọi user authenticated đều xem được.
+router.get('/assignable', asyncWrapper(async (_req, res) => {
+  const result = await db.query(
+    `SELECT id, ho_ten, vai_tro
+     FROM users WHERE active = TRUE ORDER BY ho_ten`,
+  );
+  sendSuccess(res, result.rows);
+}));
+
 // GET /api/users — danh sách toàn bộ user (admin)
 router.get('/', requireRole('admin'), asyncWrapper(async (req, res) => {
   const rows = await userModel.findAll({ vai_tro: req.query.vai_tro });

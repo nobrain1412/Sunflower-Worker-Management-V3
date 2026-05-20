@@ -5,6 +5,8 @@ import { useAuth } from '../../context/AuthContext';
 import { isEmbeddableMapUrl, normalizeMapUrl } from '../../constants/mapUrl';
 import MediaUploader from '../../components/MediaUploader';
 import RateCongTyPanel from './RateCongTyPanel';
+import DeXuatModal from './DeXuatModal';
+import useIsMobile from '../../hooks/useIsMobile';
 
 function toMediaArray(v) { return Array.isArray(v) ? v : []; }
 
@@ -133,7 +135,9 @@ const EMPTY_FORM = {
 };
 
 export default function CongTy() {
-  const { isAdmin } = useAuth();
+  const { user, isAdmin } = useAuth();
+  const isQuanLy = user?.vai_tro === 'quan_ly';
+  const isMobile = useIsMobile();
   const { data: res, isLoading } = useCongTyData();
   const capNhat = useCapNhat();
   const taoMoi  = useTaoMoi();
@@ -145,8 +149,15 @@ export default function CongTy() {
   const [addModal,   setAddModal]   = useState(false);
   const [form,       setForm]       = useState(EMPTY_FORM);
   const [errMsg,     setErrMsg]     = useState('');
+  const [deXuatMode, setDeXuatMode] = useState(null); // 'tao_moi' | 'sua_doi' | null
 
-  const selected = list.find((c) => c.id === selectedId) ?? list[0] ?? null;
+  // Desktop: auto-chọn cty đầu. Mobile: chỉ chọn khi user click → list-first UX.
+  const selected = list.find((c) => c.id === selectedId)
+    ?? (isMobile ? null : list[0])
+    ?? null;
+  // Mobile collapse: ẩn list khi đang xem chi tiết, ẩn detail khi đang xem list
+  const showList   = !isMobile || !selected;
+  const showDetail = !isMobile ||  selected;
   const selectedMapUrl = normalizeMapUrl(selected?.map_url ?? '');
   const canEmbedSelectedMap = isEmbeddableMapUrl(selected?.map_url ?? '');
 
@@ -228,11 +239,16 @@ export default function CongTy() {
     <div style={s.root}>
       <div className="cong-ty-main">
         {/* Danh sách công ty */}
+        {showList && (
         <div style={s.card}>
           <div style={s.cardHeader}>
             <div style={s.cardTitle}>Công ty</div>
             {isAdmin && (
               <button className="btn-primary" style={{ padding: '6px 12px', fontSize: 12 }} onClick={() => { setForm(EMPTY_FORM); setAddModal(true); setErrMsg(''); }}>+ Thêm</button>
+            )}
+            {isQuanLy && (
+              <button className="btn-primary" style={{ padding: '6px 12px', fontSize: 12 }}
+                onClick={() => setDeXuatMode('tao_moi')}>+ Đề xuất tạo mới</button>
             )}
           </div>
           {list.map((ct) => (
@@ -253,10 +269,17 @@ export default function CongTy() {
             <div style={{ padding: '24px 0', textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>Chưa có công ty nào</div>
           )}
         </div>
+        )}
 
         {/* Chi tiết */}
-        {selected ? (
+        {showDetail && (selected ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {isMobile && (
+              <button className="btn-ghost" onClick={() => setSelectedId(null)}
+                style={{ alignSelf: 'flex-start', fontSize: 12, padding: '6px 10px' }}>
+                ← Danh sách công ty
+              </button>
+            )}
             {/* Profile card */}
             <div style={s.card}>
               <div style={s.cardHeader}>
@@ -265,9 +288,16 @@ export default function CongTy() {
                   <div style={{ fontSize: 12, color: 'var(--text2)', marginTop: 2 }}>{selected.dia_chi ?? '—'}</div>
                 </div>
                 <div style={{ display: 'flex', gap: 8 }}>
-                  <button className="btn-ghost" onClick={editing ? () => setEditing(false) : openEdit}>
-                    {editing ? 'Hủy' : '✏️ Chỉnh sửa'}
-                  </button>
+                  {isAdmin && (
+                    <button className="btn-ghost" onClick={editing ? () => setEditing(false) : openEdit}>
+                      {editing ? 'Hủy' : '✏️ Chỉnh sửa'}
+                    </button>
+                  )}
+                  {isQuanLy && !editing && (
+                    <button className="btn-ghost" onClick={() => setDeXuatMode('sua_doi')}>
+                      ✏️ Đề xuất sửa
+                    </button>
+                  )}
                   {isAdmin && !editing && (
                     <button
                       onClick={async () => {
@@ -381,7 +411,7 @@ export default function CongTy() {
           <div style={{ ...s.card, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 200 }}>
             <div style={{ color: 'var(--text3)', fontSize: 13 }}>Chọn một công ty để xem chi tiết</div>
           </div>
-        )}
+        ))}
       </div>
 
       {/* Modal thêm mới */}
@@ -426,6 +456,15 @@ export default function CongTy() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Modal đề xuất tạo mới / sửa cho quản lý */}
+      {deXuatMode && (
+        <DeXuatModal
+          mode={deXuatMode}
+          congTy={deXuatMode === 'sua_doi' ? selected : null}
+          onClose={() => setDeXuatMode(null)}
+        />
       )}
     </div>
   );

@@ -84,7 +84,9 @@ const NAV = [
   },
   {
     to: '/cong-ty', label: 'Công ty',
-    roles: ['admin'],
+    // Mọi role đều xem được danh sách công ty.
+    // Admin tạo/sửa trực tiếp; quản lý submit đề xuất ngay trên trang này.
+    roles: ['admin', 'quan_ly', 'ke_toan', 'vender', 'cong_tac_vien'],
     icon: (
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
         <rect x="2" y="7" width="20" height="14" rx="2" stroke="currentColor" strokeWidth="2"/>
@@ -93,8 +95,8 @@ const NAV = [
     ),
   },
   {
-    to: '/cong-ty/de-xuat', label: 'Đề xuất công ty',
-    roles: ['admin', 'quan_ly'],
+    to: '/cong-ty/de-xuat', label: 'Duyệt đề xuất',
+    roles: ['admin'],  // chỉ admin xem queue duyệt
     icon: (
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
         <path d="M9 11l3 3L22 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>

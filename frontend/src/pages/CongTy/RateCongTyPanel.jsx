@@ -13,7 +13,7 @@ export default function RateCongTyPanel({ congTyId, canEdit }) {
 
   const ratesQ = useQuery({
     queryKey: ['cong-ty-rates', congTyId],
-    queryFn:  () => api.get(`/cong-ty/${congTyId}/rates`).then((r) => r.data?.data ?? []),
+    queryFn:  () => api.get(`/cong-ty/${congTyId}/rates`).then((r) => r.data ?? []),
     enabled:  !!congTyId,
   });
 
@@ -22,8 +22,8 @@ export default function RateCongTyPanel({ congTyId, canEdit }) {
     queryKey: ['users-vender-ctv'],
     queryFn:  async () => {
       const [v, c] = await Promise.all([
-        api.get('/users', { params: { vai_tro: 'vender' } }).then((r) => r.data?.data ?? []),
-        api.get('/users', { params: { vai_tro: 'cong_tac_vien' } }).then((r) => r.data?.data ?? []),
+        api.get('/users', { params: { vai_tro: 'vender' } }).then((r) => r.data ?? []),
+        api.get('/users', { params: { vai_tro: 'cong_tac_vien' } }).then((r) => r.data ?? []),
       ]);
       return [...v, ...c];
     },

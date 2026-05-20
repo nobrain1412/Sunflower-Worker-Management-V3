@@ -37,12 +37,21 @@ async function chiTiet(id, scope, vaiTro) {
     err.code = 'NOT_FOUND';
     throw err;
   }
-  // Kiểm tra quyền xem: vender chỉ xem CN mình tuyển
+  // Kiểm tra quyền xem
+  // - vender/CTV: chỉ xem CN mình tuyển
+  // - quản lý:    chỉ xem CN thuộc công ty mình quản lý
   if (scope?.type === 'vender' && congNhan.nguoi_tuyen_id !== scope.userId) {
     const err = new Error('Bạn không có quyền xem công nhân này');
-    err.statusCode = 403;
-    err.code = 'FORBIDDEN';
+    err.statusCode = 403; err.code = 'FORBIDDEN';
     throw err;
+  }
+  if (scope?.type === 'cong_ty') {
+    const allowed = (scope.ids ?? []).includes(congNhan.cong_ty_id);
+    if (!allowed) {
+      const err = new Error('Bạn không có quyền xem công nhân này');
+      err.statusCode = 403; err.code = 'FORBIDDEN';
+      throw err;
+    }
   }
   return sanitizeForRole(congNhan, vaiTro);
 }

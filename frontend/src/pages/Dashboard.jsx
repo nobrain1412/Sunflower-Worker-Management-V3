@@ -9,6 +9,7 @@ import { useAuth } from '../context/AuthContext';
 import { useDashboard } from '../hooks/useDashboard';
 import { useHoatDongLienQuan, useHoatDongCuaToi } from '../hooks/useHoatDong';
 import useIsMobile from '../hooks/useIsMobile';
+import TodoWidget from '../components/TodoWidget';
 
 const DONUT_COLORS = ['#4f7cff', '#7b5fff', '#2dd4bf', '#22c986', '#ffb344', '#ff5f72', '#545870'];
 
@@ -427,8 +428,11 @@ function AdminDashboard() {
         </div>
       </div>
 
-      {/* Row 4: Activity + KTX (đưa xuống dưới) */}
+      {/* Todo widget + Activity row */}
       <div className="dash-row">
+        <div style={{ ...s.card, flex: 1, minWidth: 320 }}>
+          <TodoWidget />
+        </div>
         <div style={{ ...s.card, flex: 1, minWidth: 220 }}>
           <div style={s.cardHeader}>
             <div style={s.cardTitle}>Hoạt động gần đây</div>
@@ -653,6 +657,11 @@ function QuanLyDashboard() {
         )}
       </div>
 
+      {/* Todo widget */}
+      <div style={s.card}>
+        <TodoWidget />
+      </div>
+
       {/* Hoạt động gần đây — liên quan đến CN trong công ty user quản lý */}
       <div style={s.card}>
         <div style={s.cardHeader}>
@@ -807,6 +816,11 @@ function VenderDashboard() {
             </tbody>
           </table>
         )}
+      </div>
+
+      {/* Todo widget */}
+      <div style={s.card}>
+        <TodoWidget />
       </div>
 
       {/* Hoạt động của tôi */}

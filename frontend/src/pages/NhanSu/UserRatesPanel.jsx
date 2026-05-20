@@ -13,12 +13,12 @@ export default function UserRatesPanel({ userId, vaiTro }) {
 
   const ratesQ = useQuery({
     queryKey: ['user-rates', userId],
-    queryFn:  () => api.get(`/users/${userId}/rates`).then((r) => r.data?.data ?? []),
+    queryFn:  () => api.get(`/users/${userId}/rates`).then((r) => r.data ?? []),
   });
 
   const ctysQ = useQuery({
     queryKey: ['cong-ty-list-min'],
-    queryFn:  () => api.get('/cong-ty', { params: { limit: 100 } }).then((r) => r.data?.data ?? []),
+    queryFn:  () => api.get('/cong-ty', { params: { limit: 100 } }).then((r) => r.data ?? []),
     enabled:  isAdmin,
   });
 

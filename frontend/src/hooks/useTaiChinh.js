@@ -48,8 +48,9 @@ export function useTaoGiaoDich() {
   return useMutation({
     mutationFn: (data) => api.post('/tai-chinh', data),
     onSuccess:  () => {
-      qc.invalidateQueries({ queryKey: ['tai-chinh', 'giao-dich'] });
-      qc.invalidateQueries({ queryKey: ['tai-chinh', 'tong'] });
+      // Sync mọi view tài chính: list chung, tổng, theo CN, tổng tạm ứng CN
+      qc.invalidateQueries({ queryKey: ['tai-chinh'] });
+      qc.invalidateQueries({ queryKey: ['cong-nhan'] });
     },
   });
 }

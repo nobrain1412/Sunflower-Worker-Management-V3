@@ -461,4 +461,51 @@ CREATE INDEX idx_ocr_quet_trang_thai ON ocr_quet(trang_thai);
 CREATE TRIGGER trg_ocr_quet_updated_at BEFORE UPDATE ON ocr_quet
   FOR EACH ROW EXECUTE FUNCTION fn_update_updated_at();
 
+-- ═════════════════════════════════════════════════════════════
+-- 17. TODO_CATEGORY + TODO_TASK — todo list cá nhân
+-- ═════════════════════════════════════════════════════════════
+CREATE TABLE todo_category (
+  id          SERIAL PRIMARY KEY,
+  ten         VARCHAR(100) NOT NULL,
+  icon        VARCHAR(20),
+  mau_sac     VARCHAR(20),
+  thu_tu      SMALLINT NOT NULL DEFAULT 100,
+  active      BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX idx_todo_cat_active ON todo_category(active);
+CREATE TRIGGER trg_todo_cat_updated_at BEFORE UPDATE ON todo_category
+  FOR EACH ROW EXECUTE FUNCTION fn_update_updated_at();
+
+INSERT INTO todo_category (ten, icon, mau_sac, thu_tu) VALUES
+  ('Đón công nhân mới xuống',    '🚌', 'accent', 10),
+  ('Đón công nhân ra công ty',    '🏭', 'teal',   20),
+  ('Đón công nhân về',            '🏠', 'amber',  30),
+  ('Mua đồ cho công nhân',        '🛒', 'green',  40),
+  ('Khác',                        '📝', 'text2',  99);
+
+CREATE TABLE todo_task (
+  id            SERIAL PRIMARY KEY,
+  tieu_de       VARCHAR(300) NOT NULL,
+  mo_ta         TEXT,
+  category_id   INT REFERENCES todo_category(id) ON DELETE SET NULL,
+  assignee_id   INT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+  created_by    INT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+  cong_nhan_id  INT REFERENCES cong_nhan(id) ON DELETE SET NULL,
+  han           DATE,
+  hoan_thanh    BOOLEAN NOT NULL DEFAULT FALSE,
+  hoan_thanh_at TIMESTAMPTZ,
+  hoan_thanh_by INT REFERENCES users(id) ON DELETE SET NULL,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX idx_todo_assignee   ON todo_task(assignee_id);
+CREATE INDEX idx_todo_created_by ON todo_task(created_by);
+CREATE INDEX idx_todo_hoan_thanh ON todo_task(hoan_thanh);
+CREATE INDEX idx_todo_category   ON todo_task(category_id);
+CREATE INDEX idx_todo_cong_nhan  ON todo_task(cong_nhan_id);
+CREATE TRIGGER trg_todo_task_updated_at BEFORE UPDATE ON todo_task
+  FOR EACH ROW EXECUTE FUNCTION fn_update_updated_at();
+
 COMMIT;

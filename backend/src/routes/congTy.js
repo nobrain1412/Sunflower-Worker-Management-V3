@@ -1,7 +1,7 @@
 const { Router } = require('express');
 const { z } = require('zod');
 const validate = require('../middleware/validate');
-const { requireRole, blockVender } = require('../middleware/auth');
+const { authenticate, requireRole } = require('../middleware/auth');
 const ctrl = require('../controllers/congTyController');
 
 const router = Router();
@@ -50,12 +50,9 @@ const capNhatSchema = taoMoiSchema.extend({
   active: z.boolean().optional(),
 }).partial();
 
-// Vender không được xem thông tin công ty
-router.use(blockVender);
-
-// Xem: admin, quan_ly, ke_toan (kế toán cần biết cấu hình lương để chốt công)
-router.get('/',    requireRole('admin', 'quan_ly', 'ke_toan'), ctrl.getDanhSach);
-router.get('/:id', requireRole('admin', 'quan_ly', 'ke_toan'), ctrl.getChiTiet);
+// Xem: mọi role authenticated (kể cả vender, CTV) — chỉ thông tin chung
+router.get('/',    authenticate, ctrl.getDanhSach);
+router.get('/:id', authenticate, ctrl.getChiTiet);
 
 // Tạo/sửa: chỉ admin
 router.post('/',    requireRole('admin'), validate(taoMoiSchema),  ctrl.postTaoMoi);

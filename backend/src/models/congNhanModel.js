@@ -20,8 +20,15 @@ async function findAll({ page = 1, limit = 20, sort = 'ho_ten', order = 'asc', t
   if (scope?.type === 'vender') {
     params.push(scope.userId);
     conditions.push(`cn.nguoi_tuyen_id = $${params.length}`);
-  } else if (scope?.type === 'cong_ty' && scope.ids?.length > 0) {
-    // TODO: filter qua phan_cong khi bảng đó được tạo
+  } else if (scope?.type === 'cong_ty') {
+    // Quản lý: chỉ thấy CN thuộc các công ty mình quản lý.
+    // Nếu chưa được gán công ty nào → không thấy CN nào.
+    if (scope.ids?.length > 0) {
+      params.push(scope.ids);
+      conditions.push(`cn.cong_ty_id = ANY($${params.length}::int[])`);
+    } else {
+      conditions.push(`1 = 0`);
+    }
   }
 
   // Filter user-supplied (admin/quản lý)
