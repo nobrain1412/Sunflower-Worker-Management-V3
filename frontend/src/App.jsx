@@ -17,6 +17,7 @@ import ImportChamCong from './pages/ChamCong/ImportExcel';
 import TaiChinh       from './pages/TaiChinh/index';
 import KTX            from './pages/KTX/index';
 import CongTy         from './pages/CongTy/index';
+import CongTyDeXuat   from './pages/CongTy/DeXuatPage';
 import BaoCao         from './pages/BaoCao/index';
 import NhanSu         from './pages/NhanSu/index';
 import NhanVienDetail from './pages/NhanSu/Detail';
@@ -93,6 +94,9 @@ export default function App() {
 
             <Route path="/cong-ty" element={
               <RoleRoute allowedRoles={['admin']}><CongTy /></RoleRoute>
+            } />
+            <Route path="/cong-ty/de-xuat" element={
+              <RoleRoute allowedRoles={['admin','quan_ly']}><CongTyDeXuat /></RoleRoute>
             } />
             <Route path="/nhan-su" element={
               <RoleRoute allowedRoles={['admin']}><NhanSu /></RoleRoute>
