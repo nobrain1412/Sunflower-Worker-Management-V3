@@ -2,7 +2,7 @@ const congNhanModel = require('../models/congNhanModel');
 const hoatDongLog = require('../models/hoatDongLogModel');
 const { sanitizeForRole, sanitizeListForRole } = require('../utils/sanitizeCongNhan');
 
-async function danhSach(query, scope, vaiTro) {
+async function danhSach(query, scope, vaiTro, viewerId) {
   const page  = Math.max(1, parseInt(query.page  || '1',  10));
   const limit = Math.min(100, Math.max(1, parseInt(query.limit || '20', 10)));
 
@@ -24,12 +24,12 @@ async function danhSach(query, scope, vaiTro) {
   });
 
   return {
-    data: sanitizeListForRole(rows, vaiTro),
+    data: sanitizeListForRole(rows, vaiTro, viewerId),
     meta: { page, limit, total, total_pages: Math.ceil(total / limit) },
   };
 }
 
-async function chiTiet(id, scope, vaiTro) {
+async function chiTiet(id, scope, vaiTro, viewerId) {
   const congNhan = await congNhanModel.findById(id);
   if (!congNhan) {
     const err = new Error('Không tìm thấy công nhân');
@@ -53,7 +53,7 @@ async function chiTiet(id, scope, vaiTro) {
       throw err;
     }
   }
-  return sanitizeForRole(congNhan, vaiTro);
+  return sanitizeForRole(congNhan, vaiTro, viewerId);
 }
 
 async function taoMoi(data) {
@@ -70,7 +70,26 @@ async function taoMoi(data) {
   return congNhanModel.create(data);
 }
 
-async function capNhat(id, data, actorUserId = null) {
+// Đồng bộ bảng phan_cong khi CN đổi công ty hoặc nghỉ việc.
+// - Đóng phan_cong đang active (ngay_ket_thuc IS NULL) → set ngay_ket_thuc = endDate
+// - Nếu newCongTyId không null → tạo phan_cong mới với ngay_bat_dau = startDate
+async function syncPhanCong({ congNhanId, newCongTyId, endDate, startDate }) {
+  const db = require('../utils/db');
+  await db.query(
+    `UPDATE phan_cong SET ngay_ket_thuc = $1
+      WHERE cong_nhan_id = $2 AND ngay_ket_thuc IS NULL`,
+    [endDate, congNhanId],
+  );
+  if (newCongTyId) {
+    await db.query(
+      `INSERT INTO phan_cong (cong_nhan_id, cong_ty_id, ngay_bat_dau)
+       VALUES ($1, $2, $3)`,
+      [congNhanId, newCongTyId, startDate],
+    );
+  }
+}
+
+async function capNhat(id, data, actorUserId = null, scope = null) {
   // Nếu có cập nhật CCCD, kiểm tra trùng
   if (data.cccd) {
     const existing = await congNhanModel.findByCccd(data.cccd, id);
@@ -85,12 +104,40 @@ async function capNhat(id, data, actorUserId = null) {
   // Snapshot trước khi update để so sánh, ghi audit log
   const before = await congNhanModel.findById(id);
 
+  // Kiểm tra quyền sửa theo scope
+  if (before && scope) {
+    if (scope.type === 'vender' && before.nguoi_tuyen_id !== scope.userId) {
+      const err = new Error('Bạn chỉ được sửa CN do mình tuyển');
+      err.statusCode = 403; err.code = 'FORBIDDEN'; throw err;
+    }
+    if (scope.type === 'cong_ty' && !(scope.ids ?? []).includes(before.cong_ty_id)) {
+      const err = new Error('Bạn chỉ được sửa CN thuộc công ty mình quản lý');
+      err.statusCode = 403; err.code = 'FORBIDDEN'; throw err;
+    }
+  }
+
   const updated = await congNhanModel.update(id, data);
   if (!updated) {
     const err = new Error('Không tìm thấy công nhân');
     err.statusCode = 404;
     err.code = 'NOT_FOUND';
     throw err;
+  }
+
+  // Đồng bộ phan_cong khi cong_ty_id đổi
+  if (before && 'cong_ty_id' in data && before.cong_ty_id !== updated.cong_ty_id) {
+    const today = new Date().toISOString().slice(0, 10);
+    try {
+      await syncPhanCong({
+        congNhanId: id,
+        newCongTyId: updated.cong_ty_id,
+        endDate: data.ngay_nghi_viec || today,
+        startDate: today,
+      });
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn('phan_cong sync failed:', e.message);
+    }
   }
 
   // Audit log các thay đổi quan trọng — fire-and-forget, không chặn response

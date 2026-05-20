@@ -64,7 +64,8 @@ async function findTasks({ userId, scope = 'both', includeDone = true, limit = 2
   params.push(limit);
   const r = await db.query(
     `SELECT t.id, t.tieu_de, t.mo_ta, t.category_id, t.assignee_id, t.created_by,
-            t.cong_nhan_id, t.han, t.hoan_thanh, t.hoan_thanh_at, t.hoan_thanh_by,
+            t.cong_nhan_id, t.han, t.gio_lam,
+            t.hoan_thanh, t.hoan_thanh_at, t.hoan_thanh_by,
             t.created_at, t.updated_at,
             c.ten   AS category_ten,
             c.icon  AS category_icon,
@@ -95,21 +96,21 @@ async function findTaskById(id) {
 
 async function createTask({
   tieu_de, mo_ta, category_id, assignee_id, created_by,
-  cong_nhan_id, han,
+  cong_nhan_id, han, gio_lam,
 }) {
   const r = await db.query(
     `INSERT INTO todo_task
-       (tieu_de, mo_ta, category_id, assignee_id, created_by, cong_nhan_id, han)
-     VALUES ($1,$2,$3,$4,$5,$6,$7)
+       (tieu_de, mo_ta, category_id, assignee_id, created_by, cong_nhan_id, han, gio_lam)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
      RETURNING *`,
     [tieu_de, mo_ta ?? null, category_id ?? null,
-     assignee_id, created_by, cong_nhan_id ?? null, han ?? null],
+     assignee_id, created_by, cong_nhan_id ?? null, han ?? null, gio_lam ?? null],
   );
   return r.rows[0];
 }
 
 async function updateTask(id, data) {
-  const allowed = ['tieu_de', 'mo_ta', 'category_id', 'assignee_id', 'cong_nhan_id', 'han'];
+  const allowed = ['tieu_de', 'mo_ta', 'category_id', 'assignee_id', 'cong_nhan_id', 'han', 'gio_lam'];
   const fields = [], params = [];
   for (const f of allowed) {
     if (f in data) { params.push(data[f]); fields.push(`${f} = $${params.length}`); }

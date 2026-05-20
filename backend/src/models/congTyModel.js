@@ -26,6 +26,7 @@ async function findAll({ page = 1, limit = 20, sort = 'ten_cong_ty', order = 'as
             luong_tc_ngay, luong_hc_dem, luong_tc_dem, luong_chu_nhat, luong_ngay_le,
             tien_dong_phuc, tien_phat_nghi,
             tro_cap, chuyen_can, ngay_chot_cong,
+            tien_cong_quan_ly_theo_gio,
             mo_ta_cong_viec, media_urls,
             active, created_at
      FROM cong_ty ${where}
@@ -48,6 +49,7 @@ async function create(data) {
           luong_tc_ngay, luong_hc_dem, luong_tc_dem, luong_chu_nhat, luong_ngay_le,
           tien_dong_phuc, tien_phat_nghi,
           tro_cap, chuyen_can, ngay_chot_cong,
+          tien_cong_quan_ly_theo_gio,
           mo_ta_cong_viec, media_urls,
           ghi_chu } = data;
 
@@ -58,15 +60,17 @@ async function create(data) {
         luong_tc_ngay, luong_hc_dem, luong_tc_dem, luong_chu_nhat, luong_ngay_le,
         tien_dong_phuc, tien_phat_nghi,
         tro_cap, chuyen_can, ngay_chot_cong,
+        tien_cong_quan_ly_theo_gio,
         mo_ta_cong_viec, media_urls,
         ghi_chu)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
      RETURNING *`,
     [ten_cong_ty, dia_chi ?? null, map_url ?? null, so_dien_thoai ?? null, email ?? null,
      luong_co_ban ?? 0, luong_theo_gio ?? 0, he_so_ot ?? 1.5, ngay_lam_chuan ?? 26,
      luong_tc_ngay ?? 0, luong_hc_dem ?? 0, luong_tc_dem ?? 0, luong_chu_nhat ?? 0, luong_ngay_le ?? 0,
      tien_dong_phuc ?? 0, tien_phat_nghi ?? 0,
      tro_cap ?? 0, chuyen_can ?? 0, ngay_chot_cong ?? 25,
+     tien_cong_quan_ly_theo_gio ?? 0,
      mo_ta_cong_viec ?? null, JSON.stringify(media_urls ?? []),
      ghi_chu ?? null],
   );
@@ -79,6 +83,7 @@ async function update(id, data) {
                    'luong_tc_ngay', 'luong_hc_dem', 'luong_tc_dem', 'luong_chu_nhat', 'luong_ngay_le',
                    'tien_dong_phuc', 'tien_phat_nghi',
                    'tro_cap', 'chuyen_can', 'ngay_chot_cong',
+                   'tien_cong_quan_ly_theo_gio',
                    'mo_ta_cong_viec', 'media_urls',
                    'active', 'ghi_chu'];
   const fields = [];

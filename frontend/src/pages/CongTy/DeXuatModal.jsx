@@ -26,7 +26,6 @@ const SECTIONS = [
     fields: [
       { key: 'luong_co_ban',    label: 'Lương cơ bản (đ/tháng)', type: 'number' },
       { key: 'luong_theo_gio',  label: 'Lương theo giờ (đ/giờ)', type: 'number' },
-      { key: 'he_so_ot',        label: 'Hệ số OT (mặc định 1.5)', type: 'number', step: '0.1' },
       { key: 'ngay_lam_chuan',  label: 'Số ngày làm chuẩn/tháng', type: 'number' },
       { key: 'ngay_chot_cong',  label: 'Ngày chốt công (1-31)', type: 'number' },
     ],
@@ -48,6 +47,7 @@ const SECTIONS = [
       { key: 'tien_phat_nghi', label: 'Tiền phạt nghỉ', type: 'number' },
       { key: 'tro_cap',        label: 'Trợ cấp',        type: 'number' },
       { key: 'chuyen_can',     label: 'Chuyên cần',     type: 'number' },
+      { key: 'tien_cong_quan_ly_theo_gio', label: 'Tiền công quản lý (VNĐ/giờ)', type: 'number' },
     ],
   },
 ];

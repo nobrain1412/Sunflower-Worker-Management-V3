@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useCongNhanDetail, useCapNhatCongNhan, useNoiOCongNhan, useTongUngCongNhan, useNoiOTruyCap } from '../../hooks/useCongNhan';
+import { useCongNhanDetail, useCapNhatCongNhan, useNoiOCongNhan, useTongUngCongNhan, useNoiOTruyCap, useCongTyList } from '../../hooks/useCongNhan';
 import { useGiaoDichCongNhan, useToggleHoanTien, useTaoGiaoDich } from '../../hooks/useTaiChinh';
 import { useLichSuPhong, usePhongList, useGiuongList } from '../../hooks/useKtx';
 import { useChamCongCongNhan } from '../../hooks/useChamCong';
@@ -475,8 +475,30 @@ export default function CongNhanDetail() {
   const [anhModal,         setAnhModal]         = useState(false);
   const [previewImage, setPreviewImage] = useState(null);
   const [choUngModal, setChoUngModal] = useState(false);
+  const [doiCtyModal, setDoiCtyModal] = useState(false);
   const capNhatXe = useCapNhatCongNhan(cn?.id);
+  const capNhatCty = useCapNhatCongNhan(cn?.id);
   const toggleHoan = useToggleHoanTien();
+
+  async function handleNghiViec() {
+    if (!cn) return;
+    if (!window.confirm(
+      `Xác nhận chuyển ${cn.ho_ten} sang trạng thái NGHỈ VIỆC?\n\n` +
+      `- Công ty hiện tại: ${cn.ten_cong_ty ?? '—'} → bỏ trống\n` +
+      `- Ngày nghỉ việc: hôm nay\n` +
+      `- Bảng công của công ty cũ sẽ được đóng lại.`
+    )) return;
+    const today = new Date().toISOString().slice(0, 10);
+    try {
+      await capNhatCty.mutateAsync({
+        trang_thai: 'nghi_viec',
+        cong_ty_id: null,
+        ngay_nghi_viec: today,
+      });
+    } catch (e) {
+      alert(e?.response?.data?.error?.message ?? 'Không cập nhật được');
+    }
+  }
 
   async function handleToggleHoan(g) {
     try {
@@ -505,6 +527,24 @@ export default function CongNhanDetail() {
 
   const pill = TRANG_THAI_PILL[cn.trang_thai] ?? TRANG_THAI_PILL.moi_vao;
   const canEdit = isAdmin || isQuanLy;
+
+  // Quyền xem 3 thông tin cá nhân (mượn xe / nơi ở / tổng tạm ứng):
+  // chỉ admin hoặc người tuyển CN — quản lý cty mà không phải người tuyển KHÔNG xem được.
+  const isRecruiter = !!user && cn?.nguoi_tuyen_id === user.id;
+  const canViewPrivate = user?.vai_tro === 'admin' || isRecruiter;
+
+  // Quyền sửa cty / nghỉ việc: admin, QL với CN trong cty mình, vender/CTV với CN mình tuyển
+  const canDoiCty = (() => {
+    if (!user || !cn) return false;
+    if (user.vai_tro === 'admin') return true;
+    if (user.vai_tro === 'quan_ly') {
+      return Array.isArray(user.cong_ty_ids) && user.cong_ty_ids.includes(cn.cong_ty_id);
+    }
+    if (user.vai_tro === 'vender' || user.vai_tro === 'cong_tac_vien') {
+      return cn.nguoi_tuyen_id === user.id;
+    }
+    return false;
+  })();
 
   // Quyền cho ứng (tạm ứng):
   // - admin   : luôn được
@@ -640,7 +680,27 @@ export default function CongNhanDetail() {
           <div style={s.cardTitle}>Thông tin công việc</div>
           <div className="cn-detail-fields" style={s.fields}>
             <Field label="Trạng thái" value={pill.label} />
-            <Field label="Công ty" value={cn.ten_cong_ty} />
+            <Field label="Công ty">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <span>{cn.ten_cong_ty ?? '—'}</span>
+                {canDoiCty && cn.trang_thai !== 'nghi_viec' && (
+                  <>
+                    <button onClick={() => setDoiCtyModal(true)}
+                      style={{ background: 'var(--bg3)', border: '1px solid var(--border2)',
+                        borderRadius: 6, padding: '3px 8px', fontSize: 11, color: 'var(--text2)',
+                        cursor: 'pointer', fontFamily: "'Be Vietnam Pro', sans-serif" }}>
+                      ✏️ Đổi
+                    </button>
+                    <button onClick={handleNghiViec} disabled={capNhatCty.isPending}
+                      style={{ background: 'rgba(255,95,114,0.12)', border: '1px solid rgba(255,95,114,0.4)',
+                        borderRadius: 6, padding: '3px 8px', fontSize: 11, color: 'var(--red)',
+                        cursor: 'pointer', fontFamily: "'Be Vietnam Pro', sans-serif" }}>
+                      🚪 Nghỉ việc
+                    </button>
+                  </>
+                )}
+              </div>
+            </Field>
             <Field label="Ngày vào làm" value={cn.ngay_vao_lam ? new Date(cn.ngay_vao_lam).toLocaleDateString('vi-VN') : null} />
             <Field label="Ngày nghỉ việc" value={cn.ngay_nghi_viec ? new Date(cn.ngay_nghi_viec).toLocaleDateString('vi-VN') : null} />
             <Field label="Người tuyển" value={cn.nguoi_tuyen_ho_ten} />
@@ -649,6 +709,7 @@ export default function CongNhanDetail() {
           </div>
         </div>
 
+        {canViewPrivate && (
         <div className="cn-detail-card" style={s.card}>
           <div style={s.cardTitle}>Mượn xe</div>
           <div className="cn-detail-fields" style={s.fields}>
@@ -671,6 +732,7 @@ export default function CongNhanDetail() {
             </Field>
           </div>
         </div>
+        )}
 
         {/* Khấu trừ */}
         <div className="cn-detail-card" style={s.card}>
@@ -701,7 +763,8 @@ export default function CongNhanDetail() {
           )}
         </div>
 
-        {/* Nơi ở: KTX hoặc Phòng trọ */}
+        {/* Nơi ở: KTX hoặc Phòng trọ — chỉ admin / người tuyển xem */}
+        {canViewPrivate && (
         <div className="cn-detail-card" style={s.card}>
           <div style={s.cardTitle}>Nơi ở hiện tại</div>
           <div style={{ marginBottom: 10 }}>
@@ -754,8 +817,10 @@ export default function CongNhanDetail() {
             </details>
           )}
         </div>
+        )}
 
-        {/* Tổng tạm ứng */}
+        {/* Tổng tạm ứng — chỉ admin / người tuyển xem */}
+        {canViewPrivate && (
         <div className="cn-detail-card" style={s.card}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
             <div style={s.cardTitle}>Tạm ứng</div>
@@ -782,6 +847,7 @@ export default function CongNhanDetail() {
             </Field>
           </div>
         </div>
+        )}
 
         {/* Lịch sử tài chính */}
         <div className="cn-detail-card cn-history-card" style={{ ...s.card, gridColumn: 'span 2' }}>
@@ -963,6 +1029,7 @@ export default function CongNhanDetail() {
       {chuyenKhoanModal && <ChuyenKhoanModal   cn={cn} onClose={() => setChuyenKhoanModal(false)} />}
       {anhModal         && <UploadAnhModal      cn={cn} onClose={() => setAnhModal(false)} />}
       {choUngModal      && <ChoUngModal         cn={cn} onClose={() => setChoUngModal(false)} />}
+      {doiCtyModal      && <DoiCongTyModal      cn={cn} onClose={() => setDoiCtyModal(false)} />}
       {previewImage && (
         <ImageViewer
           src={previewImage.src}
@@ -970,6 +1037,65 @@ export default function CongNhanDetail() {
           onClose={() => setPreviewImage(null)}
         />
       )}
+    </div>
+  );
+}
+
+function DoiCongTyModal({ cn, onClose }) {
+  const capNhat = useCapNhatCongNhan(cn.id);
+  const ctyQuery = useCongTyList();
+  const ctys = ctyQuery.data?.data ?? [];
+  const [newCtyId, setNewCtyId] = useState('');
+  const [err, setErr] = useState('');
+
+  async function submit() {
+    setErr('');
+    if (!newCtyId) { setErr('Chọn công ty mới'); return; }
+    if (Number(newCtyId) === cn.cong_ty_id) { setErr('Vui lòng chọn công ty khác'); return; }
+
+    const newCtyName = ctys.find((c) => c.id === Number(newCtyId))?.ten_cong_ty ?? `#${newCtyId}`;
+    if (!window.confirm(
+      `Xác nhận chuyển ${cn.ho_ten} sang công ty "${newCtyName}"?\n\n` +
+      `- Công ty cũ "${cn.ten_cong_ty ?? '—'}" sẽ được đóng (kết thúc bảng công).\n` +
+      `- Bảng công mới bắt đầu từ hôm nay tại "${newCtyName}".\n` +
+      `- Hành động này được ghi vào log hoạt động.`
+    )) return;
+    try {
+      await capNhat.mutateAsync({ cong_ty_id: Number(newCtyId) });
+      onClose();
+    } catch (e) {
+      setErr(e?.response?.data?.error?.message ?? 'Không cập nhật được');
+    }
+  }
+
+  return (
+    <div style={M.overlay} onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div style={{ ...M.modal, maxWidth: 460 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text1)' }}>Đổi công ty — {cn.ho_ten}</div>
+          <button onClick={onClose}
+            style={{ background: 'transparent', border: 'none', fontSize: 22, color: 'var(--text2)', cursor: 'pointer' }}>×</button>
+        </div>
+        <div style={{ fontSize: 12, color: 'var(--text2)', marginBottom: 10 }}>
+          Công ty hiện tại: <b>{cn.ten_cong_ty ?? '— chưa có —'}</b>
+        </div>
+        <label className="form-label">Công ty mới *</label>
+        <select className="form-input" value={newCtyId} onChange={(e) => setNewCtyId(e.target.value)}>
+          <option value="">— Chọn công ty —</option>
+          {ctys.map((c) => (
+            <option key={c.id} value={c.id} disabled={c.id === cn.cong_ty_id}>
+              {c.ten_cong_ty}{c.id === cn.cong_ty_id ? ' (đang làm)' : ''}
+            </option>
+          ))}
+        </select>
+        {err && <div style={{ color: 'var(--red)', fontSize: 12, marginTop: 8 }}>{err}</div>}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 14 }}>
+          <button className="btn-ghost"   onClick={onClose}>Hủy</button>
+          <button className="btn-primary" onClick={submit} disabled={capNhat.isPending || !newCtyId}>
+            {capNhat.isPending ? 'Đang chuyển...' : 'Xác nhận chuyển'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

@@ -15,7 +15,9 @@ function toPositiveInt(value, fieldName) {
 
 const getDanhSach = asyncWrapper(async (req, res) => {
   // req.scope được gắn bởi scopeByRole middleware
-  const { data, meta } = await congNhanService.danhSach(req.query, req.scope, req.user?.vai_tro);
+  const { data, meta } = await congNhanService.danhSach(
+    req.query, req.scope, req.user?.vai_tro, req.user?.id,
+  );
   sendSuccess(res, data, 'Thành công', 200, meta);
 });
 
@@ -24,6 +26,7 @@ const getChiTiet = asyncWrapper(async (req, res) => {
     toPositiveInt(req.params.id, 'ID công nhân'),
     req.scope,
     req.user?.vai_tro,
+    req.user?.id,
   );
   sendSuccess(res, congNhan);
 });
@@ -44,6 +47,7 @@ const putCapNhat = asyncWrapper(async (req, res) => {
     toPositiveInt(req.params.id, 'ID công nhân'),
     req.validatedBody,
     req.user?.id ?? null,
+    req.scope,
   );
   sendSuccess(res, congNhan, 'Cập nhật thành công');
 });

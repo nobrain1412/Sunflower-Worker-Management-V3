@@ -51,6 +51,7 @@ const congTyDataSchema = z.object({
   tro_cap:                 z.number().nonnegative().optional(),
   chuyen_can:              z.number().nonnegative().optional(),
   ngay_chot_cong:          z.number().int().min(1).max(31).optional(),
+  tien_cong_quan_ly_theo_gio: z.number().nonnegative().optional(),
   mo_ta_cong_viec: z.string().max(5000).optional(),
   media_urls:      z.array(z.string().url()).max(50).optional(),
   ghi_chu:        z.string().max(1000).optional(),

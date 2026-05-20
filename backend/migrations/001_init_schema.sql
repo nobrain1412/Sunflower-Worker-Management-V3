@@ -77,6 +77,8 @@ CREATE TABLE cong_ty (
   tien_phat_nghi  NUMERIC(12,2) NOT NULL DEFAULT 0,
   -- Trợ cấp (đơn giá vender theo công ty nằm ở user_cong_ty_rate)
   tro_cap                 NUMERIC(12,2) NOT NULL DEFAULT 0,
+  -- Tiền công trả cho quản lý theo giờ (VNĐ/h)
+  tien_cong_quan_ly_theo_gio NUMERIC(10,2) NOT NULL DEFAULT 0,
   chuyen_can              NUMERIC(12,2) NOT NULL DEFAULT 0,
   ngay_chot_cong          SMALLINT      NOT NULL DEFAULT 25
                           CHECK (ngay_chot_cong BETWEEN 1 AND 31),
@@ -494,6 +496,7 @@ CREATE TABLE todo_task (
   created_by    INT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
   cong_nhan_id  INT REFERENCES cong_nhan(id) ON DELETE SET NULL,
   han           DATE,
+  gio_lam       VARCHAR(5),                          -- HH:MM (tuỳ chọn)
   hoan_thanh    BOOLEAN NOT NULL DEFAULT FALSE,
   hoan_thanh_at TIMESTAMPTZ,
   hoan_thanh_by INT REFERENCES users(id) ON DELETE SET NULL,

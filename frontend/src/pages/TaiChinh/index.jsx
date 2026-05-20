@@ -241,6 +241,7 @@ export default function TaiChinh() {
   const [tab,           setTab]           = useState('giao-dich');
   const [addModal,      setAddModal]      = useState(false);
   const [danhMucModal,  setDanhMucModal]  = useState(false);
+  const [detailGd,      setDetailGd]      = useState(null);
   const [thang,         setThang]         = useState(now.getMonth() + 1);
   const [nam,           setNam]           = useState(now.getFullYear());
   const [filterLoai,    setFilterLoai]    = useState('');
@@ -397,7 +398,8 @@ export default function TaiChinh() {
                       const loai  = LOAI_LABEL[g.loai];
                       const isThu = loai?.type === 'thu';
                       return (
-                        <tr key={g.id} style={s.tr}>
+                        <tr key={g.id} style={{ ...s.tr, cursor: 'pointer' }}
+                          onClick={() => setDetailGd(g)}>
                           <td style={s.td}><span className="pill" style={{ background: (loai?.color ?? 'var(--text3)') + '1a', color: loai?.color }}>{loai?.label}</span></td>
                           <td style={s.td}><span style={{ fontSize: 11, color: 'var(--text3)' }}>{g.danh_muc_ten ?? '—'}</span></td>
                           <td style={s.td}>
@@ -407,7 +409,7 @@ export default function TaiChinh() {
                           </td>
                           <td style={s.td}><span style={{ fontSize: 12, color: 'var(--text2)' }}>{g.ngay ? new Date(g.ngay).toLocaleDateString('vi-VN') : '—'}</span></td>
                           <td style={s.td}><span style={{ fontSize: 12, color: 'var(--text2)' }}>{g.ghi_chu ?? '—'}</span></td>
-                          <td style={s.td}>
+                          <td style={s.td} onClick={(e) => e.stopPropagation()}>
                             {isThu ? (
                               <span style={{ fontSize: 11, color: 'var(--text3)' }}>—</span>
                             ) : !isVender ? (
@@ -435,7 +437,7 @@ export default function TaiChinh() {
                               </span>
                             )}
                           </td>
-                          <td style={s.td}>
+                          <td style={s.td} onClick={(e) => e.stopPropagation()}>
                             {!isVender && (
                               <button
                                 onClick={() => handleXoa(g)}
@@ -472,9 +474,82 @@ export default function TaiChinh() {
 
       {addModal     && <AddGiaoDichModal isVender={isVender} onClose={() => setAddModal(false)} />}
       {danhMucModal && <DanhMucModal onClose={() => setDanhMucModal(false)} />}
+      {detailGd     && <GiaoDichDetailModal gd={detailGd} onClose={() => setDetailGd(null)} />}
     </div>
   );
 }
+
+// ─── Chi tiết giao dịch (read-only) ─────────────────────────
+function GiaoDichDetailModal({ gd, onClose }) {
+  const loai = LOAI_LABEL[gd.loai];
+  const isThu = loai?.type === 'thu';
+  const fmtDate = (d) => d ? new Date(d).toLocaleDateString('vi-VN') : '—';
+  const fmtDT   = (d) => d ? new Date(d).toLocaleString('vi-VN')   : '—';
+  return (
+    <div style={MD.overlay} onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div style={MD.modal}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text1)' }}>Chi tiết giao dịch</div>
+          <button onClick={onClose}
+            style={{ background: 'transparent', border: 'none', fontSize: 22, color: 'var(--text2)', cursor: 'pointer' }}>×</button>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 16px' }}>
+          <DetailField label="Loại">
+            <span className="pill" style={{ background: (loai?.color ?? 'var(--text3)') + '1a', color: loai?.color }}>{loai?.label ?? gd.loai}</span>
+          </DetailField>
+          <DetailField label="Số tiền">
+            <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 18, fontWeight: 700, color: isThu ? 'var(--green)' : 'var(--red)' }}>
+              {isThu ? '+' : '-'}{fmt(gd.so_tien)}
+            </span>
+          </DetailField>
+          <DetailField label="Danh mục" value={gd.danh_muc_ten ?? '—'} />
+          <DetailField label="Ngày giao dịch" value={fmtDate(gd.ngay)} />
+          <DetailField label="Công nhân" value={gd.cong_nhan_ten ?? '—'} />
+          <DetailField label="Người tạo (xuất/nhận)" value={gd.created_by_ten ?? '—'} />
+          <DetailField label="Tạo lúc" value={fmtDT(gd.created_at)} />
+          <DetailField label="Cập nhật lúc" value={fmtDT(gd.updated_at)} />
+          {!isThu && (
+            <>
+              <DetailField label="Đã hoàn">
+                <span style={{ color: gd.da_hoan_tien ? 'var(--green)' : 'var(--amber)', fontWeight: 600 }}>
+                  {gd.da_hoan_tien ? '✓ Đã hoàn' : 'Chưa hoàn'}
+                </span>
+              </DetailField>
+              <DetailField label="Ngày hoàn" value={fmtDate(gd.ngay_hoan)} />
+            </>
+          )}
+          <div style={{ gridColumn: 'span 2' }}>
+            <DetailField label="Ghi chú" value={gd.ghi_chu ?? '—'} />
+          </div>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 14 }}>
+          <button className="btn-primary" onClick={onClose}>Đóng</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DetailField({ label, value, children }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+      <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{label}</span>
+      <span style={{ fontSize: 13, color: 'var(--text1)' }}>{children ?? value ?? '—'}</span>
+    </div>
+  );
+}
+
+const MD = {
+  overlay: {
+    position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
+    fontFamily: "'Be Vietnam Pro', sans-serif",
+  },
+  modal: {
+    background: 'var(--bg1)', border: '1px solid var(--border)', borderRadius: 12,
+    padding: 20, width: 'min(560px, 92vw)', maxHeight: '85vh', overflow: 'auto',
+  },
+};
 
 // Hiển thị danh mục trực tiếp trong tab (không phải modal)
 function DanhMucInline() {

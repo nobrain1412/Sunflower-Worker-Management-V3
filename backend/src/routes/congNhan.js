@@ -114,9 +114,12 @@ router.post('/',
   ctrl.postTaoMoi,
 );
 
-// Cập nhật: chỉ admin và quan_ly
+// Cập nhật: mọi role (scope check ở service layer).
+// - admin: tất cả CN
+// - quan_ly: CN trong cty mình quản lý
+// - vender / cong_tac_vien: CN mình tuyển
 router.put('/:id',
-  requireRole('admin', 'quan_ly'),
+  requireRole('admin', 'quan_ly', 'vender', 'cong_tac_vien'),
   validate(capNhatSchema),
   ctrl.putCapNhat,
 );
@@ -212,6 +215,18 @@ router.get('/:id/noi-o', asyncWrapper(async (req, res) => {
 
 router.get('/:id/tong-ung', asyncWrapper(async (req, res) => {
   const id = toPositiveInt(req.params.id, 'ID công nhân');
+  // Chỉ admin hoặc người tuyển CN mới xem được tổng tạm ứng
+  if (req.user.vai_tro !== 'admin') {
+    const db = require('../utils/db');
+    const check = await db.query(
+      `SELECT 1 FROM cong_nhan WHERE id = $1 AND nguoi_tuyen_id = $2 AND deleted_at IS NULL`,
+      [id, req.user.id],
+    );
+    if (!check.rows.length) {
+      // Không cho phép → trả 0 (FE không cần xử lý 403 phức tạp)
+      return sendSuccess(res, { tong_ung: 0, con_no: 0 });
+    }
+  }
   const taiChinhModel = require('../models/taiChinhModel');
   const data = await taiChinhModel.tinhTongDaUng(id);
   sendSuccess(res, data);

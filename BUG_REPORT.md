@@ -19,21 +19,23 @@
 ---
 
 ## Danh sách lỗi
-
+- [x] todolist: cho chọn giờ làm — thêm input time
+- [x] form đề xuất công ty: bỏ field hệ số OT thừa
 ## Tính năng mới
-- [x] thêm chức năng to do list — Dashboard widget + category mgmt + assign user/CN
+
 # Dashboard
 
 # Công nhân
-- [x] quản lý chưa được gán công ty xem được CN chưa gán công ty — đã fix: filter strict theo cong_ty_ids; nếu rỗng → trả 0 dòng
-- [x] thêm nút cho ứng trên trang chi tiết CN + đồng bộ với tài chính + phân quyền theo role
+- [x] quản lý không xem được mượn xe/nơi ở/số tiền ứng của CN trong cty mình — fix: cho admin/QL xem all giao dịch của CN; vender/CTV chỉ thấy CN mình tuyển
+- [x] nút Nghỉ việc cạnh thông tin công ty CN → chuyển trang_thai='nghi_viec', xoá cong_ty_id, ghi ngay_nghi_viec
+- [x] sửa công ty CN: kết thúc phan_cong cũ + tạo phan_cong mới + confirm + log
 # Ký túc xá
 
 # công ty
-- [x] mọi role xem danh sách công ty; quản lý submit form đề xuất ngay trên trang công ty
-- [x] mobile: collapse chi tiết công ty, click tên công ty mới mở
+- [x] thêm cột tiền công cho quản lý (VNĐ/h)
+- [x] verify trang công ty hoạt động cho role khác admin (vender/CTV/kế toán/QL)
 # tài chính
-
+- [x] click giao dịch → modal chi tiết (loại, số tiền, ngày, ghi chú, người tạo, trạng thái hoàn)
 # nhân viên
 
 # cộng tác viên

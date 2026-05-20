@@ -93,10 +93,10 @@ export default function App() {
             } />
 
             <Route path="/cong-ty" element={
-              <RoleRoute allowedRoles={['admin']}><CongTy /></RoleRoute>
+              <RoleRoute allowedRoles={['admin','quan_ly','ke_toan','vender','cong_tac_vien']}><CongTy /></RoleRoute>
             } />
             <Route path="/cong-ty/de-xuat" element={
-              <RoleRoute allowedRoles={['admin','quan_ly']}><CongTyDeXuat /></RoleRoute>
+              <RoleRoute allowedRoles={['admin']}><CongTyDeXuat /></RoleRoute>
             } />
             <Route path="/nhan-su" element={
               <RoleRoute allowedRoles={['admin']}><NhanSu /></RoleRoute>

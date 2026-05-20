@@ -117,6 +117,7 @@ function QuickAdd({ cats, users, currentUserId, onDone }) {
   const [categoryId, setCategoryId] = useState(cats[0]?.id ?? '');
   const [assigneeId, setAssigneeId] = useState(currentUserId ?? '');
   const [han, setHan] = useState('');
+  const [gioLam, setGioLam] = useState('');
   const create = useCreateTodo();
   const [err, setErr] = useState('');
 
@@ -135,8 +136,9 @@ function QuickAdd({ cats, users, currentUserId, onDone }) {
         category_id: categoryId ? Number(categoryId) : null,
         assignee_id: Number(assigneeId),
         han: han || null,
+        gio_lam: gioLam || null,
       });
-      setTitle(''); setHan('');
+      setTitle(''); setHan(''); setGioLam('');
       titleRef.current?.focus();
     } catch (e2) {
       setErr(e2?.response?.data?.error?.message ?? e2?.message ?? 'Lỗi');
@@ -147,7 +149,7 @@ function QuickAdd({ cats, users, currentUserId, onDone }) {
     <form onSubmit={submit} style={s.addBox}>
       <input ref={titleRef} className="form-input" placeholder="Việc cần làm..."
         value={title} onChange={(e) => setTitle(e.target.value)}
-        style={{ gridColumn: 'span 4' }} />
+        style={{ gridColumn: 'span 3' }} />
       <select className="form-input" value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
         <option value="">— Loại —</option>
         {cats.map((c) => <option key={c.id} value={c.id}>{c.icon ? c.icon + ' ' : ''}{c.ten}</option>)}
@@ -160,8 +162,9 @@ function QuickAdd({ cats, users, currentUserId, onDone }) {
           </option>
         ))}
       </select>
-      <input className="form-input" type="date" value={han} onChange={(e) => setHan(e.target.value)} title="Hạn (tuỳ chọn)" />
-      <div style={{ gridColumn: 'span 6', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+      <input className="form-input" type="date" value={han} onChange={(e) => setHan(e.target.value)} title="Ngày (tuỳ chọn)" />
+      <input className="form-input" type="time" value={gioLam} onChange={(e) => setGioLam(e.target.value)} title="Giờ làm (tuỳ chọn)" />
+      <div style={{ gridColumn: 'span 7', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
         {err ? <span style={{ color: 'var(--red)', fontSize: 12 }}>{err}</span> : <span />}
         <div style={{ display: 'flex', gap: 6 }}>
           <button type="button" className="btn-ghost" onClick={onDone} style={{ fontSize: 12, padding: '6px 12px' }}>Đóng</button>
@@ -207,7 +210,8 @@ function TaskRow({ task, currentUserId, onOpenCN }) {
               👷 {task.cong_nhan_ho_ten}
             </span>
           )}
-          {han && <span style={{ ...s.metaItem, color: han.color }}>⏰ {han.label}</span>}
+          {han && <span style={{ ...s.metaItem, color: han.color }}>⏰ {han.label}{task.gio_lam ? ` ${task.gio_lam}` : ''}</span>}
+          {!han && task.gio_lam && <span style={{ ...s.metaItem, color: 'var(--text2)' }}>🕒 {task.gio_lam}</span>}
         </div>
       </div>
       <button onClick={() => { if (window.confirm('Xoá việc này?')) del.mutate(task.id); }}
@@ -363,7 +367,7 @@ const s = {
   },
 
   addBox: {
-    display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 6,
+    display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 6,
     background: 'var(--bg2)', borderRadius: 10, padding: 10, marginBottom: 8,
   },
 

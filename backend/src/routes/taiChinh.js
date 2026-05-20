@@ -207,35 +207,29 @@ router.post('/',
   }),
 );
 
-// Giao dịch của 1 CN trong SỔ CỦA TÔI — chỉ trả entries do tôi tạo.
+// Giao dịch của 1 CN.
+// - admin / ke_toan       : thấy mọi sổ
+// - người tuyển CN         : thấy mọi sổ (vì là chính chủ quản lý CN)
+// - role khác (kể cả QL)   : chỉ thấy entries do CHÍNH MÌNH tạo (sổ riêng)
 router.get('/cong-nhan/:congNhanId', asyncWrapper(async (req, res) => {
   const cnId   = toPositiveInt(req.params.congNhanId, 'ID công nhân');
   const { vai_tro, id: userId } = req.user;
+  const db = require('../utils/db');
 
-  if (vai_tro === 'vender' || vai_tro === 'cong_tac_vien') {
-    const db = require('../utils/db');
+  let filterCreatedBy = undefined;
+  if (vai_tro !== 'admin' && vai_tro !== 'ke_toan') {
     const check = await db.query(
       `SELECT id FROM cong_nhan WHERE id = $1 AND nguoi_tuyen_id = $2 AND deleted_at IS NULL`,
       [cnId, userId],
     );
     if (!check.rows.length) {
-      const e = new Error('Không có quyền xem'); e.statusCode = 403; throw e;
-    }
-  } else if (vai_tro === 'quan_ly') {
-    const db = require('../utils/db');
-    const check = await db.query(
-      `SELECT cn.id FROM cong_nhan cn
-         JOIN quan_ly_cong_ty qlct ON qlct.cong_ty_id = cn.cong_ty_id
-        WHERE cn.id = $1 AND qlct.user_id = $2 AND cn.deleted_at IS NULL`,
-      [cnId, userId],
-    );
-    if (!check.rows.length) {
-      const e = new Error('Không có quyền xem'); e.statusCode = 403; throw e;
+      // Không phải người tuyển → chỉ thấy sổ riêng của mình
+      filterCreatedBy = userId;
     }
   }
 
   const { rows, total } = await model.findAll({
-    cong_nhan_id: cnId, limit: 50, created_by: userId,
+    cong_nhan_id: cnId, limit: 50, created_by: filterCreatedBy,
   });
   sendSuccess(res, rows, 'Thành công', 200, { total });
 }));

@@ -38,6 +38,7 @@ const FIELD_LABEL = {
   tien_phat_nghi: 'Tiền phạt nghỉ',
   tro_cap:        'Trợ cấp',
   chuyen_can:     'Chuyên cần',
+  tien_cong_quan_ly_theo_gio: 'Tiền công QL/giờ',
   mo_ta_cong_viec: 'Mô tả công việc',
   ghi_chu:        'Ghi chú',
 };
