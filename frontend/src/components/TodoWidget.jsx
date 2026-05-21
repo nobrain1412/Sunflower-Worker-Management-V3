@@ -147,24 +147,34 @@ function QuickAdd({ cats, users, currentUserId, onDone }) {
 
   return (
     <form onSubmit={submit} style={s.addBox}>
+      {/* Dòng 1: tiêu đề full width */}
       <input ref={titleRef} className="form-input" placeholder="Việc cần làm..."
-        value={title} onChange={(e) => setTitle(e.target.value)}
-        style={{ gridColumn: 'span 3' }} />
-      <select className="form-input" value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
-        <option value="">— Loại —</option>
-        {cats.map((c) => <option key={c.id} value={c.id}>{c.icon ? c.icon + ' ' : ''}{c.ten}</option>)}
-      </select>
-      <select className="form-input" value={assigneeId} onChange={(e) => setAssigneeId(e.target.value)}>
-        <option value="">— Người làm —</option>
-        {users.map((u) => (
-          <option key={u.id} value={u.id}>
-            {u.id === currentUserId ? '★ Mình' : u.ho_ten}
-          </option>
-        ))}
-      </select>
-      <input className="form-input" type="date" value={han} onChange={(e) => setHan(e.target.value)} title="Ngày (tuỳ chọn)" />
-      <input className="form-input" type="time" value={gioLam} onChange={(e) => setGioLam(e.target.value)} title="Giờ làm (tuỳ chọn)" />
-      <div style={{ gridColumn: 'span 7', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+        value={title} onChange={(e) => setTitle(e.target.value)} />
+      {/* Dòng 2: loại / người làm / ngày / giờ */}
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        <select className="form-input" value={categoryId} onChange={(e) => setCategoryId(e.target.value)}
+          style={{ flex: '1 1 140px', minWidth: 0 }}>
+          <option value="">— Loại —</option>
+          {cats.map((c) => <option key={c.id} value={c.id}>{c.icon ? c.icon + ' ' : ''}{c.ten}</option>)}
+        </select>
+        <select className="form-input" value={assigneeId} onChange={(e) => setAssigneeId(e.target.value)}
+          style={{ flex: '1 1 140px', minWidth: 0 }}>
+          <option value="">— Người làm —</option>
+          {users.map((u) => (
+            <option key={u.id} value={u.id}>
+              {u.id === currentUserId ? '★ Mình' : u.ho_ten}
+            </option>
+          ))}
+        </select>
+        <input className="form-input" type="date" value={han}
+          onChange={(e) => setHan(e.target.value)} title="Ngày (tuỳ chọn)"
+          style={{ flex: '1 1 130px', minWidth: 0 }} />
+        <input className="form-input" type="time" value={gioLam}
+          onChange={(e) => setGioLam(e.target.value)} title="Giờ làm (tuỳ chọn)"
+          style={{ flex: '1 1 110px', minWidth: 0 }} />
+      </div>
+      {/* Dòng 3: lỗi + nút */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
         {err ? <span style={{ color: 'var(--red)', fontSize: 12 }}>{err}</span> : <span />}
         <div style={{ display: 'flex', gap: 6 }}>
           <button type="button" className="btn-ghost" onClick={onDone} style={{ fontSize: 12, padding: '6px 12px' }}>Đóng</button>
@@ -367,7 +377,7 @@ const s = {
   },
 
   addBox: {
-    display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 6,
+    display: 'flex', flexDirection: 'column', gap: 6,
     background: 'var(--bg2)', borderRadius: 10, padding: 10, marginBottom: 8,
   },
 
