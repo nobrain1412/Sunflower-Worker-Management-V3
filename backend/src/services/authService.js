@@ -204,4 +204,36 @@ async function changePassword(userId, matKhauCu, matKhauMoi) {
   );
 }
 
-module.exports = { login, refreshToken, logout, changePassword };
+// Đăng ký tài khoản công khai — luôn tạo với vai_tro = cong_tac_vien.
+// Quản lý/admin sẽ phân quyền sau qua trang Nhân sự.
+async function register({ ten_dang_nhap, ho_ten, so_dien_thoai, mat_khau }, session = {}) {
+  const existed = await userModel.findByUsername(ten_dang_nhap);
+  if (existed) {
+    const err = new Error('Tên đăng nhập đã tồn tại');
+    err.statusCode = 409;
+    err.code = 'USERNAME_TAKEN';
+    throw err;
+  }
+
+  const mat_khau_hash = await bcrypt.hash(mat_khau, 10);
+  const created = await userModel.create({
+    ten_dang_nhap,
+    mat_khau_hash,
+    ho_ten,
+    vai_tro: 'cong_tac_vien',
+    so_dien_thoai,
+  });
+
+  const user = await userModel.findById(created.id);
+  const payload = await buildTokenPayload(user);
+  const access_token = signAccessToken(payload);
+  const refresh_token = await issueRefreshToken(user.id, session);
+
+  return {
+    access_token,
+    refresh_token,
+    user: mapUserResponse(user, payload),
+  };
+}
+
+module.exports = { login, refreshToken, logout, changePassword, register };

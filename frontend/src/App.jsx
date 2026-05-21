@@ -6,6 +6,7 @@ import AppErrorBoundary from './components/AppErrorBoundary';
 
 // Pages
 import Login          from './pages/Login';
+import DangKy         from './pages/DangKy';
 import Dashboard      from './pages/Dashboard';
 import CongNhan       from './pages/CongNhan/index';
 import CongNhanDetail from './pages/CongNhan/Detail';
@@ -50,6 +51,12 @@ function LoginRoute() {
   return isLoggedIn ? <Navigate to="/" replace /> : <Login />;
 }
 
+function DangKyRoute() {
+  const { isLoggedIn, isAuthReady } = useAuth();
+  if (!isAuthReady) return <div style={{ minHeight: '100vh', background: 'var(--bg0)' }} />;
+  return isLoggedIn ? <Navigate to="/" replace /> : <DangKy />;
+}
+
 export default function App() {
   return (
     <AppErrorBoundary>
@@ -57,7 +64,8 @@ export default function App() {
         <AuthProvider>
           <BrowserRouter>
             <Routes>
-              <Route path="/login" element={<LoginRoute />} />
+              <Route path="/login"   element={<LoginRoute />} />
+              <Route path="/dang-ky" element={<DangKyRoute />} />
 
             {/* Tất cả role */}
             <Route path="/"              element={<PrivateRoute><Dashboard /></PrivateRoute>} />

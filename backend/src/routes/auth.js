@@ -16,7 +16,21 @@ const doiMatKhauSchema = z.object({
   mat_khau_moi: z.string().min(6, 'Mật khẩu mới tối thiểu 6 ký tự').max(100),
 });
 
+const dangKySchema = z.object({
+  ten_dang_nhap:    z.string().trim().min(3, 'Tên đăng nhập tối thiểu 3 ký tự').max(50)
+                     .regex(/^[a-zA-Z0-9_.]+$/, 'Tên đăng nhập chỉ gồm chữ, số, dấu chấm hoặc gạch dưới'),
+  ho_ten:           z.string().trim().min(2, 'Vui lòng nhập họ tên').max(100),
+  so_dien_thoai:    z.string().trim().min(8, 'Số điện thoại không hợp lệ').max(20)
+                     .regex(/^[0-9+\s.-]+$/, 'Số điện thoại không hợp lệ'),
+  mat_khau:         z.string().min(6, 'Mật khẩu tối thiểu 6 ký tự').max(100),
+  nhap_lai_mat_khau: z.string().min(1, 'Vui lòng nhập lại mật khẩu'),
+}).refine((d) => d.mat_khau === d.nhap_lai_mat_khau, {
+  message: 'Mật khẩu nhập lại không khớp',
+  path:    ['nhap_lai_mat_khau'],
+});
+
 router.post('/login',         validate(loginSchema), ctrl.postLogin);
+router.post('/dang-ky',       validate(dangKySchema), ctrl.postDangKy);
 router.post('/refresh',       ctrl.postRefresh);
 router.post('/logout',        ctrl.postLogout);
 router.post('/doi-mat-khau',  authenticate, validate(doiMatKhauSchema), ctrl.postDoiMatKhau);

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 export default function Login() {
@@ -143,6 +143,10 @@ export default function Login() {
             )}
             {loading ? 'Đang đăng nhập...' : 'Đăng nhập'}
           </button>
+
+          <div style={styles.footerNote}>
+            Chưa có tài khoản? <Link to="/dang-ky" style={styles.link}>Đăng ký ngay</Link>
+          </div>
         </form>
       </div>
     </div>
@@ -256,6 +260,10 @@ const styles = {
     fontFamily: "'Be Vietnam Pro', sans-serif",
     transition: 'opacity 0.15s',
   },
+  footerNote: {
+    textAlign: 'center', fontSize: 12, color: 'var(--text2)', marginTop: 6,
+  },
+  link: { color: 'var(--accent)', textDecoration: 'none', fontWeight: 600 },
   spinner: {
     width: 16, height: 16, borderRadius: '50%',
     border: '2px solid rgba(255,255,255,0.3)',

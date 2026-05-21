@@ -743,8 +743,29 @@ function VenderDashboard() {
 
   if (isLoading) return <div style={{ padding: 40, color: 'var(--text2)' }}>Đang tải...</div>;
 
+  // Cộng tác viên mới đăng ký chưa được phân quyền — hiện banner liên hệ admin.
+  const isCongTacVien = user?.vai_tro === 'cong_tac_vien';
+
   return (
     <div style={s.root}>
+      {isCongTacVien && (
+        <div style={vd.noticeBanner}>
+          <div style={vd.noticeIcon}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2"/>
+              <line x1="12" y1="8"  x2="12" y2="12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+              <line x1="12" y1="16" x2="12.01" y2="16" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+            </svg>
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={vd.noticeTitle}>Tài khoản đang ở vai trò cộng tác viên</div>
+            <div style={vd.noticeText}>
+              Vui lòng liên hệ <b>Đăng VT</b> để được phân quyền nếu bạn là <b>Quản lý</b> hoặc <b>Vender</b>.
+            </div>
+          </div>
+        </div>
+      )}
+
       <div style={ql.header}>
         <div>
           <div style={ql.title}>Của tôi</div>
@@ -957,6 +978,21 @@ const vd = {
     background: 'linear-gradient(135deg, var(--accent), var(--accent2))',
     border: 'none', borderRadius: 8, color: '#fff',
     fontSize: 13, fontWeight: 600, padding: '9px 16px', cursor: 'pointer',
+  },
+  noticeBanner: {
+    display: 'flex', alignItems: 'flex-start', gap: 12,
+    background: 'rgba(255,179,68,0.08)',
+    border: '1px solid rgba(255,179,68,0.3)',
+    borderRadius: 12, padding: '14px 16px',
+  },
+  noticeIcon: {
+    color: 'var(--amber)', flexShrink: 0, marginTop: 1, lineHeight: 0,
+  },
+  noticeTitle: {
+    fontSize: 13, fontWeight: 700, color: 'var(--amber)', marginBottom: 4,
+  },
+  noticeText: {
+    fontSize: 12.5, color: 'var(--text1)', lineHeight: 1.5,
   },
 };
 

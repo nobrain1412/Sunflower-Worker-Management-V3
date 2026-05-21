@@ -71,4 +71,18 @@ const postDoiMatKhau = asyncWrapper(async (req, res) => {
   sendSuccess(res, null, 'Đổi mật khẩu thành công');
 });
 
-module.exports = { postLogin, postRefresh, postLogout, postDoiMatKhau };
+const postDangKy = asyncWrapper(async (req, res) => {
+  const { ten_dang_nhap, ho_ten, so_dien_thoai, mat_khau } = req.validatedBody;
+  const result = await authService.register(
+    { ten_dang_nhap, ho_ten, so_dien_thoai, mat_khau },
+    getSessionInfo(req),
+  );
+
+  res.cookie('refresh_token', result.refresh_token, COOKIE_OPTS);
+  sendSuccess(res, {
+    access_token: result.access_token,
+    user: result.user,
+  }, 'Đăng ký tài khoản thành công');
+});
+
+module.exports = { postLogin, postRefresh, postLogout, postDoiMatKhau, postDangKy };
