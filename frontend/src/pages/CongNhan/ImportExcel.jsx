@@ -12,6 +12,19 @@ export default function ImportExcel() {
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
 
+  // Chuẩn hoá lỗi từ interceptor ({ code, message, details }) thành text dễ hiểu.
+  // Lỗi validate (VALIDATION_ERROR) sẽ kèm danh sách field bị sai.
+  function describeErr(err, fallback) {
+    const base = err?.message || fallback;
+    if (err?.code === 'VALIDATION_ERROR' && Array.isArray(err.details) && err.details.length) {
+      const lines = err.details
+        .map((d) => (d.field ? `• ${d.field}: ${d.message}` : `• ${d.message}`))
+        .join('\n');
+      return `Dữ liệu không hợp lệ:\n${lines}`;
+    }
+    return base;
+  }
+
   function pickFile() {
     fileInputRef.current?.click();
   }
@@ -56,7 +69,7 @@ export default function ImportExcel() {
       });
       setPreview(res.data);
     } catch (err) {
-      setError(err?.message || 'Parse Excel thất bại');
+      setError(describeErr(err, 'Parse Excel thất bại'));
     } finally {
       setParsing(false);
     }
@@ -95,7 +108,7 @@ export default function ImportExcel() {
       const res = await api.post('/cong-nhan/import-excel/revalidate', { rows: rowsPayload() });
       setPreview(res.data);
     } catch (err) {
-      setError(err?.message || 'Kiểm tra lại thất bại');
+      setError(describeErr(err, 'Kiểm tra lại thất bại'));
     } finally {
       setParsing(false);
     }
@@ -113,7 +126,7 @@ export default function ImportExcel() {
       const res = await api.post('/cong-nhan/import-excel/commit-rows', { rows: rowsPayload() });
       setResult(res.data);
     } catch (err) {
-      setError(err?.message || 'Import thất bại');
+      setError(describeErr(err, 'Import thất bại'));
     } finally {
       setCommitting(false);
     }
@@ -443,6 +456,7 @@ const s = {
     border: '1px solid rgba(255,95,114,0.3)',
     color: '#ff5f72', borderRadius: 8,
     padding: '10px 14px', fontSize: 12, marginBottom: 16,
+    whiteSpace: 'pre-line',
   },
 
   summary: {

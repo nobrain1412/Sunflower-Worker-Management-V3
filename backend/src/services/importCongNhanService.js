@@ -125,7 +125,7 @@ async function parseExcel(buffer) {
   await wb.xlsx.load(buffer);
   const ws = wb.worksheets[0];
   if (!ws) {
-    const err = new Error('File Excel không có sheet nào');
+    const err = new Error('File Excel rỗng (không có sheet dữ liệu nào). Vui lòng kiểm tra lại file.');
     err.statusCode = 400; err.code = 'EMPTY_WORKBOOK';
     throw err;
   }
@@ -140,7 +140,10 @@ async function parseExcel(buffer) {
   });
 
   if (!Object.values(colMap).includes('ho_ten')) {
-    const err = new Error('File Excel thiếu cột "Họ tên"');
+    const err = new Error(
+      'File Excel thiếu cột "Họ tên". Dòng đầu tiên (header) bắt buộc có 1 cột tên là "Họ tên" hoặc "Họ và tên". '
+      + 'Hãy tải file mẫu để đối chiếu đúng tên cột.',
+    );
     err.statusCode = 400; err.code = 'MISSING_HO_TEN';
     throw err;
   }

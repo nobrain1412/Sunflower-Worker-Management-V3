@@ -8,6 +8,7 @@
  * Cả 2 POST nhận multipart field `file` (.xlsx).
  */
 const { Router } = require('express');
+const multer = require('multer');
 const { z } = require('zod');
 const validate = require('../middleware/validate');
 const { authenticate, requireRole } = require('../middleware/auth');
@@ -17,6 +18,23 @@ const { sendSuccess } = require('../utils/response');
 const importSvc = require('../services/importCongNhanService');
 
 const router = Router();
+
+// Bọc uploadExcel để chuyển lỗi multer (sai định dạng / quá lớn) thành 400 dễ hiểu
+function uploadExcelSafe(req, res, next) {
+  uploadExcel(req, res, (err) => {
+    if (!err) return next();
+    let message = 'Không đọc được file tải lên. Vui lòng chọn lại file Excel (.xlsx).';
+    if (err instanceof multer.MulterError) {
+      if (err.code === 'LIMIT_FILE_SIZE') message = 'File quá lớn. Giới hạn 10MB.';
+      else message = `Lỗi tải file: ${err.message}`;
+    } else if (err.message) {
+      message = err.message; // vd: "Chỉ chấp nhận file Excel (.xlsx)"
+    }
+    const e = new Error(message);
+    e.statusCode = 400; e.code = 'INVALID_UPLOAD';
+    return next(e);
+  });
+}
 
 // Dựng payload preview để FE hiển thị/sửa
 function toPreviewPayload(rows) {
@@ -63,7 +81,7 @@ router.get('/template', authenticate, asyncWrapper(async (_req, res) => {
 router.post('/preview',
   authenticate,
   requireRole('admin', 'quan_ly'),
-  uploadExcel,
+  uploadExcelSafe,
   asyncWrapper(async (req, res) => {
     if (!req.file) {
       const e = new Error('Vui lòng upload file Excel');
@@ -111,7 +129,7 @@ router.post('/commit-rows',
 router.post('/commit',
   authenticate,
   requireRole('admin', 'quan_ly'),
-  uploadExcel,
+  uploadExcelSafe,
   asyncWrapper(async (req, res) => {
     if (!req.file) {
       const e = new Error('Vui lòng upload file Excel');
