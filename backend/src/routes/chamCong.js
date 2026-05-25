@@ -49,12 +49,40 @@ router.get('/', requireRole('admin', 'quan_ly', 'ke_toan'),
   }),
 );
 
+// Kiểm tra quyền xem bảng công của 1 công nhân theo scope của user.
+// - admin/ke_toan (type 'all'): xem tất cả
+// - quan_ly (type 'cong_ty'): chỉ CN thuộc công ty mình quản lý
+// - vender/cong_tac_vien (type 'vender'/'nguoi_tuyen'): chỉ CN mình tuyển
+async function assertCanViewCongNhan(req, congNhanId) {
+  const cnRes = await db.query(
+    `SELECT cong_ty_id, nguoi_tuyen_id FROM cong_nhan WHERE id = $1 AND deleted_at IS NULL`,
+    [congNhanId],
+  );
+  const cn = cnRes.rows[0];
+  if (!cn) { const e = new Error('Không tìm thấy công nhân'); e.statusCode = 404; throw e; }
+
+  const scope = req.scope;
+  let allowed = scope?.type === 'all';
+  if (!allowed && scope?.type === 'cong_ty') {
+    allowed = Array.isArray(scope.ids) && cn.cong_ty_id != null && scope.ids.includes(cn.cong_ty_id);
+  }
+  if (!allowed && (scope?.type === 'vender' || scope?.type === 'nguoi_tuyen')) {
+    allowed = cn.nguoi_tuyen_id === scope.userId;
+  }
+  if (!allowed) {
+    const e = new Error('Bạn không có quyền xem bảng công của công nhân này');
+    e.statusCode = 403; throw e;
+  }
+}
+
 // GET /api/cham-cong/cong-nhan/:congNhanId?thang=&nam=
 router.get('/cong-nhan/:congNhanId',
   asyncWrapper(async (req, res) => {
     const congNhanId = toPositiveInt(req.params.congNhanId, 'ID công nhân');
     const thang = toPositiveInt(req.query.thang, 'Tháng');
     const nam   = toPositiveInt(req.query.nam,   'Năm');
+
+    await assertCanViewCongNhan(req, congNhanId);
 
     const phanCongs = await chamCongModel.findPhanCongByCongNhan(congNhanId, { thang, nam });
     const chiTiet = await Promise.all(
@@ -97,7 +125,16 @@ router.post('/batch', requireRole('admin', 'quan_ly'),
       const e = new Error('Không tìm thấy phân công');
       e.statusCode = 404; throw e;
     }
-    const { cong_nhan_id, ho_ten, nguoi_tuyen_id, ten_cong_ty } = meta.rows[0];
+    const { cong_nhan_id, cong_ty_id, ho_ten, nguoi_tuyen_id, ten_cong_ty } = meta.rows[0];
+
+    // Quản lý chỉ được chấm công cho CN thuộc công ty mình quản lý
+    if (req.scope?.type === 'cong_ty') {
+      const ok = Array.isArray(req.scope.ids) && cong_ty_id != null && req.scope.ids.includes(cong_ty_id);
+      if (!ok) {
+        const e = new Error('Bạn không có quyền chấm công cho công nhân này');
+        e.statusCode = 403; throw e;
+      }
+    }
 
     const result = await chamCongModel.upsertBatch(phan_cong_id, entries);
 

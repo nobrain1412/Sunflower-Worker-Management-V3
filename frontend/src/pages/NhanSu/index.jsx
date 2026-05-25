@@ -44,6 +44,7 @@ function UserModal({ user, onClose }) {
     ho_ten: user?.ho_ten ?? '',
     vai_tro: user?.vai_tro ?? 'vender',
     so_dien_thoai: user?.so_dien_thoai ?? '',
+    ma_vender: user?.ma_vender ?? '',
     ngan_hang: user?.ngan_hang ?? '',
     so_tai_khoan: user?.so_tai_khoan ?? '',
     ten_chu_tk: user?.ten_chu_tk ?? '',
@@ -79,6 +80,7 @@ function UserModal({ user, onClose }) {
       ho_ten: form.ho_ten,
       vai_tro: form.vai_tro,
       so_dien_thoai: form.so_dien_thoai || undefined,
+      ma_vender: form.ma_vender || '',
       ngan_hang: form.ngan_hang || undefined,
       so_tai_khoan: form.so_tai_khoan || undefined,
       ten_chu_tk: form.ten_chu_tk || undefined,
@@ -94,7 +96,7 @@ function UserModal({ user, onClose }) {
         await tao.mutateAsync({ ten_dang_nhap: form.ten_dang_nhap, ...payload });
       }
       onClose();
-    } catch (e) { setErr(e?.response?.data?.error?.message ?? 'Lỗi'); }
+    } catch (e) { setErr(e?.message ?? 'Lỗi'); }
   }
 
   return (
@@ -127,6 +129,11 @@ function UserModal({ user, onClose }) {
           <div style={F.col}>
             <label className="form-label">SĐT</label>
             <input className="form-input" name="so_dien_thoai" value={form.so_dien_thoai} onChange={handleChange} />
+          </div>
+          <div style={F.col}>
+            <label className="form-label">Mã vender</label>
+            <input className="form-input" name="ma_vender" value={form.ma_vender} onChange={handleChange}
+              placeholder="Dùng để import Excel nhận diện vender" />
           </div>
           {form.vai_tro === 'cong_tac_vien' && (
             <div style={{ ...F.col, gridColumn: 'span 2' }}>

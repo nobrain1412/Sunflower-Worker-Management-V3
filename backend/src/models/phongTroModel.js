@@ -3,10 +3,17 @@
  */
 const db = require('../utils/db');
 
-async function findAll({ active } = {}) {
+// scope: { isAdmin: bool, userId: int }
+// - admin: xem tất cả nhà trọ
+// - khác: chỉ xem nhà trọ do chính mình tạo (nguoi_tao_id = userId)
+async function findAll({ active, scope } = {}) {
   const params = [];
   const cond = [];
   if (active !== undefined) { params.push(active === 'true' || active === true); cond.push(`pt.active = $${params.length}`); }
+  if (scope && !scope.isAdmin) {
+    params.push(scope.userId);
+    cond.push(`pt.nguoi_tao_id = $${params.length}`);
+  }
   const where = cond.length ? `WHERE ${cond.join(' AND ')}` : '';
 
   const result = await db.query(
@@ -30,14 +37,14 @@ async function create(data) {
   const result = await db.query(
     `INSERT INTO phong_tro
        (ten, dia_chi, map_url, chu_tro, sdt_chu_tro, so_phong, tien_phong, ghi_chu,
-        ngan_hang, so_tai_khoan, ten_chu_tk, media_urls)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+        ngan_hang, so_tai_khoan, ten_chu_tk, media_urls, nguoi_tao_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
      RETURNING *`,
     [data.ten, data.dia_chi ?? null, data.map_url ?? null,
      data.chu_tro ?? null, data.sdt_chu_tro ?? null,
      data.so_phong ?? 0, data.tien_phong ?? 0, data.ghi_chu ?? null,
      data.ngan_hang ?? null, data.so_tai_khoan ?? null, data.ten_chu_tk ?? null,
-     JSON.stringify(data.media_urls ?? [])],
+     JSON.stringify(data.media_urls ?? []), data.nguoi_tao_id ?? null],
   );
   return result.rows[0];
 }

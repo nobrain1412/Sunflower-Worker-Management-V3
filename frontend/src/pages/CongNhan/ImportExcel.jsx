@@ -62,20 +62,55 @@ export default function ImportExcel() {
     }
   }
 
+  // Payload các dòng (đã có thể sửa tay) gửi cho backend
+  function rowsPayload() {
+    return (preview?.rows ?? []).map((r) => ({
+      rowNumber:    r.rowNumber,
+      data:         r.data,
+      vender_name:  r.vender_name ?? null,
+      cong_ty_name: r.cong_ty_name ?? null,
+    }));
+  }
+
+  // Sửa 1 ô trong bảng preview
+  function editRow(rowNumber, field, value) {
+    setPreview((prev) => {
+      if (!prev) return prev;
+      const rows = prev.rows.map((r) => {
+        if (r.rowNumber !== rowNumber) return r;
+        if (field === 'vender_name' || field === 'cong_ty_name') {
+          return { ...r, [field]: value };
+        }
+        return { ...r, data: { ...r.data, [field]: value } };
+      });
+      return { ...prev, rows };
+    });
+  }
+
+  // Kiểm tra lại các dòng đã sửa (không ghi DB)
+  async function doRevalidate() {
+    setParsing(true);
+    setError('');
+    try {
+      const res = await api.post('/cong-nhan/import-excel/revalidate', { rows: rowsPayload() });
+      setPreview(res.data);
+    } catch (err) {
+      setError(err?.message || 'Kiểm tra lại thất bại');
+    } finally {
+      setParsing(false);
+    }
+  }
+
   async function doCommit() {
-    if (!file) return;
+    if (!preview) return;
     if (!window.confirm(
-      `Sắp insert ${preview.summary.ready} công nhân vào DB. ${preview.summary.skipRows} dòng sẽ skip (CCCD trùng). Tiếp tục?`
+      `Sắp insert ${preview.summary.ready} công nhân vào DB. ${preview.summary.skipRows} dòng sẽ skip (CCCD trùng), ${preview.summary.errorRows} dòng lỗi sẽ bị bỏ qua. Tiếp tục?`
     )) return;
 
     setCommitting(true);
     setError('');
     try {
-      const fd = new FormData();
-      fd.append('file', file);
-      const res = await api.post('/cong-nhan/import-excel/commit', fd, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      const res = await api.post('/cong-nhan/import-excel/commit-rows', { rows: rowsPayload() });
       setResult(res.data);
     } catch (err) {
       setError(err?.message || 'Import thất bại');
@@ -117,7 +152,7 @@ export default function ImportExcel() {
           <strong>Cột yêu cầu</strong> (header dòng 1): Họ tên (bắt buộc), CCCD, Ngày sinh, Ngày vào,
           Địa chỉ, SĐT, Mã vân tay, Vender, Công ty, Bộ phận.
           <br />
-          <strong>Lưu ý:</strong> Vender phải khớp <em>họ tên</em> user đã tạo. Công ty phải khớp <em>tên công ty</em> đã có trong DB.
+          <strong>Lưu ý:</strong> Cột Vender có thể ghi <em>họ tên</em> hoặc <em>mã vender</em> của user. Công ty phải khớp <em>tên công ty</em> đã có trong DB. Dòng nào lỗi có thể sửa trực tiếp ở bước preview.
         </div>
         <button onClick={downloadTemplate} style={s.btnSecondary}>
           ⬇ Tải file template mẫu
@@ -182,19 +217,29 @@ export default function ImportExcel() {
             <SummaryItem label="Có lỗi" value={preview.summary.errorRows} color="var(--red)" />
           </div>
 
-          <PreviewTable rows={preview.rows} />
+          <div style={s.tip}>
+            ✏️ Bạn có thể <strong>sửa trực tiếp</strong> các ô trong bảng (đặc biệt là dòng bị lỗi),
+            rồi bấm <strong>Kiểm tra lại</strong> để xác thực trước khi import.
+          </div>
+
+          <PreviewTable rows={preview.rows} onEdit={editRow} />
 
           <div style={s.commitRow}>
             <button onClick={reset} style={s.btnGhost}>Huỷ, chọn file khác</button>
-            <button
-              onClick={doCommit}
-              disabled={committing || preview.summary.ready === 0}
-              style={s.btnPrimary}
-            >
-              {committing
-                ? 'Đang import...'
-                : `Xác nhận import ${preview.summary.ready} công nhân`}
-            </button>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={doRevalidate} disabled={parsing} style={s.btnSecondary}>
+                {parsing ? 'Đang kiểm tra...' : '↻ Kiểm tra lại'}
+              </button>
+              <button
+                onClick={doCommit}
+                disabled={committing || preview.summary.ready === 0}
+                style={s.btnPrimary}
+              >
+                {committing
+                  ? 'Đang import...'
+                  : `Xác nhận import ${preview.summary.ready} công nhân`}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -234,7 +279,18 @@ function SummaryItem({ label, value, color }) {
   );
 }
 
-function PreviewTable({ rows }) {
+function EditCell({ value, onChange, mono, placeholder }) {
+  return (
+    <input
+      value={value ?? ''}
+      placeholder={placeholder ?? ''}
+      onChange={(e) => onChange(e.target.value)}
+      style={{ ...s.cellInput, ...(mono ? s.cellInputMono : null) }}
+    />
+  );
+}
+
+function PreviewTable({ rows, onEdit }) {
   return (
     <div style={s.tableWrap}>
       <table style={s.table}>
@@ -246,7 +302,7 @@ function PreviewTable({ rows }) {
             <th style={s.th}>CCCD</th>
             <th style={s.th}>Ngày sinh</th>
             <th style={s.th}>SĐT</th>
-            <th style={s.th}>Vender</th>
+            <th style={s.th}>Vender (tên/mã)</th>
             <th style={s.th}>Công ty</th>
             <th style={s.th}>Ngày vào</th>
             <th style={s.th}>Vấn đề</th>
@@ -261,6 +317,9 @@ function PreviewTable({ rows }) {
             if (hasError) { statusLabel = 'Lỗi'; statusColor = 'var(--red)'; }
             else if (willSkip) { statusLabel = 'Skip'; statusColor = 'var(--amber)'; }
 
+            const venderNotFound = r.vender_name && !r.data.nguoi_tuyen_id;
+            const congTyNotFound = r.cong_ty_name && !r.data.cong_ty_id;
+
             return (
               <tr key={r.rowNumber} style={hasError ? s.rowError : willSkip ? s.rowSkip : null}>
                 <td style={s.td}>{r.rowNumber}</td>
@@ -269,26 +328,38 @@ function PreviewTable({ rows }) {
                     {statusLabel}
                   </span>
                 </td>
-                <td style={s.td}>{r.data.ho_ten ?? '—'}</td>
-                <td style={s.tdMono}>{r.data.cccd ?? '—'}</td>
-                <td style={s.tdMono}>{r.data.ngay_sinh ?? '—'}</td>
-                <td style={s.tdMono}>{r.data.so_dien_thoai ?? '—'}</td>
                 <td style={s.td}>
-                  {r.vender_name ?? '—'}
-                  {r.vender_name && !r.data.nguoi_tuyen_id && <span style={{ color: 'var(--red)', fontSize: 10 }}> (không tìm thấy)</span>}
+                  <EditCell value={r.data.ho_ten} onChange={(v) => onEdit(r.rowNumber, 'ho_ten', v)} />
                 </td>
                 <td style={s.td}>
-                  {r.cong_ty_name ?? '—'}
-                  {r.cong_ty_name && !r.data.cong_ty_id && <span style={{ color: 'var(--red)', fontSize: 10 }}> (không tìm thấy)</span>}
+                  <EditCell value={r.data.cccd} mono onChange={(v) => onEdit(r.rowNumber, 'cccd', v)} placeholder="12 số" />
                 </td>
-                <td style={s.tdMono}>{r.data.ngay_vao_lam ?? '—'}</td>
                 <td style={s.td}>
-                  {[...r.errors, ...r.warnings].map((m, i) => (
+                  <EditCell value={r.data.ngay_sinh} mono onChange={(v) => onEdit(r.rowNumber, 'ngay_sinh', v)} placeholder="YYYY-MM-DD" />
+                </td>
+                <td style={s.td}>
+                  <EditCell value={r.data.so_dien_thoai} mono onChange={(v) => onEdit(r.rowNumber, 'so_dien_thoai', v)} />
+                </td>
+                <td style={s.td}>
+                  <EditCell value={r.vender_name}
+                    onChange={(v) => onEdit(r.rowNumber, 'vender_name', v)}
+                    placeholder="tên hoặc mã vender" />
+                  {venderNotFound && <span style={{ color: 'var(--red)', fontSize: 10 }}>không tìm thấy</span>}
+                </td>
+                <td style={s.td}>
+                  <EditCell value={r.cong_ty_name} onChange={(v) => onEdit(r.rowNumber, 'cong_ty_name', v)} />
+                  {congTyNotFound && <span style={{ color: 'var(--red)', fontSize: 10 }}>không tìm thấy</span>}
+                </td>
+                <td style={s.td}>
+                  <EditCell value={r.data.ngay_vao_lam} mono onChange={(v) => onEdit(r.rowNumber, 'ngay_vao_lam', v)} placeholder="YYYY-MM-DD" />
+                </td>
+                <td style={s.td}>
+                  {[...r.errors, ...r.warnings].length === 0 ? '—' : [...r.errors, ...r.warnings].map((m, i) => (
                     <div key={i} style={{
                       fontSize: 11,
                       color: r.errors.includes(m) ? 'var(--red)' : 'var(--amber)',
                     }}>{m}</div>
-                  )) || '—'}
+                  ))}
                 </td>
               </tr>
             );
@@ -406,6 +477,13 @@ const s = {
     color: 'var(--text1)', verticalAlign: 'top',
     fontFamily: "'JetBrains Mono', monospace", fontSize: 11,
   },
+  cellInput: {
+    width: '100%', minWidth: 90,
+    background: 'var(--bg3)', border: '1px solid var(--border2)',
+    borderRadius: 6, padding: '5px 7px', fontSize: 12, color: 'var(--text1)',
+    fontFamily: "'Be Vietnam Pro', sans-serif", outline: 'none',
+  },
+  cellInputMono: { fontFamily: "'JetBrains Mono', monospace", fontSize: 11 },
   rowError: { background: 'rgba(255,95,114,0.04)' },
   rowSkip:  { background: 'rgba(255,179,68,0.04)' },
   pill: {

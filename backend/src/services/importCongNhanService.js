@@ -40,6 +40,8 @@ const HEADER_MAP = {
   'ma van tay':              'ma_van_tay',
   'vender':                  '__vender_name',
   'nguoi tuyen':             '__vender_name',
+  'ma vender':               '__vender_name',
+  'ma vd':                   '__vender_name',
   'cong ty':                 '__cong_ty_name',
   'bo phan':                 'ghi_chu',
   'ghi chu':                 'ghi_chu',
@@ -205,14 +207,21 @@ async function resolveAndValidate(rows) {
   const congTyNames = [...new Set(rows.map((r) => r._congTyName).filter(Boolean))];
   const cccds       = [...new Set(rows.map((r) => r.data.cccd).filter(Boolean))];
 
-  // Resolve vender (match ho_ten case-insensitive, exact match)
+  // Resolve vender: khớp theo HỌ TÊN hoặc MÃ VENDER (đều case-insensitive).
+  // → giải quyết lỗi import không nhận diện được vender khi file ghi mã thay vì tên.
   const venderMap = new Map();
   if (venderNames.length > 0) {
+    const lowered = venderNames.map((n) => n.toLowerCase());
     const { rows: vRows } = await db.query(
-      `SELECT id, ho_ten FROM users WHERE LOWER(ho_ten) = ANY($1::text[]) AND active = TRUE`,
-      [venderNames.map((n) => n.toLowerCase())],
+      `SELECT id, ho_ten, ma_vender FROM users
+        WHERE active = TRUE
+          AND (LOWER(ho_ten) = ANY($1::text[]) OR LOWER(ma_vender) = ANY($1::text[]))`,
+      [lowered],
     );
-    for (const v of vRows) venderMap.set(v.ho_ten.toLowerCase(), v.id);
+    for (const v of vRows) {
+      if (v.ho_ten) venderMap.set(v.ho_ten.toLowerCase(), v.id);
+      if (v.ma_vender) venderMap.set(v.ma_vender.toLowerCase(), v.id);
+    }
   }
 
   // Resolve cong_ty
@@ -286,6 +295,33 @@ async function resolveAndValidate(rows) {
   }
 
   return rows;
+}
+
+/**
+ * Dựng lại danh sách row từ payload do FE gửi (đã sửa tay ở màn hình preview)
+ * về đúng shape nội bộ để resolveAndValidate xử lý lại.
+ * payload row: { rowNumber, data:{...}, vender_name, cong_ty_name }
+ */
+function rebuildRowsFromPayload(payloadRows = []) {
+  return payloadRows.map((r, i) => {
+    const data = { ...(r.data || {}) };
+    // Bỏ id resolve cũ để re-resolve theo tên/mã đã sửa
+    delete data.nguoi_tuyen_id;
+    delete data.cong_ty_id;
+    // Normalize lại các field nhạy cảm
+    if (data.cccd) data.cccd = normalizeCccd(data.cccd);
+    if (data.so_dien_thoai) data.so_dien_thoai = normalizePhone(data.so_dien_thoai);
+    if (data.ngay_sinh) data.ngay_sinh = parseDate(data.ngay_sinh) ?? data.ngay_sinh;
+    if (data.ngay_vao_lam) data.ngay_vao_lam = parseDate(data.ngay_vao_lam) ?? data.ngay_vao_lam;
+    return {
+      rowNumber: r.rowNumber ?? i + 2,
+      data,
+      _venderName: r.vender_name || null,
+      _congTyName: r.cong_ty_name || null,
+      errors: [],
+      warnings: [],
+    };
+  });
 }
 
 /**
@@ -396,4 +432,6 @@ async function buildTemplate() {
   return wb.xlsx.writeBuffer();
 }
 
-module.exports = { parseExcel, resolveAndValidate, commitImport, buildTemplate };
+module.exports = {
+  parseExcel, resolveAndValidate, commitImport, buildTemplate, rebuildRowsFromPayload,
+};

@@ -173,6 +173,7 @@ const createSchema = z.object({
   so_tai_khoan:         z.string().max(50).optional(),
   ten_chu_tk:           z.string().max(100).optional(),
   hinh_thuc_thanh_toan: z.enum(['mot_lan', 'hang_thang']).optional(),
+  ma_vender:            z.string().max(50).optional().or(z.literal('')),
   cong_ty_ids:          z.array(z.number().int().positive()).optional(),
 });
 
@@ -208,6 +209,7 @@ const updateSchema = z.object({
   so_tai_khoan:         z.string().max(50).optional(),
   ten_chu_tk:           z.string().max(100).optional(),
   hinh_thuc_thanh_toan: z.enum(['mot_lan', 'hang_thang']).optional(),
+  ma_vender:            z.string().max(50).optional().or(z.literal('')),
   mat_khau:             z.string().min(6).max(100).optional(),
   cong_ty_ids:          z.array(z.number().int().positive()).optional(),
 });

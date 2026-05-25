@@ -59,14 +59,14 @@ router.get('/:id', authenticate, ctrl.getChiTiet);
 router.post('/',    requireRole('admin'), validate(taoMoiSchema),  ctrl.postTaoMoi);
 router.put('/:id',  requireRole('admin'), validate(capNhatSchema), ctrl.putCapNhat);
 
-// Vô hiệu hoá công ty (active = FALSE)
+// Xoá thật công ty (admin) — kèm toàn bộ dữ liệu phụ thuộc
 const asyncWrapper = require('../utils/asyncWrapper');
 const { sendSuccess } = require('../utils/response');
 const congTyModel = require('../models/congTyModel');
 router.delete('/:id', requireRole('admin'), asyncWrapper(async (req, res) => {
-  const data = await congTyModel.update(toPositiveInt(req.params.id, 'ID công ty'), { active: false });
+  const data = await congTyModel.hardDelete(toPositiveInt(req.params.id, 'ID công ty'));
   if (!data) { const e = new Error('Không tìm thấy công ty'); e.statusCode = 404; throw e; }
-  sendSuccess(res, null, 'Đã vô hiệu hoá công ty');
+  sendSuccess(res, null, 'Đã xoá công ty');
 }));
 
 // Quản lý phân công: chỉ admin

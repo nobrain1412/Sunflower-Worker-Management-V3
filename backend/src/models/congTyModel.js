@@ -107,6 +107,39 @@ async function update(id, data) {
   return result.rows[0] || null;
 }
 
+// Xoá thật công ty + toàn bộ dữ liệu phụ thuộc (chấm công, phân công, phân quyền QL).
+// cong_nhan.cong_ty_id sẽ tự SET NULL; user_cong_ty_rate & cong_ty_de_xuat tự CASCADE.
+// Toàn bộ chạy trong 1 transaction để đảm bảo nguyên tử.
+async function hardDelete(id) {
+  await db.query('BEGIN');
+  try {
+    const exists = await db.query(`SELECT id FROM cong_ty WHERE id = $1`, [id]);
+    if (exists.rows.length === 0) {
+      await db.query('ROLLBACK');
+      return null;
+    }
+
+    // 1. Chấm công thuộc các phân công của công ty
+    await db.query(
+      `DELETE FROM cham_cong
+        WHERE phan_cong_id IN (SELECT id FROM phan_cong WHERE cong_ty_id = $1)`,
+      [id],
+    );
+    // 2. Phân công (RESTRICT nên phải xoá trước cong_ty)
+    await db.query(`DELETE FROM phan_cong WHERE cong_ty_id = $1`, [id]);
+    // 3. Phân quyền quản lý ↔ công ty (RESTRICT)
+    await db.query(`DELETE FROM quan_ly_cong_ty WHERE cong_ty_id = $1`, [id]);
+    // 4. Xoá công ty (cong_nhan.cong_ty_id → NULL, rate & đề xuất CASCADE)
+    const result = await db.query(`DELETE FROM cong_ty WHERE id = $1 RETURNING id`, [id]);
+
+    await db.query('COMMIT');
+    return result.rows[0] || null;
+  } catch (err) {
+    await db.query('ROLLBACK');
+    throw err;
+  }
+}
+
 // Lấy danh sách quản lý của 1 công ty
 async function findQuanLy(congTyId) {
   const result = await db.query(
@@ -194,7 +227,7 @@ async function deleteRate(userId, congTyId) {
 }
 
 module.exports = {
-  findAll, findById, create, update,
+  findAll, findById, create, update, hardDelete,
   findQuanLy, assignQuanLy, removeQuanLy,
   findRatesByCongTy, findRatesByUser, upsertRate, deleteRate,
 };

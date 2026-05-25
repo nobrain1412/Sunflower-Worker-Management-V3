@@ -316,7 +316,7 @@ export default function CongTy() {
                   {isAdmin && !editing && (
                     <button
                       onClick={async () => {
-                        if (!window.confirm(`Vô hiệu hoá công ty "${selected.ten_cong_ty}"?`)) return;
+                        if (!window.confirm(`XOÁ VĨNH VIỄN công ty "${selected.ten_cong_ty}"?\n\nToàn bộ phân công, chấm công và phân quyền quản lý của công ty này sẽ bị xoá. Công nhân sẽ được gỡ khỏi công ty (không bị xoá). Hành động KHÔNG THỂ hoàn tác.`)) return;
                         try { await xoa.mutateAsync(selected.id); setSelectedId(null); }
                         catch (e) { alert(e?.message ?? 'Lỗi'); }
                       }}

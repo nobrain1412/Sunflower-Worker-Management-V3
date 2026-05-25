@@ -14,7 +14,7 @@ async function findById(id) {
   const result = await db.query(
     `SELECT id, ten_dang_nhap, ho_ten, vai_tro, active, created_at,
             so_dien_thoai, ngan_hang, so_tai_khoan, ten_chu_tk,
-            hinh_thuc_thanh_toan, quan_ly_id
+            hinh_thuc_thanh_toan, quan_ly_id, ma_vender
      FROM users WHERE id = $1`,
     [id],
   );
@@ -40,7 +40,7 @@ async function findAll({ vai_tro } = {}) {
   const result = await db.query(
     `SELECT u.id, u.ten_dang_nhap, u.ho_ten, u.vai_tro, u.active,
             u.so_dien_thoai, u.ngan_hang, u.so_tai_khoan, u.ten_chu_tk,
-            u.hinh_thuc_thanh_toan, u.quan_ly_id, u.created_at,
+            u.hinh_thuc_thanh_toan, u.quan_ly_id, u.created_at, u.ma_vender,
             -- Tổng CN người này tuyển (đang còn)
             (SELECT COUNT(*) FROM cong_nhan cn
               WHERE cn.nguoi_tuyen_id = u.id
@@ -69,21 +69,22 @@ async function findAll({ vai_tro } = {}) {
 async function create({
   ten_dang_nhap, mat_khau_hash, ho_ten, vai_tro,
   so_dien_thoai, ngan_hang, so_tai_khoan, ten_chu_tk,
-  hinh_thuc_thanh_toan, quan_ly_id,
+  hinh_thuc_thanh_toan, quan_ly_id, ma_vender,
 }) {
   const result = await db.query(
     `INSERT INTO users
        (ten_dang_nhap, mat_khau_hash, ho_ten, vai_tro,
         so_dien_thoai, ngan_hang, so_tai_khoan, ten_chu_tk,
-        hinh_thuc_thanh_toan, quan_ly_id)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+        hinh_thuc_thanh_toan, quan_ly_id, ma_vender)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
      RETURNING id, ten_dang_nhap, ho_ten, vai_tro, active, so_dien_thoai,
                ngan_hang, so_tai_khoan, ten_chu_tk,
-               hinh_thuc_thanh_toan, quan_ly_id`,
+               hinh_thuc_thanh_toan, quan_ly_id, ma_vender`,
     [ten_dang_nhap, mat_khau_hash, ho_ten, vai_tro,
      so_dien_thoai ?? null, ngan_hang ?? null, so_tai_khoan ?? null,
      ten_chu_tk ?? null,
-     hinh_thuc_thanh_toan ?? 'mot_lan', quan_ly_id ?? null],
+     hinh_thuc_thanh_toan ?? 'mot_lan', quan_ly_id ?? null,
+     ma_vender ? ma_vender : null],
   );
   return result.rows[0];
 }
@@ -91,10 +92,14 @@ async function create({
 async function update(id, data) {
   const allowed = ['ho_ten', 'vai_tro', 'active',
     'so_dien_thoai', 'ngan_hang', 'so_tai_khoan', 'ten_chu_tk',
-    'hinh_thuc_thanh_toan', 'quan_ly_id'];
+    'hinh_thuc_thanh_toan', 'quan_ly_id', 'ma_vender'];
   const fields = [], params = [];
   for (const f of allowed) {
-    if (f in data) { params.push(data[f]); fields.push(`${f} = $${params.length}`); }
+    if (f in data) {
+      // ma_vender rỗng → NULL (tránh đụng unique index trên chuỗi rỗng)
+      const val = (f === 'ma_vender' && data[f] === '') ? null : data[f];
+      params.push(val); fields.push(`${f} = $${params.length}`);
+    }
   }
   if (!fields.length) return findById(id);
   params.push(id);

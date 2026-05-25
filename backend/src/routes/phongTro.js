@@ -52,22 +52,35 @@ const traSchema = z.object({
   ngay_ra: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
 });
 
+// Nhà trọ riêng tư: chỉ admin hoặc người tạo mới được xem/sửa/xoá 1 nhà trọ cụ thể.
+async function assertCanAccess(req, id) {
+  const data = await model.findById(id);
+  if (!data) { const e = new Error('Không tìm thấy phòng trọ'); e.statusCode = 404; throw e; }
+  const isAdmin = req.user.vai_tro === 'admin';
+  if (!isAdmin && data.nguoi_tao_id !== req.user.id) {
+    const e = new Error('Bạn không có quyền truy cập nhà trọ này');
+    e.statusCode = 403; throw e;
+  }
+  return data;
+}
+
 // ─── CRUD phong_tro ───────────────────────────────────────
 router.get('/', requireRole('admin', 'quan_ly', 'vender'), asyncWrapper(async (req, res) => {
-  const data = await model.findAll({ active: req.query.active });
+  const scope = { isAdmin: req.user.vai_tro === 'admin', userId: req.user.id };
+  const data = await model.findAll({ active: req.query.active, scope });
   sendSuccess(res, data);
 }));
 
 router.get('/:id', requireRole('admin', 'quan_ly', 'vender'), asyncWrapper(async (req, res) => {
-  const data = await model.findById(toPositiveInt(req.params.id, 'ID phòng trọ'));
-  if (!data) { const e = new Error('Không tìm thấy phòng trọ'); e.statusCode = 404; throw e; }
+  const data = await assertCanAccess(req, toPositiveInt(req.params.id, 'ID phòng trọ'));
   sendSuccess(res, data);
 }));
 
 router.post('/', requireRole('admin', 'quan_ly', 'vender'),
   validate(createSchema),
   asyncWrapper(async (req, res) => {
-    const data = await model.create(req.validatedBody);
+    // Gắn người tạo để áp quyền riêng tư
+    const data = await model.create({ ...req.validatedBody, nguoi_tao_id: req.user.id });
     sendCreated(res, data, 'Tạo phòng trọ thành công');
   }),
 );
@@ -75,30 +88,38 @@ router.post('/', requireRole('admin', 'quan_ly', 'vender'),
 router.put('/:id', requireRole('admin', 'quan_ly', 'vender'),
   validate(updateSchema),
   asyncWrapper(async (req, res) => {
-    const data = await model.update(toPositiveInt(req.params.id, 'ID phòng trọ'), req.validatedBody);
+    const id = toPositiveInt(req.params.id, 'ID phòng trọ');
+    await assertCanAccess(req, id);
+    const data = await model.update(id, req.validatedBody);
     if (!data) { const e = new Error('Không tìm thấy phòng trọ'); e.statusCode = 404; throw e; }
     sendSuccess(res, data, 'Cập nhật thành công');
   }),
 );
 
-router.delete('/:id', requireRole('admin', 'quan_ly'), asyncWrapper(async (req, res) => {
-  const data = await model.remove(toPositiveInt(req.params.id, 'ID phòng trọ'));
+router.delete('/:id', requireRole('admin', 'quan_ly', 'vender'), asyncWrapper(async (req, res) => {
+  const id = toPositiveInt(req.params.id, 'ID phòng trọ');
+  await assertCanAccess(req, id);
+  const data = await model.remove(id);
   if (!data) { const e = new Error('Không tìm thấy phòng trọ'); e.statusCode = 404; throw e; }
   sendSuccess(res, null, 'Đã xoá phòng trọ');
 }));
 
 // ─── Thuê phòng trọ ───────────────────────────────────────
 router.get('/:id/thue', requireRole('admin', 'quan_ly', 'vender'), asyncWrapper(async (req, res) => {
-  const data = await model.listThue(toPositiveInt(req.params.id, 'ID phòng trọ'));
+  const id = toPositiveInt(req.params.id, 'ID phòng trọ');
+  await assertCanAccess(req, id);
+  const data = await model.listThue(id);
   sendSuccess(res, data);
 }));
 
 router.post('/:id/thue', requireRole('admin', 'quan_ly', 'vender'),
   validate(ganSchema),
   asyncWrapper(async (req, res) => {
+    const id = toPositiveInt(req.params.id, 'ID phòng trọ');
+    await assertCanAccess(req, id);
     const data = await model.ganCongNhan({
       ...req.validatedBody,
-      phong_tro_id: toPositiveInt(req.params.id, 'ID phòng trọ'),
+      phong_tro_id: id,
     });
     sendCreated(res, data, 'Đã gán công nhân vào phòng trọ');
   }),
