@@ -20,9 +20,9 @@ function toPositiveInt(value, fieldName) {
 const taoMoiSchema = z.object({
   ten_cong_ty:    z.string().min(2).max(200),
   dia_chi:        z.string().max(500).optional(),
-  map_url:        z.string().url('Link Google Maps không hợp lệ').optional(),
-  so_dien_thoai:  z.string().max(20).optional(),
-  email:          z.string().email('Email không hợp lệ').optional(),
+  map_url:        z.string().url('Link Google Maps không hợp lệ').optional().or(z.literal('')),
+  so_dien_thoai:  z.string().max(20).optional().or(z.literal('')),
+  email:          z.string().email('Email không hợp lệ').optional().or(z.literal('')),
   luong_co_ban:   z.number().nonnegative().optional(),
   luong_theo_gio: z.number().nonnegative().optional(),
   he_so_ot:       z.number().min(1).max(5).optional(),

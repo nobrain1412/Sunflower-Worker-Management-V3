@@ -17,8 +17,6 @@ const SECTIONS = [
       { key: 'ten_cong_ty',    label: 'Tên công ty *', type: 'text', required: true },
       { key: 'dia_chi',        label: 'Địa chỉ',       type: 'text' },
       { key: 'map_url',        label: 'Link Google Maps', type: 'text', placeholder: 'https://maps.google.com/...' },
-      { key: 'so_dien_thoai',  label: 'Số điện thoại', type: 'text' },
-      { key: 'email',          label: 'Email',         type: 'email' },
     ],
   },
   {
@@ -47,7 +45,7 @@ const SECTIONS = [
       { key: 'tien_phat_nghi', label: 'Tiền phạt nghỉ', type: 'number' },
       { key: 'tro_cap',        label: 'Trợ cấp',        type: 'number' },
       { key: 'chuyen_can',     label: 'Chuyên cần',     type: 'number' },
-      { key: 'tien_cong_quan_ly_theo_gio', label: 'Tiền công quản lý (VNĐ/giờ)', type: 'number' },
+      // Tiền công quản lý do admin nhập, không cho quản lý đề xuất.
     ],
   },
 ];

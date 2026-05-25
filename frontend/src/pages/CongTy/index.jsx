@@ -215,13 +215,24 @@ export default function CongTy() {
     return payload;
   }
 
+  // Interceptor trong useApi đã chuẩn hoá lỗi về { code, message, details }
+  // → đọc thẳng e.message (kèm details nếu là lỗi validate) thay vì e.response.data...
+  function getErrMsg(e) {
+    const base = e?.message ?? 'Lỗi không xác định';
+    if (Array.isArray(e?.details) && e.details.length) {
+      const detail = e.details.map((d) => d.message).filter(Boolean).join('; ');
+      if (detail) return `${base}: ${detail}`;
+    }
+    return base;
+  }
+
   async function handleSave() {
     setErrMsg('');
     try {
       await capNhat.mutateAsync({ id: selected.id, ...buildPayload() });
       setEditing(false);
     } catch (e) {
-      setErrMsg(e?.response?.data?.error?.message ?? 'Lỗi không xác định');
+      setErrMsg(getErrMsg(e));
     }
   }
 
@@ -230,10 +241,10 @@ export default function CongTy() {
     try {
       const res2 = await taoMoi.mutateAsync(buildPayload());
       setAddModal(false);
-      setSelectedId(res2?.data?.data?.id ?? null);
+      setSelectedId(res2?.data?.id ?? null);
       setForm(EMPTY_FORM);
     } catch (e) {
-      setErrMsg(e?.response?.data?.error?.message ?? 'Lỗi không xác định');
+      setErrMsg(getErrMsg(e));
     }
   }
 
@@ -307,7 +318,7 @@ export default function CongTy() {
                       onClick={async () => {
                         if (!window.confirm(`Vô hiệu hoá công ty "${selected.ten_cong_ty}"?`)) return;
                         try { await xoa.mutateAsync(selected.id); setSelectedId(null); }
-                        catch (e) { alert(e?.response?.data?.error?.message ?? 'Lỗi'); }
+                        catch (e) { alert(e?.message ?? 'Lỗi'); }
                       }}
                       style={{ background: 'transparent', border: '1px solid rgba(255,95,114,0.4)',
                         borderRadius: 8, padding: '7px 14px', fontSize: 12, color: 'var(--red)',
