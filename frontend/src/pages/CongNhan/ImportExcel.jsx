@@ -64,9 +64,9 @@ export default function ImportExcel() {
     try {
       const fd = new FormData();
       fd.append('file', file);
-      const res = await api.post('/cong-nhan/import-excel/preview', fd, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      // KHÔNG tự set Content-Type — để axios/trình duyệt tự thêm boundary cho multipart.
+      // (Set 'multipart/form-data' thủ công sẽ thiếu boundary → server không parse được file.)
+      const res = await api.post('/cong-nhan/import-excel/preview', fd);
       setPreview(res.data);
     } catch (err) {
       setError(describeErr(err, 'Parse Excel thất bại'));

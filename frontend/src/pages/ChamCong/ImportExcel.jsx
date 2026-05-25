@@ -45,9 +45,8 @@ export default function ImportChamCongExcel() {
       const fd = new FormData();
       fd.append('file', file);
       fd.append('cong_ty_id', congTyId);
-      const res = await api.post('/cham-cong/import-excel/preview', fd, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      // KHÔNG tự set Content-Type — để trình duyệt tự thêm boundary cho multipart.
+      const res = await api.post('/cham-cong/import-excel/preview', fd);
       setPreview(res.data);
     } catch (err) {
       setError(err?.message || 'Parse Excel thất bại');
@@ -68,9 +67,8 @@ export default function ImportChamCongExcel() {
       const fd = new FormData();
       fd.append('file', file);
       fd.append('cong_ty_id', congTyId);
-      const res = await api.post('/cham-cong/import-excel/commit', fd, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      // KHÔNG tự set Content-Type — để trình duyệt tự thêm boundary cho multipart.
+      const res = await api.post('/cham-cong/import-excel/commit', fd);
       setResult(res.data);
     } catch (err) {
       setError(err?.message || 'Import thất bại');

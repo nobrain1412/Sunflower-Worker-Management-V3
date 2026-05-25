@@ -43,6 +43,15 @@ export function setUnauthorizedHandler(handler) {
 // Gắn JWT vào mỗi request
 api.interceptors.request.use((config) => {
   if (accessToken) config.headers.Authorization = `Bearer ${accessToken}`;
+  // Khi gửi FormData (upload file), phải BỎ Content-Type mặc định (application/json)
+  // để trình duyệt tự set multipart/form-data kèm boundary — nếu không server không parse được file.
+  if (typeof FormData !== 'undefined' && config.data instanceof FormData) {
+    if (config.headers && typeof config.headers.delete === 'function') {
+      config.headers.delete('Content-Type');
+    } else if (config.headers) {
+      delete config.headers['Content-Type'];
+    }
+  }
   return config;
 });
 
