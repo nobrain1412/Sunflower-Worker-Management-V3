@@ -455,7 +455,10 @@ export default function CongTy() {
                 <label className="form-label">Ảnh công ty</label>
                 <MediaUploader value={toMediaArray(form.media_urls)} onChange={(urls) => setForm((f) => ({ ...f, media_urls: urls }))} folder="cong-ty" />
               </div>
-              {numberFields.map(([name, label]) => (
+              {/* Form thêm mới: bỏ "Tiền công quản lý" (admin nhập sau khi chỉnh sửa) */}
+              {numberFields
+                .filter(([name]) => name !== 'tien_cong_quan_ly_theo_gio')
+                .map(([name, label]) => (
                 <div key={name} style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
                   <label className="form-label">{label}</label>
                   <input className="form-input" name={name} type="number" value={form[name]} onChange={handleChange} />
