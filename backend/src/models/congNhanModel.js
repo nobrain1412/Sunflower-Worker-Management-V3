@@ -231,14 +231,17 @@ async function autoUpdateTrangThai() {
   );
 }
 
-async function hardDelete(id) {
+// Soft delete theo spec: đánh dấu deleted_at thay vì xoá thật.
+// → giữ lịch sử chấm công/tài chính/chỗ ở, tránh lỗi FK RESTRICT.
+async function softDelete(id) {
   const result = await db.query(
-    `DELETE FROM cong_nhan
-     WHERE id = $1
-     RETURNING id`,
+    `UPDATE cong_nhan
+        SET deleted_at = NOW()
+      WHERE id = $1 AND deleted_at IS NULL
+      RETURNING id`,
     [id],
   );
   return result.rows[0] || null;
 }
 
-module.exports = { findAll, findById, findByCccd, create, update, updateAnh, findByCongTy, hardDelete, autoUpdateTrangThai };
+module.exports = { findAll, findById, findByCccd, create, update, updateAnh, findByCongTy, softDelete, autoUpdateTrangThai };

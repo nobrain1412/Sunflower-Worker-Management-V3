@@ -292,6 +292,22 @@ function SummaryItem({ label, value, color }) {
   );
 }
 
+// Hiển thị ngày: nội bộ lưu ISO yyyy-mm-dd, hiển thị cho người dùng là dd/mm/yyyy.
+// Nếu giá trị chưa phải ISO (đang gõ dở) thì giữ nguyên để không mất ký tự.
+function isoToDmy(v) {
+  if (!v) return '';
+  const m = String(v).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : String(v);
+}
+// dd/mm/yyyy → ISO yyyy-mm-dd (validate). Không hợp lệ → null.
+function dmyToIso(v) {
+  const m = String(v ?? '').trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (!m) return null;
+  const d = +m[1], mo = +m[2], y = +m[3];
+  if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+  return `${y}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+}
+
 function EditCell({ value, onChange, mono, placeholder }) {
   return (
     <input
@@ -348,7 +364,9 @@ function PreviewTable({ rows, onEdit }) {
                   <EditCell value={r.data.cccd} mono onChange={(v) => onEdit(r.rowNumber, 'cccd', v)} placeholder="12 số" />
                 </td>
                 <td style={s.td}>
-                  <EditCell value={r.data.ngay_sinh} mono onChange={(v) => onEdit(r.rowNumber, 'ngay_sinh', v)} placeholder="YYYY-MM-DD" />
+                  <EditCell value={isoToDmy(r.data.ngay_sinh)} mono
+                    onChange={(v) => onEdit(r.rowNumber, 'ngay_sinh', dmyToIso(v) ?? v)}
+                    placeholder="dd/mm/yyyy" />
                 </td>
                 <td style={s.td}>
                   <EditCell value={r.data.so_dien_thoai} mono onChange={(v) => onEdit(r.rowNumber, 'so_dien_thoai', v)} />
@@ -364,7 +382,9 @@ function PreviewTable({ rows, onEdit }) {
                   {congTyNotFound && <span style={{ color: 'var(--red)', fontSize: 10 }}>không tìm thấy</span>}
                 </td>
                 <td style={s.td}>
-                  <EditCell value={r.data.ngay_vao_lam} mono onChange={(v) => onEdit(r.rowNumber, 'ngay_vao_lam', v)} placeholder="YYYY-MM-DD" />
+                  <EditCell value={isoToDmy(r.data.ngay_vao_lam)} mono
+                    onChange={(v) => onEdit(r.rowNumber, 'ngay_vao_lam', dmyToIso(v) ?? v)}
+                    placeholder="dd/mm/yyyy" />
                 </td>
                 <td style={s.td}>
                   {[...r.errors, ...r.warnings].length === 0 ? '—' : [...r.errors, ...r.warnings].map((m, i) => (

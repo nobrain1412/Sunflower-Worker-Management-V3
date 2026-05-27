@@ -251,7 +251,9 @@ export default function AddCongNhanModal({ onClose }) {
                 <select className="form-input" name="nguoi_tuyen_id" value={form.nguoi_tuyen_id} onChange={handleChange}>
                   <option value="">— Mặc định: {user?.ho_ten ?? 'tôi'} —</option>
                   {venderArr.map((v) => (
-                    <option key={v.id} value={v.id}>{v.ho_ten}</option>
+                    <option key={v.id} value={v.id}>
+                      {v.ma_vender ? `${v.ho_ten} (${v.ma_vender})` : v.ho_ten}
+                    </option>
                   ))}
                 </select>
               </FormField>

@@ -14,7 +14,7 @@ async function findById(id) {
   const result = await db.query(
     `SELECT id, ten_dang_nhap, ho_ten, vai_tro, active, created_at,
             so_dien_thoai, ngan_hang, so_tai_khoan, ten_chu_tk,
-            hinh_thuc_thanh_toan, quan_ly_id, ma_vender
+            hinh_thuc_thanh_toan, quan_ly_id, ma_vender, quyen_ktx
      FROM users WHERE id = $1`,
     [id],
   );
@@ -40,7 +40,7 @@ async function findAll({ vai_tro } = {}) {
   const result = await db.query(
     `SELECT u.id, u.ten_dang_nhap, u.ho_ten, u.vai_tro, u.active,
             u.so_dien_thoai, u.ngan_hang, u.so_tai_khoan, u.ten_chu_tk,
-            u.hinh_thuc_thanh_toan, u.quan_ly_id, u.created_at, u.ma_vender,
+            u.hinh_thuc_thanh_toan, u.quan_ly_id, u.created_at, u.ma_vender, u.quyen_ktx,
             -- Tổng CN người này tuyển (đang còn)
             (SELECT COUNT(*) FROM cong_nhan cn
               WHERE cn.nguoi_tuyen_id = u.id
@@ -90,9 +90,9 @@ async function create({
 }
 
 async function update(id, data) {
-  const allowed = ['ho_ten', 'vai_tro', 'active',
+  const allowed = ['ten_dang_nhap', 'ho_ten', 'vai_tro', 'active',
     'so_dien_thoai', 'ngan_hang', 'so_tai_khoan', 'ten_chu_tk',
-    'hinh_thuc_thanh_toan', 'quan_ly_id', 'ma_vender'];
+    'hinh_thuc_thanh_toan', 'quan_ly_id', 'ma_vender', 'quyen_ktx'];
   const fields = [], params = [];
   for (const f of allowed) {
     if (f in data) {

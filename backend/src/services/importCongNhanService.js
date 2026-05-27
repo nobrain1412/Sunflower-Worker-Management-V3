@@ -114,34 +114,108 @@ function cleanCell(value) {
   return s;
 }
 
-// Parse date từ nhiều format: Date (Excel), 'YYYY-MM-DD', 'DD/MM/YYYY', 'D/M/YYYY'
+// Ghép YYYY-MM-DD đã pad + kiểm tra hợp lệ (tháng 1-12, ngày 1-31). Sai → null.
+function buildISO(y, mo, d) {
+  const Y = Number(y), M = Number(mo), D = Number(d);
+  if (M < 1 || M > 12 || D < 1 || D > 31) return null;
+  return `${Y}-${String(M).padStart(2, '0')}-${String(D).padStart(2, '0')}`;
+}
+
+// Parse date từ nhiều format → luôn trả ISO 'YYYY-MM-DD' (chuẩn, không nhập nhằng).
+// Chuẩn ưu tiên: dd/mm/yyyy. Nhưng tự nhận diện nếu file lỡ ở dạng mm/dd/yyyy:
+//   - phần đầu > 12  → chắc chắn là NGÀY  → dd/mm
+//   - phần sau  > 12 → chắc chắn là NGÀY → mm/dd (đảo lại)
+//   - cả hai <= 12   → không chắc → theo chuẩn dd/mm
+function parseDayMonth(a, b, y) {
+  const A = Number(a), B = Number(b);
+  let day, mo;
+  if (A > 12 && B <= 12) { day = A; mo = B; }       // dd/mm rõ ràng
+  else if (B > 12 && A <= 12) { day = B; mo = A; }  // mm/dd → đảo về dd/mm
+  else { day = A; mo = B; }                          // cả hai <=12 → giả định dd/mm
+  return buildISO(y, mo, day);
+}
+
 function parseDate(raw) {
   if (raw == null) return null;
   if (raw instanceof Date) {
     if (isNaN(raw.getTime())) return null;
-    return raw.toISOString().slice(0, 10);
+    // Excel lưu ngày ở UTC nửa đêm → dùng phần UTC để tránh lệch múi giờ (-1 ngày)
+    return `${raw.getUTCFullYear()}-${String(raw.getUTCMonth() + 1).padStart(2, '0')}-${String(raw.getUTCDate()).padStart(2, '0')}`;
   }
   const s = String(raw).trim();
   if (!s) return null;
-  // ISO YYYY-MM-DD
+  // ISO YYYY-MM-DD (không nhập nhằng)
   let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
-  if (m) {
-    const [, y, mo, d] = m;
-    return `${y}-${mo.padStart(2, '0')}-${d.padStart(2, '0')}`;
-  }
-  // DD/MM/YYYY
-  m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if (m) {
-    const [, d, mo, y] = m;
-    return `${y}-${mo.padStart(2, '0')}-${d.padStart(2, '0')}`;
-  }
-  // DD-MM-YYYY
-  m = s.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
-  if (m) {
-    const [, d, mo, y] = m;
-    return `${y}-${mo.padStart(2, '0')}-${d.padStart(2, '0')}`;
-  }
+  if (m) return buildISO(m[1], m[2], m[3]);
+  // X/Y/YYYY hoặc X-Y-YYYY (dd/mm hoặc mm/dd — tự nhận diện)
+  m = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+  if (m) return parseDayMonth(m[1], m[2], m[3]);
   return null;
+}
+
+// ISO yyyy-mm-dd → dd/mm/yyyy (cho thông báo cảnh báo)
+function isoToDmy(iso) {
+  const m = String(iso ?? '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : String(iso ?? '');
+}
+
+// Đảo ngày ↔ tháng của 1 ISO. Trả null nếu sau khi đảo không hợp lệ (vd ngày gốc > 12).
+function swapDayMonth(iso) {
+  const m = String(iso ?? '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return null;
+  return buildISO(m[1], m[3], m[2]); // tháng mới = ngày cũ, ngày mới = tháng cũ
+}
+
+// Ngày vào / ngày sinh KHÔNG thể ở tương lai. Nếu iso > hôm nay → thử đảo ngày/tháng:
+//   - đảo xong hợp lệ và <= hôm nay  → coi như bị ngược, tự sửa (swapped = true)
+//   - không sửa được                → giữ nguyên, đánh dấu future = true để cảnh báo
+function fixFutureDate(iso, todayISO) {
+  if (!iso || iso <= todayISO) return { iso, swapped: false, future: false };
+  const sw = swapDayMonth(iso);
+  if (sw && sw <= todayISO) return { iso: sw, swapped: true, future: false };
+  return { iso, swapped: false, future: true };
+}
+
+const DATE_FIELDS = [['ngay_sinh', 'Ngày sinh'], ['ngay_vao_lam', 'Ngày vào']];
+
+// Ngưỡng: nếu >= 30% số dòng có ngày trong 1 cột bị lật (mm/dd) → coi cả cột là mm/dd.
+const MMDD_COLUMN_THRESHOLD = 0.30;
+
+// Phân tích sâu 1 ô ngày — phục vụ vừa xử lý per-row vừa thống kê cả cột.
+// Trả:
+//   hasValue        ô có dữ liệu không
+//   invalid         không đọc được
+//   iso0 / iso      ISO trước / sau khi sửa-tương-lai
+//   futureSwapped   đã đảo ngày/tháng vì ở tương lai
+//   future          ở tương lai nhưng không đảo được
+//   reversed        đã/đáng bị lật so với cách đọc dd/mm (mm/dd chắc chắn, hoặc future-swap)
+//   pendingAmbiguous còn nhập nhằng (cả 2 số <=12) chưa được quyết
+function analyzeDate(raw, todayISO) {
+  if (raw == null) return { hasValue: false };
+  const goc = raw instanceof Date ? null : String(raw).trim();
+
+  // Phân loại cặp số nếu là dạng chữ dd/mm hoặc mm/dd
+  let mmddCertain = false, ambiguous = false;
+  if (!(raw instanceof Date)) {
+    const m = String(raw).trim().match(/^(\d{1,2})[/-](\d{1,2})[/-]\d{4}$/);
+    if (m) {
+      const A = +m[1], B = +m[2];
+      if (B > 12 && A <= 12) mmddCertain = true;            // tháng>12 → chắc chắn mm/dd
+      else if (A <= 12 && B <= 12 && A !== B) ambiguous = true;
+    }
+  }
+
+  const iso0 = parseDate(raw); // đã tự đảo khi tháng>12
+  if (iso0 == null) return { hasValue: true, goc, invalid: true };
+
+  const fixed = fixFutureDate(iso0, todayISO);
+  return {
+    hasValue: true, goc, invalid: false,
+    iso0, iso: fixed.iso,
+    futureSwapped: fixed.swapped, future: fixed.future,
+    reversed: mmddCertain || fixed.swapped,
+    pendingAmbiguous: ambiguous && !fixed.swapped,
+  };
 }
 
 function normalizeCccd(raw) {
@@ -200,6 +274,11 @@ async function parseExcel(buffer) {
     throw err;
   }
 
+  // Hôm nay (ISO) — dùng để phát hiện ngày ở tương lai. UTC ổn cho so sánh ngày.
+  const todayISO = new Date().toISOString().slice(0, 10);
+  // Thống kê mỗi cột ngày để quyết định cả cột có đang là mm/dd hay không
+  const dateStats = { ngay_sinh: { total: 0, reversed: 0 }, ngay_vao_lam: { total: 0, reversed: 0 } };
+
   // Đọc data rows (từ row 2)
   const rows = [];
   for (let r = 2; r <= ws.rowCount; r++) {
@@ -221,16 +300,36 @@ async function parseExcel(buffer) {
     // Bỏ qua row trống
     if (!data.ho_ten && !data.cccd) continue;
 
+    const warnings = [];
+
     // Normalize từng field
     if (data.ho_ten) data.ho_ten = toTitleCaseVN(data.ho_ten);
     if (data.cccd) data.cccd = normalizeCccd(data.cccd);
     if (data.so_dien_thoai) data.so_dien_thoai = normalizePhone(data.so_dien_thoai);
-    if (data.ngay_sinh) data.ngay_sinh = parseDate(data.ngay_sinh);
-    if (data.ngay_vao_lam) data.ngay_vao_lam = parseDate(data.ngay_vao_lam);
+    // Ngày: parse per-row (tự đảo khi tháng>12 / ngày ở tương lai).
+    // Phần nhập nhằng (cả 2 số <=12) tạm để dd/mm, quyết định sau theo thống kê cả cột.
+    const dateMeta = {};
+    for (const [field, nhan] of DATE_FIELDS) {
+      if (data[field] == null) continue;
+      const a = analyzeDate(data[field], todayISO);
+      dateMeta[field] = a;
+      data[field] = a.invalid ? null : a.iso;
+      dateStats[field].total++;
+      if (a.invalid) {
+        if (a.goc) warnings.push(`${nhan} "${a.goc}" không đọc được → để trống, vui lòng nhập lại (dd/mm/yyyy)`);
+        continue;
+      }
+      if (a.reversed) dateStats[field].reversed++;
+      if (a.futureSwapped) {
+        warnings.push(`${nhan} ${isoToDmy(a.iso0)} ở tương lai → tự sửa ngày/tháng thành ${isoToDmy(a.iso)}`);
+      } else if (a.future) {
+        warnings.push(`${nhan} ${isoToDmy(a.iso)} ở tương lai (sau hôm nay) — hãy kiểm tra lại`);
+      }
+      // dòng nhập nhằng: chưa cảnh báo ở đây — xử lý ở lượt thống kê cột bên dưới
+    }
     if (data.que_quan) data.que_quan = toTitleCaseVN(data.que_quan);
 
     // Chuẩn hoá tỉnh trong que_quan → đảm bảo filter "Tỉnh" bắt được
-    const warnings = [];
     if (data.que_quan) {
       const { normalized, originalTinh, matchedTinh } = normalizeQueQuan(data.que_quan);
       data.que_quan = normalized;
@@ -246,10 +345,37 @@ async function parseExcel(buffer) {
       data,
       _venderName: venderName,
       _congTyName: congTyName,
+      _dateMeta: dateMeta,
       errors: [],
       warnings,
     });
   }
+
+  // ── Quyết định nhập nhằng theo từng CỘT ──────────────────────────────
+  // Nếu >= 30% số dòng có ngày trong cột bị lật (mm/dd) → coi cả cột là mm/dd,
+  // đổi nốt các dòng nhập nhằng (cả 2 số <=12) về dd/mm. Ngược lại chỉ cảnh báo.
+  for (const [field, nhan] of DATE_FIELDS) {
+    const st = dateStats[field];
+    const columnIsMmdd = st.total > 0 && st.reversed / st.total >= MMDD_COLUMN_THRESHOLD;
+    for (const r of rows) {
+      const a = r._dateMeta?.[field];
+      if (!a || !a.pendingAmbiguous || !a.iso) continue;
+      if (columnIsMmdd) {
+        const sw = swapDayMonth(a.iso);
+        if (sw) {
+          r.data[field] = sw;
+          r.warnings.push(`Cột "${nhan}": ≥30% dòng đang ở dạng mm/dd → đổi dòng này ${isoToDmy(a.iso)} → ${isoToDmy(sw)} (dd/mm)`);
+        } else {
+          r.warnings.push(`${nhan} "${a.goc}" không rõ ngày/tháng — đã hiểu là ${isoToDmy(a.iso)}, hãy kiểm tra lại`);
+        }
+      } else {
+        r.warnings.push(`${nhan} "${a.goc}" không rõ ngày/tháng — đã hiểu là ${isoToDmy(a.iso)}, hãy kiểm tra lại`);
+      }
+    }
+  }
+
+  // _dateMeta chỉ dùng nội bộ — bỏ trước khi trả ra ngoài
+  for (const r of rows) delete r._dateMeta;
 
   return rows;
 }
@@ -266,7 +392,9 @@ async function resolveAndValidate(rows) {
 
   // Resolve vender: khớp theo HỌ TÊN hoặc MÃ VENDER (đều case-insensitive).
   // → giải quyết lỗi import không nhận diện được vender khi file ghi mã thay vì tên.
-  const venderMap = new Map();
+  const venderMap = new Map();   // token (ho_ten | ma_vender, lowercase) → user id
+  const maVenderSet = new Set();  // các token là MÃ VENDER (duy nhất → luôn ưu tiên)
+  const nameCount = new Map();    // lowered ho_ten → số user trùng tên (phát hiện nhập nhằng)
   if (venderNames.length > 0) {
     const lowered = venderNames.map((n) => n.toLowerCase());
     const { rows: vRows } = await db.query(
@@ -276,8 +404,16 @@ async function resolveAndValidate(rows) {
       [lowered],
     );
     for (const v of vRows) {
-      if (v.ho_ten) venderMap.set(v.ho_ten.toLowerCase(), v.id);
-      if (v.ma_vender) venderMap.set(v.ma_vender.toLowerCase(), v.id);
+      if (v.ma_vender) {
+        const k = v.ma_vender.toLowerCase();
+        venderMap.set(k, v.id);
+        maVenderSet.add(k);
+      }
+      if (v.ho_ten) {
+        const k = v.ho_ten.toLowerCase();
+        nameCount.set(k, (nameCount.get(k) || 0) + 1);
+        if (!venderMap.has(k)) venderMap.set(k, v.id); // chỉ dùng khi không nhập nhằng
+      }
     }
   }
 
@@ -332,9 +468,17 @@ async function resolveAndValidate(rows) {
 
     // Resolve vender
     if (r._venderName) {
-      const id = venderMap.get(r._venderName.toLowerCase());
-      if (id) {
-        d.nguoi_tuyen_id = id;
+      const key = r._venderName.toLowerCase();
+      if (maVenderSet.has(key)) {
+        // Khớp theo MÃ VENDER → luôn rõ ràng (mã là duy nhất)
+        d.nguoi_tuyen_id = venderMap.get(key);
+      } else if (venderMap.has(key)) {
+        // Khớp theo HỌ TÊN → nếu nhiều user trùng tên thì không tự đoán, bắt nhập mã
+        if ((nameCount.get(key) || 0) > 1) {
+          r.errors.push(`Tên vender "${r._venderName}" trùng ${nameCount.get(key)} người — hãy nhập MÃ VENDER để chỉ định chính xác`);
+        } else {
+          d.nguoi_tuyen_id = venderMap.get(key);
+        }
       } else {
         r.errors.push(`Vender "${r._venderName}" không tìm thấy trong danh sách users`);
       }

@@ -4,7 +4,7 @@
 const { Router } = require('express');
 const { z } = require('zod');
 const validate       = require('../middleware/validate');
-const { requireRole } = require('../middleware/auth');
+const { requireKtxAccess } = require('../middleware/auth');
 const asyncWrapper   = require('../utils/asyncWrapper');
 const { sendSuccess, sendCreated } = require('../utils/response');
 const ktxModel = require('../models/ktxModel');
@@ -23,12 +23,12 @@ function toPositiveInt(value, fieldName) {
 }
 
 // ─── KY_TUC_XA ────────────────────────────────────────────
-router.get('/', requireRole('admin'), asyncWrapper(async (_req, res) => {
+router.get('/', requireKtxAccess, asyncWrapper(async (_req, res) => {
   const data = await ktxModel.findAllKtx();
   sendSuccess(res, data);
 }));
 
-router.post('/', requireRole('admin'),
+router.post('/', requireKtxAccess,
   validate(z.object({
     ten: z.string().min(1).max(100),
     dia_chi: z.string().max(500).optional(),
@@ -42,13 +42,13 @@ router.post('/', requireRole('admin'),
 );
 
 // Vô hiệu hoá KTX (active = FALSE)
-router.delete('/:id', requireRole('admin'), asyncWrapper(async (req, res) => {
+router.delete('/:id', requireKtxAccess, asyncWrapper(async (req, res) => {
   const data = await ktxModel.updateKtx(toPositiveInt(req.params.id, 'ID KTX'), { active: false });
   if (!data) { const e = new Error('Không tìm thấy KTX'); e.statusCode = 404; throw e; }
   sendSuccess(res, null, 'Đã vô hiệu hoá KTX');
 }));
 
-router.put('/:id', requireRole('admin'),
+router.put('/:id', requireKtxAccess,
   validate(z.object({
     ten: z.string().min(1).max(100).optional(),
     dia_chi: z.string().max(500).optional(),
@@ -64,7 +64,7 @@ router.put('/:id', requireRole('admin'),
 );
 
 // ─── PHONG ────────────────────────────────────────────────
-router.get('/:ktxId/phong', requireRole('admin'), asyncWrapper(async (req, res) => {
+router.get('/:ktxId/phong', requireKtxAccess, asyncWrapper(async (req, res) => {
   const data = await ktxModel.findPhongByKtx(toPositiveInt(req.params.ktxId, 'ID KTX'));
   sendSuccess(res, data);
 }));
@@ -78,7 +78,7 @@ const phongSchema = z.object({
   ghi_chu:   z.string().optional(),
 });
 
-router.post('/:ktxId/phong', requireRole('admin'),
+router.post('/:ktxId/phong', requireKtxAccess,
   validate(phongSchema.omit({ ktx_id: true })),
   asyncWrapper(async (req, res) => {
     const data = await ktxModel.createPhong({
@@ -89,7 +89,7 @@ router.post('/:ktxId/phong', requireRole('admin'),
   }),
 );
 
-router.put('/phong/:phongId', requireRole('admin'),
+router.put('/phong/:phongId', requireKtxAccess,
   validate(phongSchema.omit({ ktx_id: true }).partial()),
   asyncWrapper(async (req, res) => {
     const data = await ktxModel.updatePhong(toPositiveInt(req.params.phongId, 'ID phòng'), req.validatedBody);
@@ -98,14 +98,14 @@ router.put('/phong/:phongId', requireRole('admin'),
   }),
 );
 
-router.delete('/phong/:phongId', requireRole('admin'), asyncWrapper(async (req, res) => {
+router.delete('/phong/:phongId', requireKtxAccess, asyncWrapper(async (req, res) => {
   const data = await ktxModel.deletePhong(toPositiveInt(req.params.phongId, 'ID phòng'));
   if (!data) { const e = new Error('Không tìm thấy phòng'); e.statusCode = 404; throw e; }
   sendSuccess(res, null, 'Đã xoá phòng');
 }));
 
 // ─── GIUONG (xem chi tiết phòng) ──────────────────────────
-router.get('/phong/:phongId/giuong', requireRole('admin'), asyncWrapper(async (req, res) => {
+router.get('/phong/:phongId/giuong', requireKtxAccess, asyncWrapper(async (req, res) => {
   const data = await ktxModel.findGiuongByPhong(toPositiveInt(req.params.phongId, 'ID phòng'));
   sendSuccess(res, data);
 }));
@@ -116,7 +116,7 @@ const xepSchema = z.object({
   ngay_vao:     z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
 });
 
-router.post('/giuong/:giuongId/xep', requireRole('admin'),
+router.post('/giuong/:giuongId/xep', requireKtxAccess,
   validate(xepSchema),
   asyncWrapper(async (req, res) => {
     const data = await ktxModel.xepGiuong(
@@ -128,7 +128,7 @@ router.post('/giuong/:giuongId/xep', requireRole('admin'),
   }),
 );
 
-router.put('/thue-phong/:id/tra', requireRole('admin'),
+router.put('/thue-phong/:id/tra', requireKtxAccess,
   validate(z.object({ ngay_ra: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) })),
   asyncWrapper(async (req, res) => {
     const data = await ktxModel.traPhong(
@@ -141,13 +141,13 @@ router.put('/thue-phong/:id/tra', requireRole('admin'),
 );
 
 // Lịch sử thuê phòng của 1 công nhân
-router.get('/lich-su/:congNhanId', requireRole('admin'), asyncWrapper(async (req, res) => {
+router.get('/lich-su/:congNhanId', requireKtxAccess, asyncWrapper(async (req, res) => {
   const data = await ktxModel.findThuephongByCongNhan(toPositiveInt(req.params.congNhanId, 'ID công nhân'));
   sendSuccess(res, data);
 }));
 
 // Danh sách công nhân có thể xếp phòng (chưa có KTX/phòng trọ active)
-router.get('/cong-nhan/co-the-xep', requireRole('admin'), asyncWrapper(async (req, res) => {
+router.get('/cong-nhan/co-the-xep', requireKtxAccess, asyncWrapper(async (req, res) => {
   const data = await ktxModel.findUngVienXepPhong({
     search: req.query.search,
     limit: req.query.limit,
@@ -156,13 +156,13 @@ router.get('/cong-nhan/co-the-xep', requireRole('admin'), asyncWrapper(async (re
 }));
 
 // ─── HOA_DON_KTX ───────────────────────────────────────────
-router.get('/phong/:phongId/hoa-don', requireRole('admin'), asyncWrapper(async (req, res) => {
+router.get('/phong/:phongId/hoa-don', requireKtxAccess, asyncWrapper(async (req, res) => {
   const data = await ktxModel.findHoaDonByPhong(toPositiveInt(req.params.phongId, 'ID phòng'));
   sendSuccess(res, data);
 }));
 
 // Lấy số điện/nước tháng trước để điền sẵn
-router.get('/phong/:phongId/hoa-don/thang-truoc', requireRole('admin'), asyncWrapper(async (req, res) => {
+router.get('/phong/:phongId/hoa-don/thang-truoc', requireKtxAccess, asyncWrapper(async (req, res) => {
   const { thang, nam } = req.query;
   const thangNum = toPositiveInt(thang, 'Tháng');
   const namNum = toPositiveInt(nam, 'Năm');
@@ -193,7 +193,7 @@ const hoaDonSchema = z.object({
   ghi_chu:     z.string().optional(),
 });
 
-router.post('/phong/:phongId/hoa-don', requireRole('admin'),
+router.post('/phong/:phongId/hoa-don', requireKtxAccess,
   validate(hoaDonSchema),
   asyncWrapper(async (req, res) => {
     const data = await ktxModel.createHoaDon({

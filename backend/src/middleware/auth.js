@@ -54,4 +54,14 @@ function blockVender(req, res, next) {
   return next();
 }
 
-module.exports = { authenticate, requireRole, scopeByRole, blockVender };
+// Cho phép dùng module Ký túc xá: admin LUÔN được; user khác cần được admin
+// cấp quyền (users.quyen_ktx = TRUE, đính kèm trong JWT).
+const requireKtxAccess = [
+  authenticate,
+  (req, res, next) => {
+    if (req.user?.vai_tro === 'admin' || req.user?.quyen_ktx === true) return next();
+    return sendForbidden(res, 'Bạn chưa được cấp quyền sử dụng chức năng Ký túc xá');
+  },
+];
+
+module.exports = { authenticate, requireRole, scopeByRole, blockVender, requireKtxAccess };

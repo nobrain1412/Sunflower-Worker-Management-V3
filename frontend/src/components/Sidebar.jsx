@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useCongTyList } from '../hooks/useCongNhan';
 import DoiMatKhauModal from './DoiMatKhauModal';
 
 // Nav items có thêm `roles` để lọc theo quyền
@@ -143,7 +144,12 @@ export default function Sidebar({ onClose }) {
     if (onClose) onClose(); // đóng sidebar mobile nếu đang mở
   }
 
-  const visibleNav = NAV.filter((item) => item.roles.includes(vaiTro));
+  const visibleNav = NAV.filter((item) => {
+    if (item.roles.includes(vaiTro)) return true;
+    // Ngoài role, user được admin cấp quyền KTX cũng thấy mục "Phòng trọ" (/ktx)
+    if (item.to === '/ktx' && user?.quyen_ktx) return true;
+    return false;
+  });
 
   return (
     <aside style={s.sidebar}>
@@ -221,20 +227,24 @@ export default function Sidebar({ onClose }) {
   );
 }
 
-// Dropdown chọn công ty cho quản lý — fetch tên từ API
+// Dropdown chọn công ty cho quản lý — hiển thị tên công ty được gán cho quản lý
 function CongTyDropdown({ congTyIds, selectedId, onSelect }) {
-  // Tạm thời hiển thị ID, sẽ fetch tên đầy đủ sau khi có dữ liệu thực
+  const congTyArr = useCongTyList().data?.data ?? [];
+  // map id → tên công ty; fallback "Công ty #id" nếu chưa load kịp
+  const tenById = new Map(congTyArr.map((c) => [c.id, c.ten_cong_ty]));
+
+  // Chỉ hiển thị các công ty được gán cho quản lý này
   return (
     <div style={sd.wrap}>
       <div style={sd.label}>CÔNG TY</div>
       <select
         style={sd.select}
         value={selectedId ?? ''}
-        onChange={(e) => onSelect(parseInt(e.target.value, 10))}
+        onChange={(e) => onSelect(e.target.value ? parseInt(e.target.value, 10) : null)}
       >
         <option value="">-- Tất cả công ty --</option>
         {congTyIds.map((id) => (
-          <option key={id} value={id}>Công ty #{id}</option>
+          <option key={id} value={id}>{tenById.get(id) ?? `Công ty #${id}`}</option>
         ))}
       </select>
     </div>

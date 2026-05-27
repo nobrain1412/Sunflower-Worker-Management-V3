@@ -49,15 +49,18 @@ function UserModal({ user, onClose }) {
     so_tai_khoan: user?.so_tai_khoan ?? '',
     ten_chu_tk: user?.ten_chu_tk ?? '',
     hinh_thuc_thanh_toan: user?.hinh_thuc_thanh_toan ?? 'mot_lan',
+    quyen_ktx: user?.quyen_ktx ?? false,
     cong_ty_ids: user?.cong_ty_ids ?? [],
   });
   const [err, setErr] = useState('');
 
   function handleChange(e) {
-    const { name, value, type } = e.target;
+    const { name, value, type, checked } = e.target;
     setForm((f) => ({
       ...f,
-      [name]: type === 'number' ? (value === '' ? '' : Number(value)) : value,
+      [name]: type === 'checkbox' ? checked
+        : type === 'number' ? (value === '' ? '' : Number(value))
+        : value,
     }));
   }
 
@@ -87,10 +90,16 @@ function UserModal({ user, onClose }) {
       hinh_thuc_thanh_toan: form.vai_tro === 'cong_tac_vien' ? form.hinh_thuc_thanh_toan : undefined,
       cong_ty_ids: form.vai_tro === 'quan_ly' ? form.cong_ty_ids : [],
     };
+    // Chỉ admin được cấp quyền KTX
+    if (isAdmin) payload.quyen_ktx = !!form.quyen_ktx;
     if (form.mat_khau) payload.mat_khau = form.mat_khau;
 
     try {
       if (isEdit) {
+        // Admin được đổi tên đăng nhập; chỉ gửi khi thực sự thay đổi
+        if (isAdmin && form.ten_dang_nhap && form.ten_dang_nhap !== user.ten_dang_nhap) {
+          payload.ten_dang_nhap = form.ten_dang_nhap;
+        }
         await capNhat.mutateAsync({ id: user.id, ...payload });
       } else {
         await tao.mutateAsync({ ten_dang_nhap: form.ten_dang_nhap, ...payload });
@@ -107,7 +116,7 @@ function UserModal({ user, onClose }) {
           <div style={F.col}>
             <label className="form-label">Tên đăng nhập *</label>
             <input className="form-input" name="ten_dang_nhap" value={form.ten_dang_nhap}
-              onChange={handleChange} disabled={isEdit} />
+              onChange={handleChange} disabled={isEdit && !isAdmin} />
           </div>
           <div style={F.col}>
             <label className="form-label">Mật khẩu {isEdit ? '(để trống nếu không đổi)' : '*'}</label>
@@ -163,6 +172,17 @@ function UserModal({ user, onClose }) {
             <label className="form-label">Tên chủ tài khoản</label>
             <input className="form-input" name="ten_chu_tk" value={form.ten_chu_tk} onChange={handleChange} />
           </div>
+          {isAdmin && (
+            <div style={{ ...F.col, gridColumn: 'span 2' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, color: 'var(--text1)' }}>
+                <input type="checkbox" name="quyen_ktx" checked={form.quyen_ktx} onChange={handleChange} />
+                Cho phép sử dụng chức năng Ký túc xá
+              </label>
+              <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>
+                User được tick sẽ thấy và quản lý được module Ký túc xá (admin luôn có quyền).
+              </div>
+            </div>
+          )}
           {form.vai_tro === 'quan_ly' && isAdmin && (
             <div style={{ ...F.col, gridColumn: 'span 2' }}>
               <label className="form-label">Công ty quản lý</label>

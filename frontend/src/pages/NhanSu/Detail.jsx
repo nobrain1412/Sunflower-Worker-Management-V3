@@ -42,9 +42,18 @@ export default function NhanVienDetail() {
           )}
         </div>
         <div style={s.grid}>
-          <Field label="Tên đăng nhập" value={u.ten_dang_nhap} />
+          <Field label="Tên đăng nhập" value={u.ten_dang_nhap} mono />
+          <Field label="Vai trò" value={ROLE_LABEL[u.vai_tro] ?? u.vai_tro} />
           <Field label="SĐT" value={u.so_dien_thoai} />
+          {(u.vai_tro === 'vender' || u.vai_tro === 'cong_tac_vien') && (
+            <Field label="Mã vender" value={u.ma_vender} mono />
+          )}
+          {u.vai_tro === 'cong_tac_vien' && (
+            <Field label="Hình thức thanh toán"
+              value={u.hinh_thuc_thanh_toan === 'hang_thang' ? 'Hàng tháng (đơn giá giờ)' : 'Một lần (đủ 26 ngày)'} />
+          )}
           <Field label="Trạng thái" value={u.active ? 'Hoạt động' : 'Đã khoá'} />
+          <Field label="Ngày tham gia" value={fmtDate(u.created_at)} />
           <Field label="Ngân hàng" value={u.ngan_hang} />
           <Field label="Số tài khoản" value={u.so_tai_khoan} mono />
           <Field label="Tên chủ TK" value={u.ten_chu_tk} />
@@ -68,6 +77,13 @@ export default function NhanVienDetail() {
       )}
     </div>
   );
+}
+
+function fmtDate(v) {
+  if (!v) return null;
+  const d = new Date(v);
+  if (isNaN(d.getTime())) return null;
+  return d.toLocaleDateString('vi-VN');
 }
 
 function Field({ label, value, mono }) {

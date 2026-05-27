@@ -19,23 +19,20 @@
 ---
 
 ## Danh sách lỗi
-- [x] todolist: cho chọn giờ làm — thêm input time
-- [x] form đề xuất công ty: bỏ field hệ số OT thừa
+
 ## Tính năng mới
 
 # Dashboard
 
 # Công nhân
-- [x] quản lý không xem được mượn xe/nơi ở/số tiền ứng của CN trong cty mình — fix: cho admin/QL xem all giao dịch của CN; vender/CTV chỉ thấy CN mình tuyển
-- [x] nút Nghỉ việc cạnh thông tin công ty CN → chuyển trang_thai='nghi_viec', xoá cong_ty_id, ghi ngay_nghi_viec
-- [x] sửa công ty CN: kết thúc phan_cong cũ + tạo phan_cong mới + confirm + log
+- kiểm tra lại phần thêm mỡi công nhân nếu có 2 vender tên gần giống nhau như hồng và hồng nguyễn thì nên xử lý thế nào
+- kiểm tra lại khi admin xoá công nhân báo lỗi hệ thống và không thể xoá. lỗi "DELETE https://vieclamsunflower.vn/api/cong-nhan/1 500 (Internal Server Error)"
 # Ký túc xá
-
+- trong phần ký túc xá hãy thêm 1 ô để admin có thể phân công những ai có thể sử dụng chức năng ký túc xá
 # công ty
-- [x] thêm cột tiền công cho quản lý (VNĐ/h)
-- [x] verify trang công ty hoạt động cho role khác admin (vender/CTV/kế toán/QL)
-# tài chính
-- [x] click giao dịch → modal chi tiết (loại, số tiền, ngày, ghi chú, người tạo, trạng thái hoàn)
-# nhân viên
 
+# nhân viên
+- hiển thị thông tin cá nhân trong chi tiết nhân viên
+- cho phép sửa tên đăng nhập
+- hãy đảm bảo khi user đổi tên đăng nhập hoặc mã vender không bị ảnh hưởng đến những công nhân được gán đến mã ven đấy
 # cộng tác viên

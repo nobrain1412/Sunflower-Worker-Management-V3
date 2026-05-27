@@ -27,7 +27,7 @@ router.use(authenticate);
 // GET /api/users/venders — danh sách user có thể tuyển CN
 router.get('/venders', requireRole('admin', 'quan_ly'), asyncWrapper(async (_req, res) => {
   const result = await db.query(
-    `SELECT id, ho_ten, vai_tro
+    `SELECT id, ho_ten, vai_tro, ma_vender
      FROM users
      WHERE active = TRUE
      ORDER BY ho_ten`,
@@ -201,6 +201,7 @@ router.post('/', requireRole('admin', 'quan_ly'), validate(createSchema), asyncW
 }));
 
 const updateSchema = z.object({
+  ten_dang_nhap:        z.string().min(3).max(50).optional(),
   ho_ten:               z.string().min(2).max(100).optional(),
   vai_tro:              z.enum(userModel.ROLE_VALUES).optional(),
   active:               z.boolean().optional(),
@@ -210,6 +211,7 @@ const updateSchema = z.object({
   ten_chu_tk:           z.string().max(100).optional(),
   hinh_thuc_thanh_toan: z.enum(['mot_lan', 'hang_thang']).optional(),
   ma_vender:            z.string().max(50).optional().or(z.literal('')),
+  quyen_ktx:            z.boolean().optional(),
   mat_khau:             z.string().min(6).max(100).optional(),
   cong_ty_ids:          z.array(z.number().int().positive()).optional(),
 });
@@ -220,12 +222,28 @@ router.put('/:id', requireRole('admin', 'quan_ly'), validate(updateSchema), asyn
   const body = { ...req.validatedBody };
   const targetUser = await userModel.findById(id);
   if (!targetUser) { const e = new Error('Không tìm thấy user'); e.statusCode = 404; throw e; }
+  // Đổi tên đăng nhập: chỉ admin, và phải đảm bảo không trùng user khác.
+  // Lưu ý: nguoi_tuyen_id của công nhân gán theo user.id nên đổi tên KHÔNG ảnh hưởng CN đã gán.
+  if (body.ten_dang_nhap && body.ten_dang_nhap !== targetUser.ten_dang_nhap) {
+    if (req.user.vai_tro !== 'admin') {
+      const e = new Error('Chỉ admin được đổi tên đăng nhập'); e.statusCode = 403; throw e;
+    }
+    const dup = await db.query(
+      `SELECT 1 FROM users WHERE LOWER(ten_dang_nhap) = LOWER($1) AND id <> $2`,
+      [body.ten_dang_nhap, id],
+    );
+    if (dup.rows.length) {
+      const e = new Error('Tên đăng nhập đã tồn tại'); e.statusCode = 409; e.code = 'DUPLICATE_USERNAME'; throw e;
+    }
+  }
   if (req.user.vai_tro === 'quan_ly') {
     if (targetUser.vai_tro !== 'cong_tac_vien' || targetUser.quan_ly_id !== req.user.id) {
       const e = new Error('Bạn chỉ được sửa cộng tác viên thuộc quyền quản lý');
       e.statusCode = 403;
       throw e;
     }
+    // Quản lý không được đổi tên đăng nhập của CTV
+    delete body.ten_dang_nhap;
     if (body.vai_tro && body.vai_tro !== 'cong_tac_vien') {
       const e = new Error('Quản lý không được thay đổi vai trò khỏi cộng tác viên');
       e.statusCode = 403;
@@ -242,6 +260,7 @@ router.put('/:id', requireRole('admin', 'quan_ly'), validate(updateSchema), asyn
   if (req.user.vai_tro === 'quan_ly') {
     delete body.vai_tro;
     delete body.active;
+    delete body.quyen_ktx; // chỉ admin được cấp quyền KTX
     body.quan_ly_id = req.user.id;
   }
   const updated = await userModel.update(id, body);

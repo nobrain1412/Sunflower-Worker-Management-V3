@@ -191,18 +191,9 @@ async function capNhat(id, data, actorUserId = null, scope = null) {
 }
 
 async function xoa(id) {
-  let deleted;
-  try {
-    deleted = await congNhanModel.hardDelete(id);
-  } catch (error) {
-    if (error.code === '23503') {
-      const err = new Error('Công nhân đang có dữ liệu liên kết (phân công, tài chính, chỗ ở...). Vui lòng xoá dữ liệu liên quan trước.');
-      err.statusCode = 409;
-      err.code = 'CONG_NHAN_HAS_RELATIONS';
-      throw err;
-    }
-    throw error;
-  }
+  // Soft delete: giữ toàn bộ dữ liệu liên kết (chấm công, tài chính, chỗ ở...)
+  // nên không còn vướng FK RESTRICT như xoá thật.
+  const deleted = await congNhanModel.softDelete(id);
   if (!deleted) {
     const err = new Error('Không tìm thấy công nhân');
     err.statusCode = 404;

@@ -34,6 +34,8 @@ function toDateFromJwtExp(token) {
 
 async function buildTokenPayload(user) {
   const base = { id: user.id, vai_tro: user.vai_tro, ho_ten: user.ho_ten };
+  // Quyền dùng module KTX — đính vào JWT để middleware khỏi query DB mỗi request
+  if (user.quyen_ktx) base.quyen_ktx = true;
   // Đính kèm danh sách cong_ty vào JWT cho quan_ly để tránh query DB mỗi request
   if (user.vai_tro === 'quan_ly') {
     base.cong_ty_ids = await userModel.findCongTyIds(user.id);
@@ -47,6 +49,7 @@ function mapUserResponse(user, payload) {
     ten_dang_nhap: user.ten_dang_nhap,
     ho_ten: user.ho_ten,
     vai_tro: user.vai_tro,
+    quyen_ktx: !!user.quyen_ktx,
     cong_ty_ids: payload.cong_ty_ids ?? [],
   };
 }

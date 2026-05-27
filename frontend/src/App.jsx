@@ -36,12 +36,15 @@ function PrivateRoute({ children }) {
     : <Navigate to="/login" replace />;
 }
 
-// Chặn route theo role — redirect về / nếu không đủ quyền
-function RoleRoute({ children, allowedRoles }) {
+// Chặn route theo role — redirect về / nếu không đủ quyền.
+// `allowKtx`: cho phép thêm user được admin cấp quyền KTX (ngoài allowedRoles).
+function RoleRoute({ children, allowedRoles, allowKtx }) {
   const { isLoggedIn, user, isAuthReady } = useAuth();
   if (!isAuthReady) return <div style={{ minHeight: '100vh', background: 'var(--bg0)' }} />;
   if (!isLoggedIn) return <Navigate to="/login" replace />;
-  if (!allowedRoles.includes(user?.vai_tro)) return <Navigate to="/" replace />;
+  const okRole = allowedRoles.includes(user?.vai_tro);
+  const okKtx  = allowKtx && user?.quyen_ktx;
+  if (!okRole && !okKtx) return <Navigate to="/" replace />;
   return <Layout>{children}</Layout>;
 }
 
@@ -97,7 +100,7 @@ export default function App() {
 
             {/* Chỉ admin */}
             <Route path="/ktx" element={
-              <RoleRoute allowedRoles={['admin']}><KTX /></RoleRoute>
+              <RoleRoute allowedRoles={['admin']} allowKtx><KTX /></RoleRoute>
             } />
 
             <Route path="/cong-ty" element={
