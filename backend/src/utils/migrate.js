@@ -89,26 +89,34 @@ async function run() {
     console.log(`Có ${pending.length} migration pending: ${pending.join(', ')}`);
   }
 
-  // Backup TRƯỚC mỗi lần deploy (mỗi lần migrate.js chạy = mỗi lần Railway start).
-  // Nếu có migration pending → backup là pre-migrate, đặc biệt quan trọng.
-  // Nếu không có pending → vẫn backup vì code mới có thể chứa bug làm hỏng data.
-  // Nếu backup fail VÀ có migration pending → ABORT để bảo vệ dữ liệu.
-  // Nếu backup fail nhưng không có migration → chỉ warning, vẫn cho start (vì không sửa schema).
-  try {
-    const reason = pending.length > 0 ? 'pre-migrate' : 'deploy';
-    const backupPath = await runBackup({ reason });
-    if (!backupPath && process.env.REQUIRE_BACKUP === 'true') {
-      throw new Error('REQUIRE_BACKUP=true nhưng backup bị skip (volume chưa mount?)');
+  // SKIP_BACKUP=true → bỏ qua backup hoàn toàn. Dùng khi chạy migration TỪ MÁY LOCAL
+  // (không cài pg_dump) trỏ vào DB Railway — DB đã được Railway backup sẵn, migration
+  // chỉ THÊM (không xoá) nên an toàn. KHÔNG set biến này trên Railway production.
+  if (process.env.SKIP_BACKUP === 'true') {
+    console.log('⏭  SKIP_BACKUP=true → bỏ qua backup trước migration (chế độ chạy local).');
+  } else {
+    // Backup TRƯỚC mỗi lần deploy (mỗi lần migrate.js chạy = mỗi lần Railway start).
+    // Nếu có migration pending → backup là pre-migrate, đặc biệt quan trọng.
+    // Nếu không có pending → vẫn backup vì code mới có thể chứa bug làm hỏng data.
+    // Nếu backup fail VÀ có migration pending → ABORT để bảo vệ dữ liệu.
+    // Nếu backup fail nhưng không có migration → chỉ warning, vẫn cho start (vì không sửa schema).
+    try {
+      const reason = pending.length > 0 ? 'pre-migrate' : 'deploy';
+      const backupPath = await runBackup({ reason });
+      if (!backupPath && process.env.REQUIRE_BACKUP === 'true') {
+        throw new Error('REQUIRE_BACKUP=true nhưng backup bị skip (volume chưa mount?)');
+      }
+      if (backupPath) pruneOldBackups();
+    } catch (err) {
+      if (pending.length > 0) {
+        console.error(`✗ Backup thất bại trước migration: ${err.message}`);
+        console.error('  → Hủy migration để bảo vệ dữ liệu. Sửa lỗi backup rồi deploy lại.');
+        console.error('  → Nếu chạy local không có pg_dump: set SKIP_BACKUP=true để bỏ qua backup.');
+        throw err;
+      }
+      console.warn(`⚠ Backup thất bại: ${err.message}`);
+      console.warn('  → Không có migration pending nên vẫn tiếp tục start. Hãy fix backup sớm.');
     }
-    if (backupPath) pruneOldBackups();
-  } catch (err) {
-    if (pending.length > 0) {
-      console.error(`✗ Backup thất bại trước migration: ${err.message}`);
-      console.error('  → Hủy migration để bảo vệ dữ liệu. Sửa lỗi backup rồi deploy lại.');
-      throw err;
-    }
-    console.warn(`⚠ Backup thất bại: ${err.message}`);
-    console.warn('  → Không có migration pending nên vẫn tiếp tục start. Hãy fix backup sớm.');
   }
 
   for (const file of files) {

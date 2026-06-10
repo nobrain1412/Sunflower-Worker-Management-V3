@@ -86,6 +86,17 @@ function runBackup({ reason = 'migrate' } = {}) {
       resolve(filepath);
     };
 
+    // Bắt 'error' khi không spawn được (vd thiếu pg_dump/gzip trên máy local) —
+    // không có listener thì Node ném uncaught error và crash cả tiến trình.
+    dump.on('error', (err) => {
+      try { fs.unlinkSync(filepath); } catch {}
+      reject(new Error(`Không chạy được pg_dump (${err.code || err.message}). Chưa cài Postgres client? Set SKIP_BACKUP=true để bỏ qua backup khi chạy local.`));
+    });
+    gzip.on('error', (err) => {
+      try { fs.unlinkSync(filepath); } catch {}
+      reject(new Error(`Không chạy được gzip (${err.code || err.message}).`));
+    });
+
     dump.on('exit', (code) => { dumpCode = code; tryFinish(); });
     gzip.on('exit', (code) => { gzipCode = code; tryFinish(); });
     out.on('close', () => { outClosed = true; tryFinish(); });
