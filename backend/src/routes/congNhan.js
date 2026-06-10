@@ -60,7 +60,7 @@ const taoMoiSchema = z.object({
   so_dien_thoai:    nullableRegex(sdtRegex, 'Số điện thoại không hợp lệ', 20),
   ngay_cap_cccd:    nullableDate('Ngày cấp CCCD không hợp lệ (YYYY-MM-DD)'),
   noi_cap_cccd:     nullableStr(200),
-  trang_thai:       z.enum(['dang_lam', 'nghi_phep', 'moi_vao', 'nghi_viec']).default('moi_vao'),
+  trang_thai:       z.enum(['dang_lam', 'nghi_phep', 'moi_vao', 'nghi_viec', 'doi_viec']).default('moi_vao'),
   ngay_vao_lam:     nullableDate('Ngày vào làm không hợp lệ (YYYY-MM-DD)'),
   ngay_nghi_viec:   nullableDate('Ngày nghỉ không hợp lệ (YYYY-MM-DD)'),
   ghi_chu:          nullableStr(1000),
@@ -124,9 +124,17 @@ router.put('/:id',
   ctrl.putCapNhat,
 );
 
-// Xoá: chỉ admin
+// Duyệt CN đang "đợi việc" → chuyển sang "moi_vao".
+// admin: duyệt bất kỳ; quan_ly: chỉ CN thuộc công ty mình (check ở service).
+router.post('/:id/duyet',
+  requireRole('admin', 'quan_ly'),
+  ctrl.postDuyet,
+);
+
+// Xoá: admin xoá bất kỳ; vender/CTV chỉ xoá CN mình tuyển khi đang "đợi việc"
+// (quyền chi tiết kiểm tra ở service layer theo req.user).
 router.delete('/:id',
-  requireRole('admin'),
+  requireRole('admin', 'quan_ly', 'vender', 'cong_tac_vien'),
   ctrl.deleteXoa,
 );
 

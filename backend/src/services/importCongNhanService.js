@@ -220,8 +220,13 @@ function analyzeDate(raw, todayISO) {
 
 function normalizeCccd(raw) {
   if (raw == null) return null;
-  const s = String(raw).replace(/\D/g, '');
-  return s || null;
+  let s = String(raw).replace(/\D/g, '');
+  if (!s) return null;
+  // Excel lưu CCCD dạng SỐ sẽ cắt số 0 ở đầu. Mã tỉnh (3 số đầu) luôn 001–096,
+  // tức CCCD chuẩn LUÔN bắt đầu bằng 0 → ô số sẽ mất 1–2 số đầu, còn 10–11 số.
+  // CCCD đúng phải 12 số → bù 0 bên trái cho đủ 12.
+  if (s.length === 10 || s.length === 11) s = s.padStart(12, '0');
+  return s;
 }
 
 function normalizePhone(raw) {
@@ -304,7 +309,13 @@ async function parseExcel(buffer) {
 
     // Normalize từng field
     if (data.ho_ten) data.ho_ten = toTitleCaseVN(data.ho_ten);
-    if (data.cccd) data.cccd = normalizeCccd(data.cccd);
+    if (data.cccd) {
+      const cccdTruoc = String(data.cccd).replace(/\D/g, '');
+      data.cccd = normalizeCccd(data.cccd);
+      if (data.cccd && cccdTruoc.length < 12 && data.cccd.length === 12) {
+        warnings.push(`CCCD "${cccdTruoc}" thiếu số 0 ở đầu (Excel lưu dạng số) → tự bù thành "${data.cccd}"`);
+      }
+    }
     if (data.so_dien_thoai) data.so_dien_thoai = normalizePhone(data.so_dien_thoai);
     // Ngày: parse per-row (tự đảo khi tháng>12 / ngày ở tương lai).
     // Phần nhập nhằng (cả 2 số <=12) tạm để dd/mm, quyết định sau theo thống kê cả cột.
@@ -384,6 +395,14 @@ async function parseExcel(buffer) {
  * Validate + resolve vender_name/cong_ty_name sang ID + check CCCD trùng.
  * Mutates rows in place (append errors/warnings + set nguoi_tuyen_id, cong_ty_id).
  */
+// Chuẩn hoá tên (vender / công ty) để so khớp: bỏ NBSP, trim, gộp khoảng trắng, lower.
+// Lý do: file Excel hay dính space dư ở đầu/cuối hoặc giữa các từ, hoặc NBSP ( )
+// do copy-paste từ Word → so khớp `=` thẳng sẽ trượt dù mắt thường thấy giống hệt.
+function normName(raw) {
+  if (raw == null) return '';
+  return String(raw).replace(/ /g, ' ').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
 async function resolveAndValidate(rows) {
   // Gom unique vender + cong_ty names để query 1 lần
   const venderNames = [...new Set(rows.map((r) => r._venderName).filter(Boolean))];
@@ -392,39 +411,40 @@ async function resolveAndValidate(rows) {
 
   // Resolve vender: khớp theo HỌ TÊN hoặc MÃ VENDER (đều case-insensitive).
   // → giải quyết lỗi import không nhận diện được vender khi file ghi mã thay vì tên.
-  const venderMap = new Map();   // token (ho_ten | ma_vender, lowercase) → user id
+  const venderMap = new Map();   // token (ho_ten | ma_vender, normName) → user id
   const maVenderSet = new Set();  // các token là MÃ VENDER (duy nhất → luôn ưu tiên)
-  const nameCount = new Map();    // lowered ho_ten → số user trùng tên (phát hiện nhập nhằng)
+  const nameCount = new Map();    // normName(ho_ten) → số user trùng tên (phát hiện nhập nhằng)
   if (venderNames.length > 0) {
-    const lowered = venderNames.map((n) => n.toLowerCase());
+    // Lấy hết user active rồi so khớp ở JS theo normName — gọn hơn là viết REGEXP_REPLACE trong SQL.
     const { rows: vRows } = await db.query(
-      `SELECT id, ho_ten, ma_vender FROM users
-        WHERE active = TRUE
-          AND (LOWER(ho_ten) = ANY($1::text[]) OR LOWER(ma_vender) = ANY($1::text[]))`,
-      [lowered],
+      `SELECT id, ho_ten, ma_vender FROM users WHERE active = TRUE`,
     );
+    const inputKeys = new Set(venderNames.map(normName));
     for (const v of vRows) {
-      if (v.ma_vender) {
-        const k = v.ma_vender.toLowerCase();
-        venderMap.set(k, v.id);
-        maVenderSet.add(k);
+      const kMa  = v.ma_vender ? normName(v.ma_vender) : null;
+      const kTen = v.ho_ten    ? normName(v.ho_ten)    : null;
+      if (kMa && inputKeys.has(kMa)) {
+        venderMap.set(kMa, v.id);
+        maVenderSet.add(kMa);
       }
-      if (v.ho_ten) {
-        const k = v.ho_ten.toLowerCase();
-        nameCount.set(k, (nameCount.get(k) || 0) + 1);
-        if (!venderMap.has(k)) venderMap.set(k, v.id); // chỉ dùng khi không nhập nhằng
+      if (kTen && inputKeys.has(kTen)) {
+        nameCount.set(kTen, (nameCount.get(kTen) || 0) + 1);
+        if (!venderMap.has(kTen)) venderMap.set(kTen, v.id);
       }
     }
   }
 
-  // Resolve cong_ty
+  // Resolve cong_ty — load all rồi match bằng normName để dung sai space/NBSP
   const congTyMap = new Map();
   if (congTyNames.length > 0) {
+    const inputKeys = new Set(congTyNames.map(normName));
     const { rows: ctRows } = await db.query(
-      `SELECT id, ten_cong_ty FROM cong_ty WHERE LOWER(ten_cong_ty) = ANY($1::text[])`,
-      [congTyNames.map((n) => n.toLowerCase())],
+      `SELECT id, ten_cong_ty FROM cong_ty`,
     );
-    for (const c of ctRows) congTyMap.set(c.ten_cong_ty.toLowerCase(), c.id);
+    for (const c of ctRows) {
+      const k = normName(c.ten_cong_ty);
+      if (inputKeys.has(k)) congTyMap.set(k, c.id);
+    }
   }
 
   // Check CCCD đã tồn tại
@@ -468,7 +488,7 @@ async function resolveAndValidate(rows) {
 
     // Resolve vender
     if (r._venderName) {
-      const key = r._venderName.toLowerCase();
+      const key = normName(r._venderName);
       if (maVenderSet.has(key)) {
         // Khớp theo MÃ VENDER → luôn rõ ràng (mã là duy nhất)
         d.nguoi_tuyen_id = venderMap.get(key);
@@ -486,7 +506,7 @@ async function resolveAndValidate(rows) {
 
     // Resolve cong_ty
     if (r._congTyName) {
-      const id = congTyMap.get(r._congTyName.toLowerCase());
+      const id = congTyMap.get(normName(r._congTyName));
       if (id) {
         d.cong_ty_id = id;
       } else {
@@ -540,12 +560,13 @@ async function commitImport(rows, createdBy) {
     for (const r of toInsert) {
       const d = r.data;
       try {
-        await db.query(
+        const ins = await db.query(
           `INSERT INTO cong_nhan
              (ho_ten, cccd, ngay_sinh, que_quan, so_dien_thoai,
               ngay_vao_lam, ma_van_tay, ghi_chu,
               nguoi_tuyen_id, cong_ty_id, trang_thai)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'moi_vao')`,
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'moi_vao')
+           RETURNING id`,
           [
             d.ho_ten,
             d.cccd ?? null,
@@ -559,6 +580,15 @@ async function commitImport(rows, createdBy) {
             d.cong_ty_id ?? null,
           ],
         );
+        // Có công ty → tạo luôn phan_cong để công nhân hiện trong bảng công.
+        // (Bảng chấm công bám theo phan_cong, không bám cong_nhan.cong_ty_id.)
+        if (d.cong_ty_id) {
+          await db.query(
+            `INSERT INTO phan_cong (cong_nhan_id, cong_ty_id, ngay_bat_dau)
+             VALUES ($1, $2, $3)`,
+            [ins.rows[0].id, d.cong_ty_id, d.ngay_vao_lam || new Date().toISOString().slice(0, 10)],
+          );
+        }
         inserted++;
       } catch (err) {
         failed.push({ rowNumber: r.rowNumber, message: err.message });
@@ -618,6 +648,11 @@ async function buildTemplate() {
     type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8F0FF' },
   };
   ws.views = [{ state: 'frozen', ySplit: 1 }]; // ghim header khi cuộn
+
+  // Ép CCCD (cột 5) + SĐT (cột 7) về định dạng Text ('@') để Excel KHÔNG cắt
+  // số 0 ở đầu khi người dùng gõ (CCCD luôn bắt đầu bằng 0, SĐT cũng vậy).
+  ws.getColumn(5).numFmt = '@';
+  ws.getColumn(7).numFmt = '@';
 
   // Sheet dữ liệu chỉ có header — không có dòng mẫu cần xoá.
   // Mọi hướng dẫn + ví dụ nằm ở sheet "Hướng dẫn" bên dưới.

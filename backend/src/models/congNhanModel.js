@@ -9,8 +9,20 @@ const db = require('../utils/db');
 // Scope 'cong_ty' yêu cầu bảng phan_cong (sẽ implement ở migration tiếp theo)
 async function findAll({ page = 1, limit = 20, sort = 'ho_ten', order = 'asc', trang_thai, trang_thai_noi_o, search, vender_id, cong_ty_id, tinh, ngay, scope }) {
   const offset = (page - 1) * limit;
-  const allowedSort = ['ho_ten', 'ngay_sinh', 'created_at', 'trang_thai'];
-  const safeSort = allowedSort.includes(sort) ? sort : 'ho_ten';
+  // Map field FE gửi → biểu thức ORDER BY thật (gồm cả cột join công ty/vender).
+  // Field lạ → fallback ho_ten. Tránh SQL injection (whitelist) + không hardcode prefix cn.
+  const SORT_EXPR = {
+    ho_ten:           'cn.ho_ten',
+    ten_cong_ty:      'ct.ten_cong_ty',
+    vender:           'u.ho_ten',
+    so_dien_thoai:    'cn.so_dien_thoai',
+    ngay_vao_lam:     'cn.ngay_vao_lam',
+    trang_thai_noi_o: 'cn.trang_thai_noi_o',
+    trang_thai:       'cn.trang_thai',
+    ngay_sinh:        'cn.ngay_sinh',
+    created_at:       'cn.created_at',
+  };
+  const sortExpr = SORT_EXPR[sort] || 'cn.ho_ten';
   const safeOrder = order === 'desc' ? 'DESC' : 'ASC';
 
   const conditions = ['cn.deleted_at IS NULL'];
@@ -87,7 +99,7 @@ async function findAll({ page = 1, limit = 20, sort = 'ho_ten', order = 'asc', t
      LEFT JOIN users   u  ON u.id  = cn.nguoi_tuyen_id
      LEFT JOIN cong_ty ct ON ct.id = cn.cong_ty_id
      WHERE ${where}
-     ORDER BY cn.${safeSort} ${safeOrder}
+     ORDER BY ${sortExpr} ${safeOrder} NULLS LAST, cn.ho_ten ASC
      LIMIT $${params.length - 1} OFFSET $${params.length}`,
     params,
   );

@@ -87,8 +87,8 @@ router.post('/',
         [req.user.id, cong_ty_id],
       );
       if (own.rows.length === 0) {
-        const e = new Error('Bạn không quản lý công ty này');
-        e.statusCode = 403; throw e;
+        const e = new Error('Bạn chỉ được đề xuất sửa công ty mình quản lý. Công ty này chưa được gán cho bạn — liên hệ admin để được phân quyền.');
+        e.statusCode = 403; e.code = 'FORBIDDEN'; throw e;
       }
     }
 

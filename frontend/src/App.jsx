@@ -11,6 +11,7 @@ import Dashboard      from './pages/Dashboard';
 import CongNhan       from './pages/CongNhan/index';
 import CongNhanDetail from './pages/CongNhan/Detail';
 import ImportExcel    from './pages/CongNhan/ImportExcel';
+import DuyetQueue     from './pages/CongNhan/DuyetQueue';
 import ScanCCCD       from './pages/OCR/ScanCCCD';
 import BulkReview     from './pages/OCR/BulkReview';
 import ChamCong       from './pages/ChamCong/index';
@@ -75,6 +76,9 @@ export default function App() {
             <Route path="/cong-nhan"     element={<PrivateRoute><CongNhan /></PrivateRoute>} />
             <Route path="/cong-nhan/import-excel" element={
               <RoleRoute allowedRoles={['admin','quan_ly']}><ImportExcel /></RoleRoute>
+            } />
+            <Route path="/cong-nhan/duyet" element={
+              <RoleRoute allowedRoles={['admin','quan_ly']}><DuyetQueue /></RoleRoute>
             } />
             <Route path="/cong-nhan/:id" element={<PrivateRoute><CongNhanDetail /></PrivateRoute>} />
             <Route path="/cham-cong"     element={<PrivateRoute><ChamCong /></PrivateRoute>} />

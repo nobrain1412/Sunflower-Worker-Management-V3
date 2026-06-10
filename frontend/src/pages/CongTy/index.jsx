@@ -308,7 +308,9 @@ export default function CongTy() {
                       {editing ? 'Hủy' : '✏️ Chỉnh sửa'}
                     </button>
                   )}
-                  {isQuanLy && !editing && (
+                  {/* Chỉ cho đề xuất sửa công ty mình quản lý — nếu không, BE sẽ trả 403.
+                      Ẩn nút ở công ty không thuộc quyền để tránh điền form rồi mới báo lỗi. */}
+                  {isQuanLy && !editing && (user?.cong_ty_ids ?? []).includes(selected.id) && (
                     <button className="btn-ghost" onClick={() => setDeXuatMode('sua_doi')}>
                       ✏️ Đề xuất sửa
                     </button>

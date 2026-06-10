@@ -67,7 +67,33 @@ async function taoMoi(data) {
     }
   }
 
-  return congNhanModel.create(data);
+  const created = await congNhanModel.create(data);
+
+  // Có công ty + đã đi làm (không phải "đợi việc") → tạo phan_cong ngay để
+  // công nhân xuất hiện trong bảng công. Bảng chấm công bám theo phan_cong,
+  // KHÔNG bám cong_nhan.cong_ty_id. CN "đợi việc" chưa đi làm nên chưa tạo.
+  if (created?.cong_ty_id && created.trang_thai !== 'doi_viec') {
+    try {
+      await taoPhanCong(created.id, created.cong_ty_id, data.ngay_vao_lam);
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn('Tạo phan_cong khi tạo CN thất bại:', e.message);
+    }
+  }
+
+  return created;
+}
+
+// Tạo 1 dòng phan_cong (công nhân ↔ công ty) bắt đầu từ ngayBatDau (hoặc hôm nay).
+// Dùng khi tạo CN có công ty hoặc khi duyệt CN "đợi việc" vào làm.
+async function taoPhanCong(congNhanId, congTyId, ngayBatDau) {
+  const db = require('../utils/db');
+  const start = ngayBatDau || new Date().toISOString().slice(0, 10);
+  await db.query(
+    `INSERT INTO phan_cong (cong_nhan_id, cong_ty_id, ngay_bat_dau)
+     VALUES ($1, $2, $3)`,
+    [congNhanId, congTyId, start],
+  );
 }
 
 // Đồng bộ bảng phan_cong khi CN đổi công ty hoặc nghỉ việc.
@@ -190,7 +216,92 @@ async function capNhat(id, data, actorUserId = null, scope = null) {
   return updated;
 }
 
-async function xoa(id) {
+// Quản lý công ty duyệt 1 CN đang "đợi việc" (phỏng vấn đạt) → chính thức vào làm.
+// - Phải đang ở trạng thái 'doi_viec'
+// - quan_ly chỉ duyệt được CN thuộc công ty mình quản lý (admin duyệt bất kỳ)
+// - Duyệt xong: trang_thai = 'moi_vao', ngay_vao_lam = ngày duyệt (nếu chưa có)
+async function duyet(id, user) {
+  const before = await congNhanModel.findById(id);
+  if (!before) {
+    const err = new Error('Không tìm thấy công nhân');
+    err.statusCode = 404; err.code = 'NOT_FOUND'; throw err;
+  }
+  if (before.trang_thai !== 'doi_viec') {
+    const err = new Error('Công nhân không ở trạng thái đợi việc');
+    err.statusCode = 400; err.code = 'INVALID_STATE'; throw err;
+  }
+  if (user?.vai_tro === 'quan_ly') {
+    const congTyIds = user.cong_ty_ids ?? [];
+    if (!congTyIds.includes(before.cong_ty_id)) {
+      const err = new Error('Bạn chỉ được duyệt công nhân thuộc công ty mình quản lý');
+      err.statusCode = 403; err.code = 'FORBIDDEN'; throw err;
+    }
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+  const ngayVao = before.ngay_vao_lam
+    ? new Date(before.ngay_vao_lam).toISOString().slice(0, 10)
+    : today;
+  const updated = await congNhanModel.update(id, {
+    trang_thai: 'moi_vao',
+    ngay_vao_lam: ngayVao,
+  });
+
+  // Duyệt vào làm → tạo phan_cong để có bảng công (nếu chưa có cho công ty này).
+  if (updated?.cong_ty_id) {
+    try {
+      const db = require('../utils/db');
+      const { rows } = await db.query(
+        `SELECT 1 FROM phan_cong WHERE cong_nhan_id = $1 AND cong_ty_id = $2 LIMIT 1`,
+        [id, updated.cong_ty_id],
+      );
+      if (rows.length === 0) await taoPhanCong(id, updated.cong_ty_id, ngayVao);
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn('Tạo phan_cong khi duyệt CN thất bại:', e.message);
+    }
+  }
+
+  // Audit log — fire-and-forget, không chặn response
+  try {
+    await hoatDongLog.create({
+      loai: 'duyet_cong_nhan',
+      muc_do: 'quan_trong',
+      cong_nhan_id: id,
+      nguoi_tuyen_id: updated.nguoi_tuyen_id,
+      du_lieu: { cong_ty_id: before.cong_ty_id },
+      ghi_chu: `Duyệt vào làm: ${updated.ho_ten} (đợi việc → mới vào)`,
+      created_by: user?.id ?? null,
+    });
+  } catch (logErr) {
+    // eslint-disable-next-line no-console
+    console.warn('hoat_dong_log write failed:', logErr.message);
+  }
+
+  return updated;
+}
+
+async function xoa(id, user) {
+  // Kiểm tra quyền xoá theo role:
+  // - admin: xoá bất kỳ
+  // - vender / cong_tac_vien: chỉ CN mình tuyển VÀ đang ở 'doi_viec' (phỏng vấn trượt)
+  // - quan_ly: không được xoá
+  if (user && user.vai_tro !== 'admin') {
+    const before = await congNhanModel.findById(id);
+    if (!before) {
+      const err = new Error('Không tìm thấy công nhân');
+      err.statusCode = 404; err.code = 'NOT_FOUND'; throw err;
+    }
+    const laNguoiTuyen = before.nguoi_tuyen_id === user.id;
+    const choPhepXoa = (user.vai_tro === 'vender' || user.vai_tro === 'cong_tac_vien')
+      && laNguoiTuyen
+      && before.trang_thai === 'doi_viec';
+    if (!choPhepXoa) {
+      const err = new Error('Chỉ được xoá công nhân bạn tuyển khi đang chờ phỏng vấn');
+      err.statusCode = 403; err.code = 'FORBIDDEN'; throw err;
+    }
+  }
+
   // Soft delete: giữ toàn bộ dữ liệu liên kết (chấm công, tài chính, chỗ ở...)
   // nên không còn vướng FK RESTRICT như xoá thật.
   const deleted = await congNhanModel.softDelete(id);
@@ -202,4 +313,4 @@ async function xoa(id) {
   }
 }
 
-module.exports = { danhSach, chiTiet, taoMoi, capNhat, xoa };
+module.exports = { danhSach, chiTiet, taoMoi, capNhat, duyet, xoa };

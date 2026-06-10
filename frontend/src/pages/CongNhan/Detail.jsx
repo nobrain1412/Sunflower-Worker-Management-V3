@@ -12,6 +12,7 @@ import api from '../../hooks/useApi';
 import { useQueryClient } from '@tanstack/react-query';
 
 const TRANG_THAI_PILL = {
+  doi_viec:  { cls: 'pill-purple', label: 'Đợi việc' },
   dang_lam:  { cls: 'pill-green', label: 'Đang làm' },
   moi_vao:   { cls: 'pill-blue',  label: 'Mới vào'  },
   nghi_phep: { cls: 'pill-amber', label: 'Nghỉ phép' },

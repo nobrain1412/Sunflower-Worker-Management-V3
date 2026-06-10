@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
@@ -17,6 +18,17 @@ export default function Topbar({ onMenuClick }) {
   const { pathname } = useLocation();
   const title = PAGE_TITLE[pathname] ?? 'WorkerOS';
   const today = new Date().toLocaleDateString('vi-VN', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' });
+  const [searchText, setSearchText] = useState('');
+
+  // Tìm kiếm toàn cục: Enter → sang trang Công nhân với ?q=... (CongNhan đọc URL).
+  function handleSearchSubmit(e) {
+    e.preventDefault();
+    const q = searchText.trim();
+    if (!q) return;
+    navigate(`/cong-nhan?q=${encodeURIComponent(q)}`);
+    setSearchText('');
+  }
+
   async function handleLogout() {
     await logout();
     navigate('/login');
@@ -40,13 +52,18 @@ export default function Topbar({ onMenuClick }) {
 
       <div style={s.right}>
         {/* Tìm kiếm nhanh — hidden on mobile */}
-        <div className="topbar-search">
+        <form className="topbar-search" onSubmit={handleSearchSubmit}>
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" style={s.searchIcon}>
             <circle cx="11" cy="11" r="8" stroke="currentColor" strokeWidth="2"/>
             <line x1="21" y1="21" x2="16.65" y2="16.65" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
           </svg>
-          <input style={s.searchInput} placeholder="Tìm kiếm..." />
-        </div>
+          <input
+            style={s.searchInput}
+            placeholder="Tìm công nhân (tên / CCCD / SĐT)..."
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+          />
+        </form>
 
         {/* Notification bell */}
         <button style={s.iconBtn}>

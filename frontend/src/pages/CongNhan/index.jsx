@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useCongNhanList, useVenders, useCongTyList, useXoaCongNhan } from '../../hooks/useCongNhan';
 import { useTinhList } from '../../hooks/useProvinces';
 import { useAuth } from '../../context/AuthContext';
@@ -8,6 +8,7 @@ import BottomSheet from '../../components/BottomSheet';
 import useIsMobile from '../../hooks/useIsMobile';
 
 const TRANG_THAI_PILL = {
+  doi_viec:  { cls: 'pill-purple', label: 'Đợi việc' },
   dang_lam:  { cls: 'pill-green', label: 'Đang làm' },
   moi_vao:   { cls: 'pill-blue',  label: 'Mới vào'  },
   nghi_phep: { cls: 'pill-amber', label: 'Nghỉ phép' },
@@ -16,6 +17,7 @@ const TRANG_THAI_PILL = {
 
 const STATUS_OPTIONS = [
   { value: '', label: 'Tất cả trạng thái' },
+  { value: 'doi_viec',  label: 'Đợi việc' },
   { value: 'dang_lam',  label: 'Đang làm' },
   { value: 'moi_vao',   label: 'Mới vào'  },
   { value: 'nghi_phep', label: 'Nghỉ phép' },
@@ -92,6 +94,7 @@ function MobileCongNhanCard({ cn, isAdmin, onOpen, onDelete }) {
 
 export default function CongNhan() {
   const navigate = useNavigate();
+  const [urlParams, setUrlParams] = useSearchParams();
   const { isAdmin, isQuanLy } = useAuth();
   const canFilterAll = isAdmin || isQuanLy;
   const xoaCN = useXoaCongNhan();
@@ -103,8 +106,22 @@ export default function CongNhan() {
     catch (err) { alert(err?.response?.data?.error?.message ?? 'Lỗi xoá'); }
   }
 
-  const [searchInput, setSearchInput] = useState('');
-  const [search, setSearch]           = useState('');
+  const [searchInput, setSearchInput] = useState(() => urlParams.get('q') ?? '');
+  const [search, setSearch]           = useState(() => urlParams.get('q') ?? '');
+
+  // Nhận query ?q=... từ Topbar global search (mỗi lần URL đổi)
+  useEffect(() => {
+    const q = urlParams.get('q');
+    if (q != null) {
+      setSearchInput(q);
+      setSearch(q);
+      setPage(1);
+      // Bỏ ?q khỏi URL để lần sau user xoá ô search không bị "dính" lại
+      urlParams.delete('q');
+      setUrlParams(urlParams, { replace: true });
+    }
+  }, [urlParams, setUrlParams]);
+
   const [trangThai, setTrangThai]     = useState('');
   const [trangThaiNoiO, setTrangThaiNoiO] = useState('');
   const [venderId, setVenderId]       = useState('');

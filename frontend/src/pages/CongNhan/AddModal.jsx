@@ -133,6 +133,11 @@ export default function AddCongNhanModal({ onClose }) {
       payload.nguoi_tuyen_id = parseInt(form.nguoi_tuyen_id, 10);
     }
 
+    // Đợi việc bắt buộc có công ty để chuẩn bị phỏng vấn
+    if (form.trang_thai === 'doi_viec' && !form.cong_ty_id) {
+      setErrors({ submit: 'Trạng thái "Đợi việc" cần chọn công ty để phỏng vấn' });
+      return;
+    }
     if (form.trang_thai_noi_o === 'ktx' && !form.giuong_id) {
       setErrors({ submit: 'Vui lòng chọn cụ thể KTX / phòng / giường' });
       return;
@@ -260,6 +265,7 @@ export default function AddCongNhanModal({ onClose }) {
             )}
             <FormField label="Trạng thái">
               <select className="form-input" name="trang_thai" value={form.trang_thai} onChange={handleChange}>
+                <option value="doi_viec">Đợi việc (chờ phỏng vấn)</option>
                 <option value="moi_vao">Mới vào</option>
                 <option value="dang_lam">Đang làm</option>
               </select>

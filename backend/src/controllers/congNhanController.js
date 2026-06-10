@@ -52,9 +52,18 @@ const putCapNhat = asyncWrapper(async (req, res) => {
   sendSuccess(res, congNhan, 'Cập nhật thành công');
 });
 
+// Duyệt CN "đợi việc" → chính thức vào làm (moi_vao)
+const postDuyet = asyncWrapper(async (req, res) => {
+  const congNhan = await congNhanService.duyet(
+    toPositiveInt(req.params.id, 'ID công nhân'),
+    req.user,
+  );
+  sendSuccess(res, congNhan, 'Đã duyệt công nhân vào làm');
+});
+
 const deleteXoa = asyncWrapper(async (req, res) => {
-  await congNhanService.xoa(toPositiveInt(req.params.id, 'ID công nhân'));
+  await congNhanService.xoa(toPositiveInt(req.params.id, 'ID công nhân'), req.user);
   sendSuccess(res, null, 'Đã xoá công nhân');
 });
 
-module.exports = { getDanhSach, getChiTiet, postTaoMoi, putCapNhat, deleteXoa };
+module.exports = { getDanhSach, getChiTiet, postTaoMoi, putCapNhat, postDuyet, deleteXoa };
