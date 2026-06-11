@@ -14,11 +14,14 @@ const TRANG_THAI_PILL = {
 };
 
 const LOAI_LABEL = {
-  tao_moi: 'Tạo mới',
-  sua_doi: 'Sửa đổi',
+  tao_moi: 'Tạo công ty',
+  sua_doi: 'Sửa công ty',
+  khac:    'Đề xuất chung',
 };
 
 const FIELD_LABEL = {
+  tieu_de:        'Tiêu đề',
+  noi_dung:       'Nội dung',
   ten_cong_ty:    'Tên công ty',
   dia_chi:        'Địa chỉ',
   map_url:        'Link Maps',
@@ -66,10 +69,10 @@ export default function DeXuatQueue() {
     <div style={s.root}>
       <div style={s.header}>
         <div>
-          <h1 style={s.title}>Đề xuất công ty</h1>
+          <h1 style={s.title}>Đề xuất</h1>
           <p style={s.subtitle}>
             {isAdmin
-              ? 'Duyệt hoặc từ chối đề xuất từ quản lý'
+              ? 'Duyệt hoặc từ chối đề xuất từ thành viên'
               : 'Theo dõi trạng thái các đề xuất của bạn'}
           </p>
         </div>
@@ -128,11 +131,12 @@ function DeXuatCard({ dx, canApprove }) {
   const fields = Object.entries(duLieu);
 
   async function handleDuyet() {
-    if (!window.confirm(
-      dx.loai === 'tao_moi'
-        ? `Duyệt sẽ TẠO công ty "${duLieu.ten_cong_ty}" vào DB. Tiếp tục?`
-        : `Duyệt sẽ CẬP NHẬT công ty "${dx.cong_ty_ten_hien_tai}". Tiếp tục?`
-    )) return;
+    const confirmMsg = dx.loai === 'tao_moi'
+      ? `Duyệt sẽ TẠO công ty "${duLieu.ten_cong_ty}" vào DB. Tiếp tục?`
+      : dx.loai === 'sua_doi'
+        ? `Duyệt sẽ CẬP NHẬT công ty "${dx.cong_ty_ten_hien_tai}". Tiếp tục?`
+        : 'Duyệt đề xuất này? (chỉ đánh dấu đã duyệt, không thay đổi dữ liệu)';
+    if (!window.confirm(confirmMsg)) return;
     try {
       await duyet.mutateAsync({ id: dx.id });
     } catch (err) {
@@ -161,7 +165,9 @@ function DeXuatCard({ dx, canApprove }) {
             </span>
             <span style={s.loaiTag}>{LOAI_LABEL[dx.loai]}</span>
             <span style={s.congTyTen}>
-              {dx.loai === 'tao_moi' ? duLieu.ten_cong_ty : dx.cong_ty_ten_hien_tai}
+              {dx.loai === 'tao_moi' ? duLieu.ten_cong_ty
+                : dx.loai === 'sua_doi' ? dx.cong_ty_ten_hien_tai
+                : (duLieu.tieu_de || 'Đề xuất chung')}
             </span>
           </div>
           <div style={s.cardMeta}>

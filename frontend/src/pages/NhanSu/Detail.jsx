@@ -45,9 +45,10 @@ export default function NhanVienDetail() {
           <Field label="Tên đăng nhập" value={u.ten_dang_nhap} mono />
           <Field label="Vai trò" value={ROLE_LABEL[u.vai_tro] ?? u.vai_tro} />
           <Field label="SĐT" value={u.so_dien_thoai} />
-          {(u.vai_tro === 'vender' || u.vai_tro === 'cong_tac_vien') && (
-            <Field label="Mã vender" value={u.ma_vender} mono />
-          )}
+          {/* Mã vender áp dụng cho mọi role (form sửa cho phép nhập với bất kỳ ai,
+              import Excel cũng nhận diện theo mã này) — hiển thị cố định để khỏi
+              "lúc hiện lúc không" khi user mang role admin/quan_ly/ke_toan */}
+          <Field label="Mã vender" value={u.ma_vender} mono />
           {u.vai_tro === 'cong_tac_vien' && (
             <Field label="Hình thức thanh toán"
               value={u.hinh_thuc_thanh_toan === 'hang_thang' ? 'Hàng tháng (đơn giá giờ)' : 'Một lần (đủ 26 ngày)'} />

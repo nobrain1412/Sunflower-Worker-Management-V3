@@ -58,19 +58,32 @@ const congTyDataSchema = z.object({
 });
 
 const submitSchema = z.object({
-  loai:        z.enum(['tao_moi', 'sua_doi']),
+  loai:        z.enum(['tao_moi', 'sua_doi', 'khac']),
   cong_ty_id:  z.number().int().positive().optional(),
-  du_lieu:     congTyDataSchema.partial(), // sua_doi có thể chỉ gửi field thay đổi
+  // sua_doi có thể chỉ gửi field thay đổi; khac dùng tieu_de + noi_dung tự do
+  du_lieu:     congTyDataSchema.partial().extend({
+    tieu_de:  z.string().max(200).optional(),
+    noi_dung: z.string().max(5000).optional(),
+  }).optional().default({}),
   ghi_chu:     z.string().max(1000).optional(),
 });
 
-// Submit đề xuất — quan_ly hoặc admin (admin có thể dùng để track lịch sử)
+// Submit đề xuất:
+//   - tao_moi / sua_doi công ty: quan_ly hoặc admin
+//   - khac (đề xuất chung): mọi user đăng nhập đều gửi được cho admin
 router.post('/',
-  requireRole('admin', 'quan_ly'),
   validate(submitSchema),
   asyncWrapper(async (req, res) => {
     const { loai, cong_ty_id, du_lieu, ghi_chu } = req.validatedBody;
 
+    if (loai !== 'khac' && req.user.vai_tro !== 'admin' && req.user.vai_tro !== 'quan_ly') {
+      const e = new Error('Chỉ quản lý mới được đề xuất tạo/sửa công ty');
+      e.statusCode = 403; e.code = 'FORBIDDEN'; throw e;
+    }
+    if (loai === 'khac' && !du_lieu?.noi_dung?.trim()) {
+      const e = new Error('Vui lòng nhập nội dung đề xuất');
+      e.statusCode = 400; e.code = 'VALIDATION_ERROR'; throw e;
+    }
     if (loai === 'sua_doi' && !cong_ty_id) {
       const e = new Error('sua_doi phải kèm cong_ty_id');
       e.statusCode = 400; e.code = 'VALIDATION_ERROR'; throw e;
@@ -103,7 +116,7 @@ router.post('/',
 
     const data = await deXuatModel.create({
       loai,
-      cong_ty_id: cong_ty_id ?? null,
+      cong_ty_id: loai === 'sua_doi' ? cong_ty_id : null,
       du_lieu,
       ghi_chu,
       nguoi_de_xuat_id: req.user.id,
@@ -112,15 +125,14 @@ router.post('/',
   }),
 );
 
-// List — admin xem tất cả, quan_ly chỉ xem của mình
+// List — admin xem tất cả, role khác chỉ xem đề xuất của mình
 router.get('/',
-  requireRole('admin', 'quan_ly'),
   asyncWrapper(async (req, res) => {
     const filter = {
       trang_thai: req.query.trang_thai,
       cong_ty_id: req.query.cong_ty_id ? toPositiveInt(req.query.cong_ty_id, 'cong_ty_id') : undefined,
     };
-    if (req.user.vai_tro === 'quan_ly') {
+    if (req.user.vai_tro !== 'admin') {
       filter.nguoi_de_xuat_id = req.user.id;
     }
     const data = await deXuatModel.findAll(filter);
@@ -137,14 +149,13 @@ router.get('/pending-count',
   }),
 );
 
-// Chi tiết
+// Chi tiết — admin xem tất cả, role khác chỉ xem của mình
 router.get('/:id',
-  requireRole('admin', 'quan_ly'),
   asyncWrapper(async (req, res) => {
     const id = toPositiveInt(req.params.id, 'ID đề xuất');
     const data = await deXuatModel.findById(id);
     if (!data) { const e = new Error('Không tìm thấy đề xuất'); e.statusCode = 404; throw e; }
-    if (req.user.vai_tro === 'quan_ly' && data.nguoi_de_xuat_id !== req.user.id) {
+    if (req.user.vai_tro !== 'admin' && data.nguoi_de_xuat_id !== req.user.id) {
       const e = new Error('Bạn không xem được đề xuất này');
       e.statusCode = 403; throw e;
     }
@@ -163,6 +174,12 @@ router.post('/:id/duyet',
     if (!dx) { const e = new Error('Không tìm thấy đề xuất'); e.statusCode = 404; throw e; }
     if (dx.trang_thai !== 'cho_duyet') {
       const e = new Error('Đề xuất đã được xử lý'); e.statusCode = 400; throw e;
+    }
+
+    // Đề xuất chung: duyệt chỉ đánh dấu đã duyệt, không tác động bảng cong_ty
+    if (dx.loai === 'khac') {
+      const approved = await deXuatModel.markApproved(id, req.user.id, ghiChuAdmin);
+      return sendSuccess(res, { de_xuat: approved }, 'Đã duyệt đề xuất');
     }
 
     // Thực hiện thay đổi trong transaction: tạo/sửa công ty + mark approved

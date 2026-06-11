@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import { useGiaoDichList, useTongThang, useTaoGiaoDich, useXoaGiaoDich, useDanhMuc, useTaoDanhMuc, useCapNhatDanhMuc, useToggleHoanTien } from '../../hooks/useTaiChinh';
+import { useGiaoDichList, useTongThang, useTaoGiaoDich, useXoaGiaoDich, useDanhMuc, useTaoDanhMuc, useCapNhatDanhMuc, useCapNhatHoanTien } from '../../hooks/useTaiChinh';
 import { useTongTheoThang } from '../../hooks/useDashboard';
 import { useAuth } from '../../context/AuthContext';
+import { useAssignableUsers } from '../../hooks/useUsers';
 import useIsMobile from '../../hooks/useIsMobile';
 
 // Mới: chỉ còn 3 nhóm chính. Phân loại nhỏ chuyển sang `danh_muc_id`.
@@ -29,9 +30,19 @@ const LOAI_LABEL = {
 
 function fmt(n) { return Number(n || 0).toLocaleString('vi-VN') + 'đ'; }
 
-function MobileGiaoDichCard({ g, isVender, onDelete, onToggleHoan, toggling }) {
+// Text tiến độ hoàn: "12.000đ/50.000đ"
+function hoanText(g) {
+  return `${fmt(g.so_tien_da_hoan)}/${fmt(g.so_tien)}`;
+}
+
+function MobileGiaoDichCard({ g, isVender, onDelete, onOpenHoan }) {
   const loai = LOAI_LABEL[g.loai];
   const isThu = loai?.type === 'thu';
+  // Khoản tiêu không có khái niệm hoàn tiền → ẩn toàn bộ phần hoàn
+  const isTieu = loai?.type === 'tieu';
+  const daHoan = Number(g.so_tien_da_hoan ?? 0);
+  // Khoản thu mirror (được gán từ khoản chi của user khác) → hiện tiến độ hoàn read-only
+  const isMirror = isThu && g.lien_ket_id != null;
 
   return (
     <div style={mobile.card}>
@@ -47,30 +58,35 @@ function MobileGiaoDichCard({ g, isVender, onDelete, onToggleHoan, toggling }) {
         <div style={mobile.metaItem}><span style={mobile.metaLabel}>Danh mục</span><span style={mobile.metaVal}>{g.danh_muc_ten ?? '—'}</span></div>
         <div style={mobile.metaItem}><span style={mobile.metaLabel}>Ngày</span><span style={mobile.metaVal}>{g.ngay ? new Date(g.ngay).toLocaleDateString('vi-VN') : '—'}</span></div>
         <div style={{ ...mobile.metaItem, gridColumn: 'span 2' }}><span style={mobile.metaLabel}>Ghi chú</span><span style={mobile.metaVal}>{g.ghi_chu ?? '—'}</span></div>
-        {!isThu && (
+        {(g.nguoi_nhan_ten || g.nguoi_gui_ten) && (
           <div style={{ ...mobile.metaItem, gridColumn: 'span 2' }}>
-            <span style={mobile.metaLabel}>Trạng thái hoàn</span>
+            <span style={mobile.metaLabel}>{g.nguoi_nhan_ten ? 'Gán cho' : 'Nhận từ'}</span>
+            <span style={mobile.metaVal}>{g.nguoi_nhan_ten ?? g.nguoi_gui_ten}</span>
+          </div>
+        )}
+        {((!isThu && !isTieu) || isMirror) && (
+          <div style={{ ...mobile.metaItem, gridColumn: 'span 2' }}>
+            <span style={mobile.metaLabel}>Đã hoàn</span>
             <span style={mobile.metaVal}>
               {g.da_hoan_tien
-                ? `✓ Đã hoàn ${g.ngay_hoan ? new Date(g.ngay_hoan).toLocaleDateString('vi-VN') : ''}`
-                : 'Chưa hoàn'}
+                ? `✓ Hoàn đủ ${g.ngay_hoan ? new Date(g.ngay_hoan).toLocaleDateString('vi-VN') : ''}`
+                : daHoan > 0 ? hoanText(g) : 'Chưa hoàn'}
             </span>
           </div>
         )}
       </div>
       {!isVender && (
         <div style={mobile.actions}>
-          {!isThu && (
+          {!isThu && !isTieu && (
             <button
-              onClick={() => onToggleHoan(g)}
-              disabled={toggling}
+              onClick={() => onOpenHoan(g)}
               style={{
                 ...mobile.deleteBtn,
                 color: g.da_hoan_tien ? 'var(--green)' : 'var(--accent)',
                 borderColor: g.da_hoan_tien ? 'var(--green)' : 'var(--accent)',
               }}
             >
-              {g.da_hoan_tien ? '↶ Bỏ hoàn' : '✓ Hoàn'}
+              {g.da_hoan_tien ? '✓ Đã hoàn đủ' : '↩ Hoàn tiền'}
             </button>
           )}
           <button onClick={() => onDelete(g)} style={mobile.deleteBtn}>🗑 Xoá</button>
@@ -82,13 +98,18 @@ function MobileGiaoDichCard({ g, isVender, onDelete, onToggleHoan, toggling }) {
 
 // ─── Modal thêm giao dịch ─────────────────────────────────
 function AddGiaoDichModal({ onClose, isVender }) {
+  const { user } = useAuth();
   const tao = useTaoGiaoDich();
   const { data: dmRes } = useDanhMuc();
   const dmList = dmRes?.data ?? [];
+  // Chỉ admin/quan_ly được gán khoản chi cho user khác
+  const canGan = user?.vai_tro === 'admin' || user?.vai_tro === 'quan_ly';
+  const { data: userList } = useAssignableUsers(canGan);
+  const ganOptions = (userList ?? []).filter((u) => u.id !== user?.id);
   const now = new Date();
   const [form, setForm] = useState({
     loai: isVender ? 'tam_ung' : 'thu', so_tien: '', ngay: now.toISOString().split('T')[0],
-    ghi_chu: '', danh_muc_id: '',
+    ghi_chu: '', danh_muc_id: '', nguoi_nhan_id: '',
   });
   const [err, setErr] = useState('');
 
@@ -96,8 +117,8 @@ function AddGiaoDichModal({ onClose, isVender }) {
     const { name, value } = e.target;
     setForm((f) => {
       const next = { ...f, [name]: value };
-      // Đổi loại chính → reset danh mục để tránh lệch
-      if (name === 'loai') next.danh_muc_id = '';
+      // Đổi loại chính → reset danh mục + người nhận để tránh lệch
+      if (name === 'loai') { next.danh_muc_id = ''; next.nguoi_nhan_id = ''; }
       return next;
     });
   }
@@ -112,9 +133,11 @@ function AddGiaoDichModal({ onClose, isVender }) {
         ngay: form.ngay,
         ghi_chu: form.ghi_chu || undefined,
         danh_muc_id: form.danh_muc_id ? parseInt(form.danh_muc_id, 10) : undefined,
+        nguoi_nhan_id: form.loai === 'chi' && form.nguoi_nhan_id
+          ? parseInt(form.nguoi_nhan_id, 10) : undefined,
       });
       onClose();
-    } catch (e) { setErr(e?.response?.data?.error?.message ?? 'Lỗi không xác định'); }
+    } catch (e) { setErr(e?.response?.data?.error?.message ?? e?.message ?? 'Lỗi không xác định'); }
   }
 
   // Hiển thị danh mục đúng theo loại chính đã chọn (thu/chi/tieu)
@@ -154,6 +177,20 @@ function AddGiaoDichModal({ onClose, isVender }) {
             <label className="form-label">Ngày</label>
             <input className="form-input" type="date" name="ngay" value={form.ngay} onChange={handleChange} />
           </div>
+          {canGan && form.loai === 'chi' && (
+            <div style={{ gridColumn: 'span 2', display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <label className="form-label">Gán cho user khác (tuỳ chọn)</label>
+              <select className="form-input" name="nguoi_nhan_id" value={form.nguoi_nhan_id} onChange={handleChange}>
+                <option value="">— Không gán —</option>
+                {ganOptions.map((u) => <option key={u.id} value={u.id}>{u.ho_ten}</option>)}
+              </select>
+              {form.nguoi_nhan_id && (
+                <span style={{ fontSize: 11, color: 'var(--text3)' }}>
+                  User được gán sẽ thấy 1 khoản thu tương ứng trong phần tài chính của họ
+                </span>
+              )}
+            </div>
+          )}
           <div style={{ gridColumn: 'span 2', display: 'flex', flexDirection: 'column', gap: 4 }}>
             <label className="form-label">Ghi chú</label>
             <input className="form-input" name="ghi_chu" value={form.ghi_chu} onChange={handleChange} placeholder="Nội dung..." />
@@ -242,6 +279,7 @@ export default function TaiChinh() {
   const [addModal,      setAddModal]      = useState(false);
   const [danhMucModal,  setDanhMucModal]  = useState(false);
   const [detailGd,      setDetailGd]      = useState(null);
+  const [hoanGd,        setHoanGd]        = useState(null);
   const [thang,         setThang]         = useState(now.getMonth() + 1);
   const [nam,           setNam]           = useState(now.getFullYear());
   const [filterLoai,    setFilterLoai]    = useState('');
@@ -250,15 +288,6 @@ export default function TaiChinh() {
   const { data: tongRes }    = useTongThang(thang, nam);
   const { data: monthlyRes } = useTongTheoThang(5);
   const xoaGd                = useXoaGiaoDich();
-  const toggleHoan           = useToggleHoanTien();
-
-  async function handleToggleHoan(g) {
-    try {
-      await toggleHoan.mutateAsync({ id: g.id, da_hoan_tien: !g.da_hoan_tien });
-    } catch (e) {
-      alert(e?.response?.data?.error?.message ?? 'Không thể cập nhật trạng thái hoàn');
-    }
-  }
 
   // Chia cho 1 triệu để hiển thị đơn vị "tr"
   const MONTHLY = (monthlyRes?.data ?? []).map((m) => ({
@@ -271,6 +300,7 @@ export default function TaiChinh() {
   const tongData = tongRes?.data ?? {};
   const tongThu  = Number(tongData.tong_thu ?? 0);
   const tongChi  = Number(tongData.tong_chi ?? 0) + Number(tongData.da_hoan ?? 0);
+  const tongTieu = Number(tongData.tong_tieu ?? 0);
   const isMobile = useIsMobile();
 
   async function handleXoa(gd) {
@@ -285,7 +315,7 @@ export default function TaiChinh() {
         {[
           { label: 'Tổng thu tháng này',   value: fmt(tongThu), color: 'var(--green)' },
           { label: 'Tổng chi tháng này',   value: fmt(tongChi), color: 'var(--red)' },
-          { label: 'Tổng tiêu',            value: fmt(0),       color: 'var(--accent)' },
+          { label: 'Tổng tiêu tháng này',  value: fmt(tongTieu), color: 'var(--accent)' },
         ].map((k) => (
           <div key={k.label} className="tc-kpi-card" style={s.kpi}>
             <div style={s.kpiLabel}>{k.label}</div>
@@ -375,8 +405,7 @@ export default function TaiChinh() {
                       g={g}
                       isVender={isVender}
                       onDelete={handleXoa}
-                      onToggleHoan={handleToggleHoan}
-                      toggling={toggleHoan.isPending}
+                      onOpenHoan={setHoanGd}
                     />
                   ))}
                 </div>
@@ -397,6 +426,9 @@ export default function TaiChinh() {
                     {gdList.map((g) => {
                       const loai  = LOAI_LABEL[g.loai];
                       const isThu = loai?.type === 'thu';
+                      const isTieu = loai?.type === 'tieu';
+                      const daHoan = Number(g.so_tien_da_hoan ?? 0);
+                      const isMirror = isThu && g.lien_ket_id != null;
                       return (
                         <tr key={g.id} style={{ ...s.tr, cursor: 'pointer' }}
                           onClick={() => setDetailGd(g)}>
@@ -410,30 +442,38 @@ export default function TaiChinh() {
                           <td style={s.td}><span style={{ fontSize: 12, color: 'var(--text2)' }}>{g.ngay ? new Date(g.ngay).toLocaleDateString('vi-VN') : '—'}</span></td>
                           <td style={s.td}><span style={{ fontSize: 12, color: 'var(--text2)' }}>{g.ghi_chu ?? '—'}</span></td>
                           <td style={s.td} onClick={(e) => e.stopPropagation()}>
-                            {isThu ? (
+                            {isTieu ? (
                               <span style={{ fontSize: 11, color: 'var(--text3)' }}>—</span>
+                            ) : isThu ? (
+                              isMirror ? (
+                                <span style={{ fontSize: 11, color: g.da_hoan_tien ? 'var(--green)' : 'var(--text2)', fontFamily: "'JetBrains Mono', monospace" }}
+                                  title="Tiến độ hoàn do người chi tiền cập nhật">
+                                  {g.da_hoan_tien ? '✓ Hoàn đủ' : daHoan > 0 ? hoanText(g) : 'Chưa hoàn'}
+                                </span>
+                              ) : (
+                                <span style={{ fontSize: 11, color: 'var(--text3)' }}>—</span>
+                              )
                             ) : !isVender ? (
                               <button
-                                onClick={() => handleToggleHoan(g)}
-                                disabled={toggleHoan.isPending}
+                                onClick={() => setHoanGd(g)}
                                 title={g.da_hoan_tien
-                                  ? `Đã hoàn ${g.ngay_hoan ? new Date(g.ngay_hoan).toLocaleDateString('vi-VN') : ''} — bấm để bỏ`
-                                  : 'Bấm để đánh dấu đã hoàn'}
+                                  ? `Đã hoàn đủ ${g.ngay_hoan ? new Date(g.ngay_hoan).toLocaleDateString('vi-VN') : ''} — bấm để sửa`
+                                  : 'Bấm để cập nhật số tiền đã hoàn'}
                                 style={{
                                   background: g.da_hoan_tien ? 'rgba(34,201,134,0.12)' : 'transparent',
-                                  border: `1px solid ${g.da_hoan_tien ? 'var(--green)' : 'var(--border2)'}`,
+                                  border: `1px solid ${g.da_hoan_tien ? 'var(--green)' : daHoan > 0 ? 'var(--amber)' : 'var(--border2)'}`,
                                   borderRadius: 6, padding: '3px 8px', fontSize: 11,
-                                  color: g.da_hoan_tien ? 'var(--green)' : 'var(--text2)',
+                                  color: g.da_hoan_tien ? 'var(--green)' : daHoan > 0 ? 'var(--amber)' : 'var(--text2)',
                                   cursor: 'pointer', fontFamily: "'Be Vietnam Pro', sans-serif",
                                 }}
                               >
                                 {g.da_hoan_tien
-                                  ? `✓ ${g.ngay_hoan ? new Date(g.ngay_hoan).toLocaleDateString('vi-VN') : ''}`
-                                  : 'Đánh dấu hoàn'}
+                                  ? `✓ Hoàn đủ`
+                                  : daHoan > 0 ? `↩ ${hoanText(g)}` : '↩ Hoàn tiền'}
                               </button>
                             ) : (
                               <span style={{ fontSize: 11, color: g.da_hoan_tien ? 'var(--green)' : 'var(--text3)' }}>
-                                {g.da_hoan_tien ? '✓' : '—'}
+                                {g.da_hoan_tien ? '✓' : daHoan > 0 ? hoanText(g) : '—'}
                               </span>
                             )}
                           </td>
@@ -475,6 +515,78 @@ export default function TaiChinh() {
       {addModal     && <AddGiaoDichModal isVender={isVender} onClose={() => setAddModal(false)} />}
       {danhMucModal && <DanhMucModal onClose={() => setDanhMucModal(false)} />}
       {detailGd     && <GiaoDichDetailModal gd={detailGd} onClose={() => setDetailGd(null)} />}
+      {hoanGd       && <HoanTienModal gd={hoanGd} onClose={() => setHoanGd(null)} />}
+    </div>
+  );
+}
+
+// ─── Modal cập nhật hoàn tiền (cho phép hoàn 1 phần) ────────
+function HoanTienModal({ gd, onClose }) {
+  const capNhat = useCapNhatHoanTien();
+  const soTien  = Number(gd.so_tien ?? 0);
+  const daHoan  = Number(gd.so_tien_da_hoan ?? 0);
+  const conLai  = Math.max(0, soTien - daHoan);
+  const [them, setThem] = useState('');
+  const [err, setErr]   = useState('');
+
+  async function submit(tongMoi) {
+    setErr('');
+    try {
+      await capNhat.mutateAsync({ id: gd.id, so_tien_da_hoan: tongMoi });
+      onClose();
+    } catch (e) {
+      setErr(e?.response?.data?.error?.message ?? e?.message ?? 'Không thể cập nhật hoàn tiền');
+    }
+  }
+
+  function handleHoanThem() {
+    const v = parseFloat(them);
+    if (!v || v <= 0) { setErr('Vui lòng nhập số tiền hoàn hợp lệ'); return; }
+    if (v > conLai)   { setErr(`Số tiền hoàn thêm vượt quá phần còn lại (${fmt(conLai)})`); return; }
+    submit(daHoan + v);
+  }
+
+  return (
+    <div style={M.overlay} onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div style={{ ...M.modal, maxWidth: 400 }}>
+        <div style={M.title}>Cập nhật hoàn tiền</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 14 }}>
+          {[['Khoản chi', fmt(soTien), 'var(--red)'],
+            ['Đã hoàn',   fmt(daHoan), 'var(--green)'],
+            ['Còn lại',   fmt(conLai), 'var(--amber)']].map(([label, value, color]) => (
+            <div key={label} style={{ background: 'var(--bg3)', borderRadius: 8, padding: '8px 10px' }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>{label}</div>
+              <div style={{ fontSize: 13, fontWeight: 700, fontFamily: "'JetBrains Mono', monospace", color }}>{value}</div>
+            </div>
+          ))}
+        </div>
+        {conLai > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 10 }}>
+            <label className="form-label">Hoàn thêm (đ)</label>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input className="form-input" type="number" min="0" max={conLai} value={them}
+                onChange={(e) => setThem(e.target.value)} placeholder={`Tối đa ${fmt(conLai)}`} style={{ flex: 1 }} />
+              <button className="btn-primary" onClick={handleHoanThem} disabled={capNhat.isPending}>
+                {capNhat.isPending ? '...' : '+ Hoàn'}
+              </button>
+            </div>
+          </div>
+        )}
+        {err && <div style={M.err}>{err}</div>}
+        <div style={{ ...M.actions, justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {conLai > 0 && (
+              <button className="btn-ghost" style={{ color: 'var(--green)' }} disabled={capNhat.isPending}
+                onClick={() => submit(soTien)}>✓ Hoàn đủ</button>
+            )}
+            {daHoan > 0 && (
+              <button className="btn-ghost" style={{ color: 'var(--red)' }} disabled={capNhat.isPending}
+                onClick={() => submit(0)}>↶ Bỏ hoàn</button>
+            )}
+          </div>
+          <button className="btn-ghost" onClick={onClose}>Đóng</button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -506,16 +618,20 @@ function GiaoDichDetailModal({ gd, onClose }) {
           <DetailField label="Ngày giao dịch" value={fmtDate(gd.ngay)} />
           <DetailField label="Công nhân" value={gd.cong_nhan_ten ?? '—'} />
           <DetailField label="Người tạo (xuất/nhận)" value={gd.created_by_ten ?? '—'} />
+          {gd.nguoi_nhan_ten && <DetailField label="Gán cho" value={gd.nguoi_nhan_ten} />}
+          {gd.nguoi_gui_ten  && <DetailField label="Nhận từ" value={gd.nguoi_gui_ten} />}
           <DetailField label="Tạo lúc" value={fmtDT(gd.created_at)} />
           <DetailField label="Cập nhật lúc" value={fmtDT(gd.updated_at)} />
-          {!isThu && (
+          {(loai?.type === 'chi' || gd.lien_ket_id != null) && (
             <>
               <DetailField label="Đã hoàn">
                 <span style={{ color: gd.da_hoan_tien ? 'var(--green)' : 'var(--amber)', fontWeight: 600 }}>
-                  {gd.da_hoan_tien ? '✓ Đã hoàn' : 'Chưa hoàn'}
+                  {gd.da_hoan_tien
+                    ? '✓ Hoàn đủ'
+                    : Number(gd.so_tien_da_hoan ?? 0) > 0 ? hoanText(gd) : 'Chưa hoàn'}
                 </span>
               </DetailField>
-              <DetailField label="Ngày hoàn" value={fmtDate(gd.ngay_hoan)} />
+              <DetailField label="Ngày hoàn gần nhất" value={fmtDate(gd.ngay_hoan)} />
             </>
           )}
           <div style={{ gridColumn: 'span 2' }}>

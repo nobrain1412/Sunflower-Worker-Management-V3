@@ -145,6 +145,7 @@ async function findCongTacVien({ quanLyId } = {}) {
     `SELECT u.id, u.ten_dang_nhap, u.ho_ten, u.vai_tro, u.active,
             u.so_dien_thoai, u.ngan_hang, u.so_tai_khoan, u.ten_chu_tk,
             u.hinh_thuc_thanh_toan, u.quan_ly_id, u.created_at,
+            u.ma_vender, u.quyen_ktx,
             (SELECT COUNT(*)
                FROM cong_nhan cn
               WHERE cn.nguoi_tuyen_id = u.id

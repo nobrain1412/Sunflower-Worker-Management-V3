@@ -76,10 +76,11 @@ export function useXoaGiaoDich() {
   });
 }
 
-export function useToggleHoanTien() {
+// Cập nhật số tiền đã hoàn (luỹ kế) — cho phép hoàn 1 phần
+export function useCapNhatHoanTien() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, da_hoan_tien }) => api.patch(`/tai-chinh/${id}/hoan-tien`, { da_hoan_tien }),
+    mutationFn: ({ id, so_tien_da_hoan }) => api.patch(`/tai-chinh/${id}/hoan-tien`, { so_tien_da_hoan }),
     onSuccess:  () => {
       qc.invalidateQueries({ queryKey: ['tai-chinh', 'giao-dich'] });
       qc.invalidateQueries({ queryKey: ['tai-chinh', 'tong'] });

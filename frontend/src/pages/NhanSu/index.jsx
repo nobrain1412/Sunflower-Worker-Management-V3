@@ -5,7 +5,7 @@
  *   - Cộng tác viên — kèm số người tuyển + tiền công
  */
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useUserList, useCongTacVien, useTaoUser, useCapNhatUser, useXoaUser, useThanhToanCongTacVien } from '../../hooks/useUsers';
 import { useCongTyList } from '../../hooks/useCongNhan';
 import useIsMobile from '../../hooks/useIsMobile';
@@ -232,8 +232,15 @@ export default function NhanSu() {
   const xoa = useXoaUser();
   const thanhToanCtv = useThanhToanCongTacVien();
 
-  const users = isAdmin ? (userRes?.data ?? []) : [];
-  const ctvs  = ctvRes?.data ?? [];
+  // Lọc theo ?q= từ thanh search Topbar (tên / đăng nhập / SĐT / mã vender)
+  const [urlParams, setUrlParams] = useSearchParams();
+  const q = (urlParams.get('q') ?? '').trim().toLowerCase();
+  const matchQ = (u) => !q ||
+    [u.ho_ten, u.ten_dang_nhap, u.so_dien_thoai, u.ma_vender]
+      .some((v) => v && String(v).toLowerCase().includes(q));
+
+  const users = (isAdmin ? (userRes?.data ?? []) : []).filter(matchQ);
+  const ctvs  = (ctvRes?.data ?? []).filter(matchQ);
   const isMobile = useIsMobile();
 
   // Nhân viên = mọi role trừ cộng tác viên (theo nghĩa nội bộ)
@@ -281,6 +288,16 @@ export default function NhanSu() {
           {isAdmin ? '+ Thêm user' : '+ Thêm cộng tác viên'}
         </button>
       </div>
+
+      {q && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text2)' }}>
+          Đang lọc theo: <b style={{ color: 'var(--text1)' }}>{urlParams.get('q')}</b>
+          <button className="btn-ghost" style={{ fontSize: 11, padding: '2px 8px' }}
+            onClick={() => { urlParams.delete('q'); setUrlParams(urlParams, { replace: true }); }}>
+            ✕ Xoá lọc
+          </button>
+        </div>
+      )}
 
       <div style={s.card}>
         {tab === 'user' && (

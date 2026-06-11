@@ -145,6 +145,8 @@ const taoMoiSchema = z.object({
   so_tien:      z.number().positive(),
   ngay:         z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   ghi_chu:      z.string().max(500).optional(),
+  // Gán khoản chi cho user khác → user đó nhận 1 khoản thu mirror trong sổ của họ
+  nguoi_nhan_id: z.number().int().positive().optional(),
 });
 
 router.post('/',
@@ -199,6 +201,46 @@ router.post('/',
       }
     }
 
+    // Gán khoản chi cho user khác → tạo thêm khoản THU mirror trong sổ người nhận
+    const nguoiNhanId = req.validatedBody.nguoi_nhan_id;
+    if (nguoiNhanId) {
+      const db = require('../utils/db');
+      if (req.validatedBody.loai !== 'chi') {
+        const e = new Error('Chỉ khoản chi mới gán được cho user khác');
+        e.statusCode = 400; e.code = 'VALIDATION_ERROR'; throw e;
+      }
+      if (vai_tro !== 'admin' && vai_tro !== 'quan_ly') {
+        const e = new Error('Bạn không có quyền gán khoản chi cho user khác');
+        e.statusCode = 403; throw e;
+      }
+      if (nguoiNhanId === userId) {
+        const e = new Error('Không thể gán khoản chi cho chính mình');
+        e.statusCode = 400; e.code = 'VALIDATION_ERROR'; throw e;
+      }
+      const nguoiNhan = await db.query(
+        `SELECT id, ho_ten FROM users WHERE id = $1 AND active = TRUE`,
+        [nguoiNhanId],
+      );
+      if (!nguoiNhan.rows.length) {
+        const e = new Error('User được gán không tồn tại hoặc đã bị khoá');
+        e.statusCode = 404; throw e;
+      }
+      const nguoiGui = await db.query(`SELECT ho_ten FROM users WHERE id = $1`, [userId]);
+      const tenNguoiGui = nguoiGui.rows[0]?.ho_ten ?? 'user khác';
+
+      const chi = await model.createWithMirror(
+        { ...req.validatedBody, created_by: userId },
+        {
+          loai: 'thu',
+          so_tien: req.validatedBody.so_tien,
+          ngay: req.validatedBody.ngay,
+          ghi_chu: `Nhận từ ${tenNguoiGui}${req.validatedBody.ghi_chu ? `: ${req.validatedBody.ghi_chu}` : ''}`,
+          created_by: nguoiNhanId,
+        },
+      );
+      return sendCreated(res, chi, `Đã thêm khoản chi và gán cho ${nguoiNhan.rows[0].ho_ten}`);
+    }
+
     const data = await model.create({
       ...req.validatedBody,
       created_by: userId,
@@ -234,23 +276,43 @@ router.get('/cong-nhan/:congNhanId', asyncWrapper(async (req, res) => {
   sendSuccess(res, rows, 'Thành công', 200, { total });
 }));
 
-// Toggle đã hoàn tiền — chỉ chủ giao dịch.
+// Cập nhật hoàn tiền (cho phép hoàn 1 phần) — chỉ chủ giao dịch.
+// Body: { so_tien_da_hoan } = tổng đã hoàn luỹ kế (0 → so_tien),
+// hoặc { da_hoan_tien } (tương thích cũ: true = hoàn đủ, false = chưa hoàn).
 router.patch('/:id/hoan-tien',
-  validate(z.object({ da_hoan_tien: z.boolean() })),
+  validate(z.object({
+    so_tien_da_hoan: z.number().min(0).optional(),
+    da_hoan_tien:    z.boolean().optional(),
+  })),
   asyncWrapper(async (req, res) => {
     const id = toPositiveInt(req.params.id, 'ID giao dịch');
     const existing = await model.findById(id);
     if (!existing) { const e = new Error('Không tìm thấy giao dịch'); e.statusCode = 404; throw e; }
     if (existing.created_by !== req.user.id) {
-      return sendForbidden(res, 'Bạn chỉ có thể chỉnh sổ của chính mình');
+      return sendForbidden(res, 'Chỉ người chi tiền mới được cập nhật hoàn tiền');
     }
-    const data = await model.toggleHoanTien(id, req.validatedBody.da_hoan_tien);
+
+    let soTienDaHoan = req.validatedBody.so_tien_da_hoan;
+    if (soTienDaHoan === undefined) {
+      if (req.validatedBody.da_hoan_tien === undefined) {
+        const e = new Error('Thiếu so_tien_da_hoan');
+        e.statusCode = 400; e.code = 'VALIDATION_ERROR'; throw e;
+      }
+      soTienDaHoan = req.validatedBody.da_hoan_tien ? Number(existing.so_tien) : 0;
+    }
+    if (soTienDaHoan > Number(existing.so_tien)) {
+      const e = new Error('Số tiền hoàn không được vượt quá số tiền khoản chi');
+      e.statusCode = 400; e.code = 'VALIDATION_ERROR'; throw e;
+    }
+
+    const daHoanTruoc = Number(existing.so_tien_da_hoan ?? 0);
+    const data = await model.capNhatHoanTien(id, soTienDaHoan);
     if (!data) {
-      const e = new Error('Giao dịch không phải khoản chi — không thể toggle');
+      const e = new Error('Giao dịch không phải khoản chi — không thể cập nhật hoàn tiền');
       e.statusCode = 400; throw e;
     }
-    // Audit khi đánh dấu hoàn (chỉ false → true) — muc_do 'thuong' vì là sổ cá nhân
-    if (req.validatedBody.da_hoan_tien && data.cong_nhan_id) {
+    // Audit khi số tiền hoàn tăng — muc_do 'thuong' vì là sổ cá nhân
+    if (soTienDaHoan > daHoanTruoc && data.cong_nhan_id) {
       try {
         const hoatDongLog = require('../models/hoatDongLogModel');
         const cnRow = await require('../utils/db').query(
@@ -266,9 +328,11 @@ router.patch('/:id/hoan-tien',
             giao_dich_id: data.id,
             loai: data.loai,
             so_tien: Number(data.so_tien),
+            so_tien_hoan_them: soTienDaHoan - daHoanTruoc,
+            so_tien_da_hoan: soTienDaHoan,
             ngay_hoan: data.ngay_hoan,
           },
-          ghi_chu: `Hoàn ứng ${Number(data.so_tien).toLocaleString('vi-VN')}đ cho ${cnRow.rows[0]?.ho_ten ?? 'CN'}`,
+          ghi_chu: `Hoàn ứng ${(soTienDaHoan - daHoanTruoc).toLocaleString('vi-VN')}đ cho ${cnRow.rows[0]?.ho_ten ?? 'CN'}`,
           created_by: req.user?.id ?? null,
         });
       } catch (e) {
@@ -276,7 +340,9 @@ router.patch('/:id/hoan-tien',
         console.warn('hoat_dong_log write failed (hoan_ung):', e.message);
       }
     }
-    sendSuccess(res, data, data.da_hoan_tien ? 'Đã đánh dấu hoàn tiền' : 'Đã bỏ đánh dấu hoàn tiền');
+    sendSuccess(res, data, data.da_hoan_tien
+      ? 'Đã hoàn đủ tiền'
+      : soTienDaHoan > 0 ? 'Đã cập nhật số tiền hoàn' : 'Đã bỏ đánh dấu hoàn tiền');
   }),
 );
 

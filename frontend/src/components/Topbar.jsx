@@ -12,6 +12,12 @@ const PAGE_TITLE = {
   '/bao-cao':   'Báo cáo',
 };
 
+// Placeholder ô tìm kiếm theo trang — search hoạt động trên trang đang mở
+const SEARCH_PLACEHOLDER = {
+  '/cong-nhan': 'Tìm công nhân (tên / CCCD / SĐT)...',
+  '/nhan-su':   'Tìm nhân viên (tên / SĐT / mã vender)...',
+};
+
 export default function Topbar({ onMenuClick }) {
   const { logout } = useAuth();
   const navigate = useNavigate();
@@ -20,13 +26,12 @@ export default function Topbar({ onMenuClick }) {
   const today = new Date().toLocaleDateString('vi-VN', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' });
   const [searchText, setSearchText] = useState('');
 
-  // Tìm kiếm toàn cục: Enter → sang trang Công nhân với ?q=... (CongNhan đọc URL).
+  // Tìm kiếm theo trang hiện tại: Enter → set ?q=... trên chính trang đang mở
+  // (trang nào hỗ trợ sẽ đọc q từ URL để lọc; không nhảy sang trang khác).
   function handleSearchSubmit(e) {
     e.preventDefault();
     const q = searchText.trim();
-    if (!q) return;
-    navigate(`/cong-nhan?q=${encodeURIComponent(q)}`);
-    setSearchText('');
+    navigate(q ? `${pathname}?q=${encodeURIComponent(q)}` : pathname);
   }
 
   async function handleLogout() {
@@ -59,7 +64,7 @@ export default function Topbar({ onMenuClick }) {
           </svg>
           <input
             style={s.searchInput}
-            placeholder="Tìm công nhân (tên / CCCD / SĐT)..."
+            placeholder={SEARCH_PLACEHOLDER[pathname] ?? 'Tìm kiếm trong trang này...'}
             value={searchText}
             onChange={(e) => setSearchText(e.target.value)}
           />

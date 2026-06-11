@@ -96,11 +96,16 @@ async function findAll({
     `SELECT g.*,
             cn.ho_ten AS cong_nhan_ten,
             dm.ten    AS danh_muc_ten,
-            u.ho_ten  AS created_by_ten
+            u.ho_ten  AS created_by_ten,
+            un.ho_ten AS nguoi_nhan_ten,
+            ug.ho_ten AS nguoi_gui_ten
      FROM giao_dich_tai_chinh g
      LEFT JOIN cong_nhan cn ON cn.id = g.cong_nhan_id
      LEFT JOIN danh_muc_giao_dich dm ON dm.id = g.danh_muc_id
      LEFT JOIN users u ON u.id = g.created_by
+     LEFT JOIN users un ON un.id = g.nguoi_nhan_id
+     LEFT JOIN giao_dich_tai_chinh gk ON gk.id = g.lien_ket_id
+     LEFT JOIN users ug ON ug.id = gk.created_by
      ${where}
      ORDER BY g.ngay DESC, g.id DESC
      LIMIT $${params.length - 1} OFFSET $${params.length}`,
@@ -123,28 +128,78 @@ async function findById(id) {
   return result.rows[0] || null;
 }
 
-async function create(data) {
-  const result = await db.query(
+function insertGiaoDich(executor, data) {
+  return executor.query(
     `INSERT INTO giao_dich_tai_chinh
-       (cong_nhan_id, danh_muc_id, loai, so_tien, ngay, ghi_chu, created_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+       (cong_nhan_id, danh_muc_id, loai, so_tien, ngay, ghi_chu, created_by,
+        nguoi_nhan_id, lien_ket_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
     [data.cong_nhan_id ?? null, data.danh_muc_id ?? null, data.loai,
-     data.so_tien, data.ngay, data.ghi_chu ?? null, data.created_by ?? null],
+     data.so_tien, data.ngay, data.ghi_chu ?? null, data.created_by ?? null,
+     data.nguoi_nhan_id ?? null, data.lien_ket_id ?? null],
   );
+}
+
+async function create(data) {
+  const result = await insertGiaoDich(db, data);
   return result.rows[0];
 }
 
-async function toggleHoanTien(id, daHoanTien) {
-  const result = await db.query(
-    `UPDATE giao_dich_tai_chinh
-     SET da_hoan_tien = $1,
-         ngay_hoan = CASE WHEN $1 THEN CURRENT_DATE ELSE NULL END
-     WHERE id = $2
-       AND loai = ANY($3::text[])
-     RETURNING *`,
-    [daHoanTien, id, LOAI_CHI],
-  );
-  return result.rows[0] || null;
+// Khoản chi gán cho user khác: tạo khoản CHI gốc + khoản THU mirror trong sổ
+// người nhận, trong cùng 1 transaction (dùng client riêng vì db là Pool).
+async function createWithMirror(chiData, mirrorData) {
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    const chiRes = await insertGiaoDich(client, chiData);
+    const chi = chiRes.rows[0];
+    await insertGiaoDich(client, { ...mirrorData, lien_ket_id: chi.id });
+    await client.query('COMMIT');
+    return chi;
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+// Cập nhật số tiền đã hoàn (luỹ kế) cho khoản chi.
+// da_hoan_tien = đã hoàn đủ; sync sang khoản thu mirror (nếu khoản chi được gán user khác)
+// để người nhận thấy tiến độ hoàn — nhưng chỉ chủ khoản chi mới sửa được (check ở route).
+async function capNhatHoanTien(id, soTienDaHoan) {
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await client.query(
+      `UPDATE giao_dich_tai_chinh
+       SET so_tien_da_hoan = $1,
+           da_hoan_tien = ($1 >= so_tien),
+           ngay_hoan = CASE WHEN $1 > 0 THEN CURRENT_DATE ELSE NULL END
+       WHERE id = $2
+         AND loai = ANY($3::text[])
+       RETURNING *`,
+      [soTienDaHoan, id, LOAI_CHI],
+    );
+    const row = result.rows[0] || null;
+    if (row) {
+      await client.query(
+        `UPDATE giao_dich_tai_chinh
+         SET so_tien_da_hoan = $1,
+             da_hoan_tien = ($1 >= so_tien),
+             ngay_hoan = CASE WHEN $1 > 0 THEN CURRENT_DATE ELSE NULL END
+         WHERE lien_ket_id = $2`,
+        [soTienDaHoan, id],
+      );
+    }
+    await client.query('COMMIT');
+    return row;
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
 }
 
 // Tổng thu/chi N tháng gần nhất (cho biểu đồ).
@@ -162,8 +217,8 @@ async function tongTheoThang(soThang = 5, userId) {
      SELECT
        EXTRACT(MONTH FROM ts.m)::int AS thang,
        EXTRACT(YEAR  FROM ts.m)::int AS nam,
-       COALESCE(SUM(CASE WHEN g.loai = ANY($2::text[]) THEN g.so_tien ELSE 0 END), 0) AS thu,
-       COALESCE(SUM(CASE WHEN g.loai = ANY($3::text[]) AND g.da_hoan_tien = FALSE THEN g.so_tien ELSE 0 END), 0) AS chi
+       COALESCE(SUM(CASE WHEN g.loai = ANY($2::text[]) THEN g.so_tien - g.so_tien_da_hoan ELSE 0 END), 0) AS thu,
+       COALESCE(SUM(CASE WHEN g.loai = ANY($3::text[]) THEN g.so_tien - g.so_tien_da_hoan ELSE 0 END), 0) AS chi
      FROM thang_series ts
      LEFT JOIN giao_dich_tai_chinh g
        ON date_trunc('month', g.ngay) = ts.m
@@ -179,8 +234,8 @@ async function tongTheoThang(soThang = 5, userId) {
 async function tinhTongDaUng(congNhanId) {
   const result = await db.query(
     `SELECT
-       COALESCE(SUM(so_tien) FILTER (WHERE da_hoan_tien = FALSE), 0) AS con_no,
-       COALESCE(SUM(so_tien),                                    0) AS tong_ung
+       COALESCE(SUM(so_tien - so_tien_da_hoan), 0) AS con_no,
+       COALESCE(SUM(so_tien),                   0) AS tong_ung
      FROM giao_dich_tai_chinh
      WHERE cong_nhan_id = $1 AND loai = 'tam_ung'`,
     [congNhanId],
@@ -191,12 +246,13 @@ async function tinhTongDaUng(congNhanId) {
 // Tổng thu/chi/tiêu trong tháng (dùng cho KPI).
 // Mỗi user có sổ riêng → bắt buộc filter theo userId (created_by).
 async function tinhTongThang(thang, nam, userId) {
-  if (!userId) return { tong_thu: 0, tong_chi: 0, da_hoan: 0 };
+  if (!userId) return { tong_thu: 0, tong_chi: 0, da_hoan: 0, tong_tieu: 0 };
   const result = await db.query(
     `SELECT
-       SUM(CASE WHEN loai = ANY($3::text[]) THEN so_tien ELSE 0 END)                              AS tong_thu,
-       SUM(CASE WHEN loai = ANY($4::text[]) AND da_hoan_tien = FALSE THEN so_tien ELSE 0 END)     AS tong_chi,
-       SUM(CASE WHEN loai = ANY($4::text[]) AND da_hoan_tien = TRUE  THEN so_tien ELSE 0 END)     AS da_hoan
+       SUM(CASE WHEN loai = ANY($3::text[]) THEN so_tien - so_tien_da_hoan ELSE 0 END) AS tong_thu,
+       SUM(CASE WHEN loai = ANY($4::text[]) THEN so_tien - so_tien_da_hoan ELSE 0 END) AS tong_chi,
+       SUM(CASE WHEN loai = ANY($4::text[]) THEN so_tien_da_hoan ELSE 0 END)           AS da_hoan,
+       SUM(CASE WHEN loai = 'tieu' THEN so_tien ELSE 0 END)                            AS tong_tieu
      FROM giao_dich_tai_chinh
      WHERE EXTRACT(MONTH FROM ngay) = $1 AND EXTRACT(YEAR FROM ngay) = $2
        AND created_by = $5`,
@@ -215,7 +271,7 @@ async function deleteOne(id) {
 
 module.exports = {
   findAllDanhMuc, findDanhMucById, createDanhMuc, updateDanhMuc, deleteDanhMuc,
-  findAll, findById, create, toggleHoanTien, deleteOne,
+  findAll, findById, create, createWithMirror, capNhatHoanTien, deleteOne,
   tinhTongThang, tongTheoThang, tinhTongDaUng,
   LOAI_CHI, LOAI_THU,
 };

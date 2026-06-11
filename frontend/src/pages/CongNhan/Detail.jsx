@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useCongNhanDetail, useCapNhatCongNhan, useNoiOCongNhan, useTongUngCongNhan, useNoiOTruyCap, useCongTyList } from '../../hooks/useCongNhan';
-import { useGiaoDichCongNhan, useToggleHoanTien, useTaoGiaoDich } from '../../hooks/useTaiChinh';
+import { useGiaoDichCongNhan, useCapNhatHoanTien, useTaoGiaoDich } from '../../hooks/useTaiChinh';
 import { useLichSuPhong, usePhongList, useGiuongList } from '../../hooks/useKtx';
 import { useChamCongCongNhan } from '../../hooks/useChamCong';
 import { useHoatDongCongNhan } from '../../hooks/useHoatDong';
@@ -479,7 +479,7 @@ export default function CongNhanDetail() {
   const [doiCtyModal, setDoiCtyModal] = useState(false);
   const capNhatXe = useCapNhatCongNhan(cn?.id);
   const capNhatCty = useCapNhatCongNhan(cn?.id);
-  const toggleHoan = useToggleHoanTien();
+  const capNhatHoan = useCapNhatHoanTien();
 
   async function handleNghiViec() {
     if (!cn) return;
@@ -501,11 +501,27 @@ export default function CongNhanDetail() {
     }
   }
 
-  async function handleToggleHoan(g) {
+  // Hoàn tiền 1 phần: nhập số tiền hoàn thêm; nếu đã hoàn đủ → hỏi bỏ đánh dấu
+  async function handleCapNhatHoan(g) {
+    const soTien = Number(g.so_tien ?? 0);
+    const daHoan = Number(g.so_tien_da_hoan ?? 0);
+    const conLai = Math.max(0, soTien - daHoan);
     try {
-      await toggleHoan.mutateAsync({ id: g.id, da_hoan_tien: !g.da_hoan_tien });
+      if (conLai <= 0) {
+        if (!window.confirm('Khoản này đã hoàn đủ. Bỏ đánh dấu hoàn toàn bộ?')) return;
+        await capNhatHoan.mutateAsync({ id: g.id, so_tien_da_hoan: 0 });
+        return;
+      }
+      const input = window.prompt(
+        `Nhập số tiền hoàn thêm (còn lại ${conLai.toLocaleString('vi-VN')}đ):`,
+        String(conLai),
+      );
+      if (input == null) return;
+      const v = parseFloat(input);
+      if (!v || v <= 0 || v > conLai) { alert('Số tiền hoàn không hợp lệ'); return; }
+      await capNhatHoan.mutateAsync({ id: g.id, so_tien_da_hoan: daHoan + v });
     } catch (e) {
-      alert(e?.response?.data?.error?.message ?? 'Không thể cập nhật trạng thái hoàn');
+      alert(e?.response?.data?.error?.message ?? 'Không thể cập nhật hoàn tiền');
     }
   }
 
@@ -878,34 +894,36 @@ export default function CongNhanDetail() {
                         <td style={{ padding: '8px 10px 8px 0', fontSize: 12, color: 'var(--text2)' }}>{g.ngay ? new Date(g.ngay).toLocaleDateString('vi-VN') : '—'}</td>
                         <td style={{ padding: '8px 10px 8px 0', fontSize: 12, color: 'var(--text2)' }}>{g.ghi_chu ?? '—'}</td>
                         <td style={{ padding: '8px 10px 8px 0' }}>
-                          {!isThu && (
-                            canEdit ? (
+                          {!isThu && (() => {
+                            const daHoanG = Number(g.so_tien_da_hoan ?? 0);
+                            const hoanLabel = g.da_hoan_tien
+                              ? `✓ Hoàn đủ ${g.ngay_hoan ? new Date(g.ngay_hoan).toLocaleDateString('vi-VN') : ''}`
+                              : daHoanG > 0
+                                ? `↩ ${daHoanG.toLocaleString('vi-VN')}/${Number(g.so_tien).toLocaleString('vi-VN')}đ`
+                                : 'Chưa hoàn';
+                            return canEdit ? (
                               <button
-                                onClick={() => handleToggleHoan(g)}
-                                disabled={toggleHoan.isPending}
+                                onClick={() => handleCapNhatHoan(g)}
+                                disabled={capNhatHoan.isPending}
                                 title={g.da_hoan_tien
-                                  ? `Đã hoàn ${g.ngay_hoan ? new Date(g.ngay_hoan).toLocaleDateString('vi-VN') : ''} — bấm để bỏ`
-                                  : 'Bấm để đánh dấu đã hoàn'}
+                                  ? 'Đã hoàn đủ — bấm để sửa'
+                                  : 'Bấm để cập nhật số tiền đã hoàn (cho phép hoàn 1 phần)'}
                                 style={{
                                   background: g.da_hoan_tien ? 'rgba(34,201,134,0.12)' : 'transparent',
-                                  border: `1px solid ${g.da_hoan_tien ? 'var(--green)' : 'var(--border2)'}`,
+                                  border: `1px solid ${g.da_hoan_tien ? 'var(--green)' : daHoanG > 0 ? 'var(--amber)' : 'var(--border2)'}`,
                                   borderRadius: 6, padding: '3px 8px', fontSize: 11,
-                                  color: g.da_hoan_tien ? 'var(--green)' : 'var(--text2)',
+                                  color: g.da_hoan_tien ? 'var(--green)' : daHoanG > 0 ? 'var(--amber)' : 'var(--text2)',
                                   cursor: 'pointer', fontFamily: "'Be Vietnam Pro', sans-serif",
                                 }}
                               >
-                                {g.da_hoan_tien
-                                  ? `✓ Hoàn ${g.ngay_hoan ? new Date(g.ngay_hoan).toLocaleDateString('vi-VN') : ''}`
-                                  : 'Đánh dấu hoàn'}
+                                {g.da_hoan_tien ? hoanLabel : daHoanG > 0 ? hoanLabel : 'Hoàn tiền'}
                               </button>
                             ) : (
-                              <span style={{ fontSize: 11, color: g.da_hoan_tien ? 'var(--green)' : 'var(--text3)' }}>
-                                {g.da_hoan_tien
-                                  ? `✓ Hoàn ${g.ngay_hoan ? new Date(g.ngay_hoan).toLocaleDateString('vi-VN') : ''}`
-                                  : 'Chưa hoàn'}
+                              <span style={{ fontSize: 11, color: g.da_hoan_tien ? 'var(--green)' : daHoanG > 0 ? 'var(--amber)' : 'var(--text3)' }}>
+                                {hoanLabel}
                               </span>
-                            )
-                          )}
+                            );
+                          })()}
                         </td>
                       </tr>
                     );

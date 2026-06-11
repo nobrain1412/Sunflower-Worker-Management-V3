@@ -2,11 +2,12 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from './useApi';
 
 // Danh sách user tối thiểu (id, ho_ten, vai_tro) — mọi user authenticated dùng được
-export function useAssignableUsers() {
+export function useAssignableUsers(enabled = true) {
   return useQuery({
     queryKey: ['users', 'assignable'],
     queryFn:  () => api.get('/users/assignable').then((r) => r.data ?? []),
     staleTime: 60_000,
+    enabled,
   });
 }
 

@@ -1,6 +1,7 @@
 /**
- * Page tổng hợp đề xuất công ty:
- *   - Quản lý: form tạo mới + form sửa + xem các đề xuất của mình
+ * Page đề xuất chung gửi admin:
+ *   - Mọi user (trừ admin): gửi đề xuất chung (nội dung tự do)
+ *   - Quản lý: thêm option đề xuất tạo mới / sửa công ty
  *   - Admin: xem queue + duyệt/từ chối
  *   - (Không có entry cho admin submit — admin sửa trực tiếp ở /cong-ty)
  */
@@ -8,11 +9,13 @@ import { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useCongTyList } from '../../hooks/useCongNhan';
 import DeXuatModal from './DeXuatModal';
+import DeXuatChungModal from './DeXuatChungModal';
 import DeXuatQueue from './DeXuatQueue';
 
 export default function DeXuatPage() {
-  const { user, isQuanLy } = useAuth();
+  const { user, isAdmin, isQuanLy } = useAuth();
   const [showCreate, setShowCreate] = useState(false);
+  const [showChung, setShowChung] = useState(false);
   const [editingCongTy, setEditingCongTy] = useState(null);
   const [showPicker, setShowPicker] = useState(false);
   const allCongTy = useCongTyList().data?.data ?? [];
@@ -29,19 +32,29 @@ export default function DeXuatPage() {
 
   return (
     <div>
-      {isQuanLy && (
+      {!isAdmin && (
         <div style={s.actionBar}>
-          <button onClick={() => setShowCreate(true)} style={s.btnPrimary}>
-            + Đề xuất tạo công ty mới
+          <button onClick={() => setShowChung(true)} style={s.btnPrimary}>
+            + Đề xuất chung
           </button>
-          <button onClick={() => setShowPicker(true)} style={s.btnSecondary}>
-            ✎ Đề xuất sửa công ty
-          </button>
+          {isQuanLy && (
+            <>
+              <button onClick={() => setShowCreate(true)} style={s.btnSecondary}>
+                + Đề xuất tạo công ty mới
+              </button>
+              <button onClick={() => setShowPicker(true)} style={s.btnSecondary}>
+                ✎ Đề xuất sửa công ty
+              </button>
+            </>
+          )}
         </div>
       )}
 
       <DeXuatQueue />
 
+      {showChung && (
+        <DeXuatChungModal onClose={() => setShowChung(false)} />
+      )}
       {showCreate && (
         <DeXuatModal mode="tao_moi" onClose={() => setShowCreate(false)} />
       )}
