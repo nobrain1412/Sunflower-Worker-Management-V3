@@ -1,9 +1,28 @@
+const multer = require('multer');
 const logger = require('../utils/logger');
 const { sendError } = require('../utils/response');
+
+// Multer trả message tiếng Anh ("File too large") → dịch sang tiếng Việt
+const MULTER_MESSAGES = {
+  LIMIT_FILE_SIZE: 'File vượt quá dung lượng cho phép (tối đa 10MB)',
+  LIMIT_FILE_COUNT: 'Số lượng file vượt quá giới hạn cho phép',
+  LIMIT_UNEXPECTED_FILE: 'File gửi lên không đúng tên trường cho phép',
+  LIMIT_PART_COUNT: 'Dữ liệu upload vượt quá giới hạn cho phép',
+  LIMIT_FIELD_KEY: 'Tên trường upload quá dài',
+  LIMIT_FIELD_VALUE: 'Giá trị trường upload quá lớn',
+  LIMIT_FIELD_COUNT: 'Số lượng trường upload vượt quá giới hạn',
+};
 
 // eslint-disable-next-line no-unused-vars
 function errorHandler(err, req, res, next) {
   const isProd = process.env.NODE_ENV === 'production';
+
+  // Lỗi upload từ multer → 400 + message tiếng Việt
+  if (err instanceof multer.MulterError) {
+    err.statusCode = 400;
+    err.message = MULTER_MESSAGES[err.code] || 'File upload không hợp lệ';
+    err.code = 'UPLOAD_ERROR';
+  }
 
   // Map PostgreSQL error code sang HTTP status để phân loại log đúng
   let statusCode = err.statusCode;

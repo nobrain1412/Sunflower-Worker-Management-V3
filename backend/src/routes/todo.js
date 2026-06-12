@@ -94,8 +94,8 @@ const updateTaskSchema = z.object({
   category_id:  z.number().int().positive().nullable().optional(),
   assignee_id:  z.number().int().positive().optional(),
   cong_nhan_id: z.number().int().positive().nullable().optional(),
-  han:          z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
-  gio_lam:      z.string().regex(/^\d{2}:\d{2}$/).nullable().optional(),
+  han:          z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Hạn phải dạng YYYY-MM-DD').nullable().optional(),
+  gio_lam:      z.string().regex(/^\d{2}:\d{2}$/, 'Giờ phải dạng HH:MM').nullable().optional(),
 });
 
 // Chỉ assignee hoặc người tạo (hoặc admin) mới sửa được

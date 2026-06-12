@@ -44,12 +44,12 @@ const updateSchema = createSchema.extend({
 
 const ganSchema = z.object({
   cong_nhan_id: z.number().int().positive(),
-  ngay_vao:     z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  ngay_vao:     z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Ngày vào không hợp lệ (định dạng YYYY-MM-DD)'),
   ghi_chu:      z.string().max(500).optional(),
 });
 
 const traSchema = z.object({
-  ngay_ra: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  ngay_ra: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Ngày ra không hợp lệ (định dạng YYYY-MM-DD)'),
 });
 
 // Nhà trọ riêng tư: chỉ admin hoặc người tạo mới được xem/sửa/xoá 1 nhà trọ cụ thể.

@@ -39,8 +39,8 @@ router.get('/', requireRole('admin', 'quan_ly', 'ke_toan'),
       const e = new Error('Tháng phải từ 1-12');
       e.statusCode = 400; e.code = 'VALIDATION_ERROR'; throw e;
     }
-    const congTyId    = req.query.cong_ty_id    ? toPositiveInt(req.query.cong_ty_id, 'cong_ty_id') : null;
-    const nguoiTuyen  = req.query.nguoi_tuyen_id ? toPositiveInt(req.query.nguoi_tuyen_id, 'nguoi_tuyen_id') : null;
+    const congTyId    = req.query.cong_ty_id    ? toPositiveInt(req.query.cong_ty_id, 'Công ty') : null;
+    const nguoiTuyen  = req.query.nguoi_tuyen_id ? toPositiveInt(req.query.nguoi_tuyen_id, 'Người tuyển') : null;
 
     const rows = await chamCongModel.findThangByScope({
       thang, nam, scope: req.scope, cong_ty_id: congTyId, nguoi_tuyen_id: nguoiTuyen,
@@ -96,7 +96,7 @@ router.get('/cong-nhan/:congNhanId',
 );
 
 const entrySchema = z.object({
-  ngay:       z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  ngay:       z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Ngày không hợp lệ (định dạng YYYY-MM-DD)'),
   so_gio:     z.number().min(0).max(24).optional(),
   so_gio_ot:  z.number().min(0).max(24).optional(),
   ca_lam:     z.string().max(20).nullable().optional(),

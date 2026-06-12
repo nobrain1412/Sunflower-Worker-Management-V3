@@ -113,7 +113,7 @@ router.get('/phong/:phongId/giuong', requireKtxAccess, asyncWrapper(async (req, 
 // ─── THUE_PHONG ────────────────────────────────────────────
 const xepSchema = z.object({
   cong_nhan_id: z.number().int().positive(),
-  ngay_vao:     z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  ngay_vao:     z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Ngày vào không hợp lệ (định dạng YYYY-MM-DD)'),
 });
 
 router.post('/giuong/:giuongId/xep', requireKtxAccess,
@@ -129,7 +129,7 @@ router.post('/giuong/:giuongId/xep', requireKtxAccess,
 );
 
 router.put('/thue-phong/:id/tra', requireKtxAccess,
-  validate(z.object({ ngay_ra: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) })),
+  validate(z.object({ ngay_ra: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Ngày ra không hợp lệ (định dạng YYYY-MM-DD)') })),
   asyncWrapper(async (req, res) => {
     const data = await ktxModel.traPhong(
       toPositiveInt(req.params.id, 'ID thuê phòng'),

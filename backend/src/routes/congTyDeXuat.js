@@ -85,11 +85,11 @@ router.post('/',
       e.statusCode = 400; e.code = 'VALIDATION_ERROR'; throw e;
     }
     if (loai === 'sua_doi' && !cong_ty_id) {
-      const e = new Error('sua_doi phải kèm cong_ty_id');
+      const e = new Error('Vui lòng chọn công ty cần đề xuất sửa');
       e.statusCode = 400; e.code = 'VALIDATION_ERROR'; throw e;
     }
     if (loai === 'tao_moi' && !du_lieu?.ten_cong_ty) {
-      const e = new Error('Tên công ty bắt buộc khi tao_moi');
+      const e = new Error('Vui lòng nhập tên công ty');
       e.statusCode = 400; e.code = 'VALIDATION_ERROR'; throw e;
     }
 
@@ -130,7 +130,7 @@ router.get('/',
   asyncWrapper(async (req, res) => {
     const filter = {
       trang_thai: req.query.trang_thai,
-      cong_ty_id: req.query.cong_ty_id ? toPositiveInt(req.query.cong_ty_id, 'cong_ty_id') : undefined,
+      cong_ty_id: req.query.cong_ty_id ? toPositiveInt(req.query.cong_ty_id, 'Công ty') : undefined,
     };
     if (req.user.vai_tro !== 'admin') {
       filter.nguoi_de_xuat_id = req.user.id;

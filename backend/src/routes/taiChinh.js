@@ -143,7 +143,7 @@ const taoMoiSchema = z.object({
   danh_muc_id:  z.number().int().positive().optional(),
   loai:         z.enum(LOAI_VALUES),
   so_tien:      z.number().positive(),
-  ngay:         z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  ngay:         z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Ngày không hợp lệ (định dạng YYYY-MM-DD)').optional(),
   ghi_chu:      z.string().max(500).optional(),
   // Gán khoản chi cho user khác → user đó nhận 1 khoản thu mirror trong sổ của họ
   nguoi_nhan_id: z.number().int().positive().optional(),
@@ -295,7 +295,7 @@ router.patch('/:id/hoan-tien',
     let soTienDaHoan = req.validatedBody.so_tien_da_hoan;
     if (soTienDaHoan === undefined) {
       if (req.validatedBody.da_hoan_tien === undefined) {
-        const e = new Error('Thiếu so_tien_da_hoan');
+        const e = new Error('Vui lòng nhập số tiền đã hoàn');
         e.statusCode = 400; e.code = 'VALIDATION_ERROR'; throw e;
       }
       soTienDaHoan = req.validatedBody.da_hoan_tien ? Number(existing.so_tien) : 0;
