@@ -43,12 +43,19 @@ async function findAll({ page = 1, limit = 20, sort = 'ho_ten', order = 'asc', t
     }
   }
 
+  // Sentinel để lọc các bản ghi có giá trị trống (NULL/rỗng) từ FE
+  const EMPTY = '__empty__';
+
   // Filter user-supplied (admin/quản lý)
-  if (vender_id) {
+  if (vender_id === EMPTY) {
+    conditions.push(`cn.nguoi_tuyen_id IS NULL`);
+  } else if (vender_id) {
     params.push(vender_id);
     conditions.push(`cn.nguoi_tuyen_id = $${params.length}`);
   }
-  if (cong_ty_id) {
+  if (cong_ty_id === EMPTY) {
+    conditions.push(`cn.cong_ty_id IS NULL`);
+  } else if (cong_ty_id) {
     params.push(cong_ty_id);
     conditions.push(`cn.cong_ty_id = $${params.length}`);
   }
@@ -67,12 +74,16 @@ async function findAll({ page = 1, limit = 20, sort = 'ho_ten', order = 'asc', t
     conditions.push(`(cn.ho_ten ILIKE $${params.length} OR cn.cccd LIKE $${params.length} OR cn.so_dien_thoai LIKE $${params.length})`);
   }
 
-  if (tinh) {
+  if (tinh === EMPTY) {
+    conditions.push(`(cn.que_quan IS NULL OR cn.que_quan = '')`);
+  } else if (tinh) {
     params.push(`%${tinh}%`);
     conditions.push(`cn.que_quan ILIKE $${params.length}`);
   }
 
-  if (ngay) {
+  if (ngay === EMPTY) {
+    conditions.push(`cn.ngay_vao_lam IS NULL`);
+  } else if (ngay) {
     params.push(ngay);
     conditions.push(`cn.ngay_vao_lam = $${params.length}`);
   }

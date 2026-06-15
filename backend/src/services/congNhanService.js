@@ -16,8 +16,11 @@ async function danhSach(query, scope, vaiTro, viewerId) {
     trang_thai: query.trang_thai,
     trang_thai_noi_o: query.trang_thai_noi_o,
     search:     query.search,
-    vender_id:  query.vender_id ? parseInt(query.vender_id, 10) : undefined,
-    cong_ty_id: query.cong_ty_id ? parseInt(query.cong_ty_id, 10) : undefined,
+    // '__empty__' = lọc giá trị trống → giữ nguyên sentinel, không parseInt
+    vender_id:  query.vender_id === '__empty__' ? '__empty__'
+                : (query.vender_id ? parseInt(query.vender_id, 10) : undefined),
+    cong_ty_id: query.cong_ty_id === '__empty__' ? '__empty__'
+                : (query.cong_ty_id ? parseInt(query.cong_ty_id, 10) : undefined),
     tinh:       query.tinh || undefined,
     ngay:       query.ngay || undefined,
     scope,

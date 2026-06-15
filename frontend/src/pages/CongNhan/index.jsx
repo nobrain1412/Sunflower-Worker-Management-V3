@@ -15,6 +15,9 @@ const TRANG_THAI_PILL = {
   nghi_viec: { cls: 'pill-red',   label: 'Nghỉ việc' },
 };
 
+// Sentinel gửi lên BE để lọc các bản ghi có giá trị trống (NULL/rỗng)
+const EMPTY = '__empty__';
+
 const STATUS_OPTIONS = [
   { value: '', label: 'Tất cả trạng thái' },
   { value: 'doi_viec',  label: 'Đợi việc' },
@@ -407,6 +410,7 @@ export default function CongNhan() {
                 <label className="form-label">Công ty</label>
                 <select className="form-input" value={congTyId} onChange={(e) => { setCongTyId(e.target.value); setPage(1); }}>
                   <option value="">Tất cả công ty</option>
+                  <option value={EMPTY}>— Chưa phân công ty —</option>
                   {congTyArr.map((ct) => <option key={ct.id} value={ct.id}>{ct.ten_cong_ty}</option>)}
                 </select>
               </div>
@@ -414,6 +418,7 @@ export default function CongNhan() {
                 <label className="form-label">Vender</label>
                 <select className="form-input" value={venderId} onChange={(e) => { setVenderId(e.target.value); setPage(1); }}>
                   <option value="">Tất cả vender</option>
+                  <option value={EMPTY}>— Chưa có vender —</option>
                   {venders.map((v) => <option key={v.id} value={v.id}>{v.ho_ten}</option>)}
                 </select>
               </div>
@@ -424,19 +429,32 @@ export default function CongNhan() {
             <label className="form-label">Tỉnh</label>
             <select className="form-input" value={tinh} onChange={(e) => { setTinh(e.target.value); setPage(1); }}>
               <option value="">Tất cả tỉnh</option>
+              <option value={EMPTY}>— Chưa có quê quán —</option>
               {tinhList.map((t) => <option key={t.code} value={t.name}>{t.name}</option>)}
             </select>
           </div>
 
           <div style={bs.field}>
             <label className="form-label">Ngày vào làm</label>
-            <input
-              type="date"
-              className="form-input"
-              value={ngay}
-              onChange={(e) => { setNgay(e.target.value); setPage(1); }}
-              lang="vi-VN"
-            />
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input
+                type="date"
+                className="form-input"
+                style={{ flex: 1 }}
+                value={ngay === EMPTY ? '' : ngay}
+                disabled={ngay === EMPTY}
+                onChange={(e) => { setNgay(e.target.value); setPage(1); }}
+                lang="vi-VN"
+              />
+              <button
+                type="button"
+                className={ngay === EMPTY ? 'btn-primary' : 'btn-ghost'}
+                style={{ fontSize: 12, padding: '6px 10px', whiteSpace: 'nowrap' }}
+                onClick={() => { setNgay(ngay === EMPTY ? '' : EMPTY); setPage(1); }}
+              >
+                Chưa có
+              </button>
+            </div>
           </div>
         </div>
       </BottomSheet>
