@@ -59,6 +59,25 @@ export default function NhanVienDetail() {
           <Field label="Số tài khoản" value={u.so_tai_khoan} mono />
           <Field label="Tên chủ TK" value={u.ten_chu_tk} />
         </div>
+
+        {/* Công ty đang quản lý — chỉ áp dụng cho vai trò quản lý */}
+        {u.vai_tro === 'quan_ly' && (
+          <div style={{ marginTop: 18, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
+            <div style={s.label}>Công ty quản lý</div>
+            {(u.cong_ty_quan_ly ?? []).length === 0 ? (
+              <div style={{ ...s.value, color: 'var(--text3)' }}>Chưa phụ trách công ty nào</div>
+            ) : (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 4 }}>
+                {(u.cong_ty_quan_ly ?? []).map((ct) => (
+                  <div key={ct.id} style={s.ctChip}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text1)' }}>{ct.ten_cong_ty}</div>
+                    {ct.dia_chi && <div style={{ fontSize: 11, color: 'var(--text3)' }}>{ct.dia_chi}</div>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {(u.vai_tro === 'vender' || u.vai_tro === 'cong_tac_vien') && (
@@ -109,4 +128,5 @@ const s = {
   grid: { display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '14px 24px' },
   label: { fontSize: 10, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 },
   value: { fontSize: 14, color: 'var(--text1)' },
+  ctChip: { background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 10, padding: '8px 14px' },
 };

@@ -21,16 +21,25 @@ async function findAll({ page = 1, limit = 20, sort = 'ten_cong_ty', order = 'as
 
   params.push(limit, offset);
   const rows = await db.query(
-    `SELECT id, ten_cong_ty, dia_chi, map_url, so_dien_thoai, email,
-            luong_co_ban, luong_theo_gio, he_so_ot, ngay_lam_chuan,
-            luong_tc_ngay, luong_hc_dem, luong_tc_dem, luong_chu_nhat, luong_ngay_le,
-            tien_dong_phuc, tien_phat_nghi,
-            tro_cap, chuyen_can, ngay_chot_cong,
-            tien_cong_quan_ly_theo_gio,
-            mo_ta_cong_viec, media_urls,
-            active, created_at
-     FROM cong_ty ${where}
-     ORDER BY ${safeSort} ${safeOrder}
+    `SELECT ct.id, ct.ten_cong_ty, ct.dia_chi, ct.map_url, ct.so_dien_thoai, ct.email,
+            ct.luong_co_ban, ct.luong_theo_gio, ct.he_so_ot, ct.ngay_lam_chuan,
+            ct.luong_tc_ngay, ct.luong_hc_dem, ct.luong_tc_dem, ct.luong_chu_nhat, ct.luong_ngay_le,
+            ct.tien_dong_phuc, ct.tien_phat_nghi,
+            ct.tro_cap, ct.chuyen_can, ct.ngay_chot_cong,
+            ct.tien_cong_quan_ly_theo_gio,
+            ct.mo_ta_cong_viec, ct.media_urls,
+            ct.active, ct.created_at,
+            -- Danh sách quản lý của công ty (id, họ tên, đăng nhập, SĐT)
+            COALESCE((SELECT json_agg(json_build_object(
+                       'id', u.id, 'ho_ten', u.ho_ten,
+                       'ten_dang_nhap', u.ten_dang_nhap,
+                       'so_dien_thoai', u.so_dien_thoai
+                     ) ORDER BY u.ho_ten)
+              FROM quan_ly_cong_ty qlct
+              JOIN users u ON u.id = qlct.user_id
+              WHERE qlct.cong_ty_id = ct.id), '[]'::json) AS quan_ly
+     FROM cong_ty ct ${where.replace(/\bactive\b/g, 'ct.active')}
+     ORDER BY ct.${safeSort} ${safeOrder}
      LIMIT $${params.length - 1} OFFSET $${params.length}`,
     params,
   );

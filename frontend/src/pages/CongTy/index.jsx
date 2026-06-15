@@ -338,6 +338,27 @@ export default function CongTy() {
                   </div>
                 </div>
               </div>
+              {/* Quản lý phụ trách công ty này */}
+              <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
+                <div style={s.occLabel}>Quản lý phụ trách</div>
+                {(selected.quan_ly ?? []).length === 0 ? (
+                  <div style={{ fontSize: 13, color: 'var(--text3)', marginTop: 4 }}>Chưa gán quản lý</div>
+                ) : (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 6 }}>
+                    {(selected.quan_ly ?? []).map((q) => (
+                      <div key={q.id} style={s.quanLyChip}>
+                        <div style={s.quanLyAvatar}>{q.ho_ten?.[0] ?? '?'}</div>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text1)' }}>{q.ho_ten}</div>
+                          <div style={{ fontSize: 11, color: 'var(--text3)', fontFamily: "'JetBrains Mono', monospace" }}>
+                            {q.so_dien_thoai || q.ten_dang_nhap}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Cấu hình lương */}
@@ -503,6 +524,8 @@ const s = {
   progressLabel: { fontSize: 10, color: 'var(--text3)', whiteSpace: 'nowrap', fontFamily: "'JetBrains Mono', monospace", marginTop: 4 },
   occupancy:    { display: 'flex', gap: 20, alignItems: 'center', marginBottom: 4 },
   occLabel:     { fontSize: 10, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 },
+  quanLyChip:   { display: 'flex', alignItems: 'center', gap: 8, background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 10, padding: '6px 12px 6px 6px' },
+  quanLyAvatar: { width: 28, height: 28, borderRadius: 8, background: 'linear-gradient(135deg, var(--accent), var(--accent2))', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: '#fff', flexShrink: 0 },
 };
 
 const f = {

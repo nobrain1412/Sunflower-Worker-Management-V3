@@ -122,6 +122,8 @@ router.get('/:id', requireRole('admin'), asyncWrapper(async (req, res) => {
   const user = await userModel.findById(id);
   if (!user) { const e = new Error('Không tìm thấy user'); e.statusCode = 404; throw e; }
   user.cong_ty_ids = await userModel.findCongTyIds(id);
+  // Danh sách công ty đang quản lý (kèm tên) — hiển thị ở trang chi tiết
+  user.cong_ty_quan_ly = await userModel.findCongTyQuanLy(id);
   sendSuccess(res, user);
 }));
 

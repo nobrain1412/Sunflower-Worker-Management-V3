@@ -30,6 +30,19 @@ async function findCongTyIds(userId) {
   return result.rows.map((r) => r.cong_ty_id);
 }
 
+// Danh sách công ty người này quản lý (kèm tên) — dùng cho trang chi tiết nhân viên
+async function findCongTyQuanLy(userId) {
+  const result = await db.query(
+    `SELECT ct.id, ct.ten_cong_ty, ct.dia_chi
+       FROM quan_ly_cong_ty qlct
+       JOIN cong_ty ct ON ct.id = qlct.cong_ty_id
+      WHERE qlct.user_id = $1
+      ORDER BY ct.ten_cong_ty`,
+    [userId],
+  );
+  return result.rows;
+}
+
 // Danh sách user (admin xem) — kèm số CN tuyển + công ty quản lý
 async function findAll({ vai_tro } = {}) {
   const conditions = [];
@@ -457,7 +470,7 @@ async function findCongNhanCuaCtv(ctvId) {
 
 module.exports = {
   ROLE_VALUES,
-  findByUsername, findById, findCongTyIds, findAll,
+  findByUsername, findById, findCongTyIds, findCongTyQuanLy, findAll,
   create, update, setCongTyIds, hardDelete, findCongTacVien, thanhToanCongTacVien,
   findCongNhanCuaCtv,
 };
