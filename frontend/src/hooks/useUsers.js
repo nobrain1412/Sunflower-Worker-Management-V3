@@ -28,6 +28,24 @@ export function useUserDetail(id) {
   });
 }
 
+// Hồ sơ cá nhân của user đang đăng nhập (đầy đủ: SĐT, ngân hàng, công ty quản lý)
+export function useMe(enabled = true) {
+  return useQuery({
+    queryKey: ['me'],
+    queryFn:  () => api.get('/auth/me'),
+    staleTime: 30_000,
+    enabled,
+  });
+}
+
+export function useUpdateMe() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data) => api.put('/auth/me', data),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: ['me'] }),
+  });
+}
+
 export function useCongTacVien() {
   return useQuery({
     queryKey: ['users', 'cong-tac-vien'],

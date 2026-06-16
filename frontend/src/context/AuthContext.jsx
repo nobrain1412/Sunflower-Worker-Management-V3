@@ -82,6 +82,16 @@ export function AuthProvider({ children }) {
     setSelectedCongTyId(id);
   }, []);
 
+  // Cập nhật cục bộ thông tin user (sau khi user tự sửa hồ sơ) — đồng bộ localStorage
+  const updateUser = useCallback((partial) => {
+    setUser((prev) => {
+      if (!prev) return prev;
+      const next = { ...prev, ...partial };
+      localStorage.setItem('user', JSON.stringify(next));
+      return next;
+    });
+  }, []);
+
   // Kiểm tra nhanh quyền theo role
   const isAdmin   = user?.vai_tro === 'admin';
   const isQuanLy  = user?.vai_tro === 'quan_ly';
@@ -134,7 +144,7 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider value={{
-      user, login, logout, isLoggedIn: !!user, isAuthReady,
+      user, login, logout, updateUser, isLoggedIn: !!user, isAuthReady,
       selectedCongTyId, chonCongTy,
       isAdmin, isQuanLy, isVender, canEdit,
     }}>

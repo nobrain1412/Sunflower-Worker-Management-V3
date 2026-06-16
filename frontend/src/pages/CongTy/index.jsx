@@ -44,6 +44,32 @@ function useXoaCongTy() {
   });
 }
 
+// Danh sách user có vai trò quản lý — để admin chọn gán cho công ty
+function useQuanLyUsers(enabled) {
+  return useQuery({
+    queryKey: ['users', { vai_tro: 'quan_ly' }],
+    queryFn:  () => api.get('/users', { params: { vai_tro: 'quan_ly' } }),
+    staleTime: 30_000,
+    enabled,
+  });
+}
+
+function useGanQuanLy() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ congTyId, userId }) => api.post(`/cong-ty/${congTyId}/quan-ly`, { user_id: userId }),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: ['cong-ty'] }),
+  });
+}
+
+function useGoQuanLy() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ congTyId, userId }) => api.delete(`/cong-ty/${congTyId}/quan-ly/${userId}`),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: ['cong-ty'] }),
+  });
+}
+
 // ─── Cấu hình lương — view mode ───────────────────────────
 function LuongConfig({ ct }) {
   const bangLuong = [
@@ -145,6 +171,9 @@ export default function CongTy() {
   const capNhat = useCapNhat();
   const taoMoi  = useTaoMoi();
   const xoa     = useXoaCongTy();
+  const quanLyUsers = useQuanLyUsers(isAdmin).data?.data ?? [];
+  const ganQuanLy = useGanQuanLy();
+  const goQuanLy  = useGoQuanLy();
 
   const list = res?.data ?? [];
   const [selectedId, setSelectedId] = useState(null);
@@ -354,10 +383,47 @@ export default function CongTy() {
                             {q.so_dien_thoai || q.ten_dang_nhap}
                           </div>
                         </div>
+                        {isAdmin && (
+                          <button
+                            title="Gỡ quản lý khỏi công ty"
+                            onClick={async () => {
+                              if (!window.confirm(`Gỡ "${q.ho_ten}" khỏi quyền quản lý công ty này?`)) return;
+                              try { await goQuanLy.mutateAsync({ congTyId: selected.id, userId: q.id }); }
+                              catch (e) { alert(e?.message ?? 'Lỗi'); }
+                            }}
+                            style={s.quanLyRemove}>×</button>
+                        )}
                       </div>
                     ))}
                   </div>
                 )}
+                {/* Admin: gán thêm quản lý */}
+                {isAdmin && (() => {
+                  const assignedIds = new Set((selected.quan_ly ?? []).map((q) => q.id));
+                  const choices = quanLyUsers.filter((u) => !assignedIds.has(u.id));
+                  return (
+                    <div style={{ display: 'flex', gap: 8, marginTop: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                      <select
+                        className="form-input"
+                        style={{ maxWidth: 260 }}
+                        value=""
+                        disabled={ganQuanLy.isPending || choices.length === 0}
+                        onChange={async (e) => {
+                          const userId = parseInt(e.target.value, 10);
+                          if (!userId) return;
+                          try { await ganQuanLy.mutateAsync({ congTyId: selected.id, userId }); }
+                          catch (err) { alert(err?.message ?? 'Lỗi'); }
+                        }}>
+                        <option value="">
+                          {choices.length === 0 ? 'Không còn quản lý để gán' : '+ Gán quản lý...'}
+                        </option>
+                        {choices.map((u) => (
+                          <option key={u.id} value={u.id}>{u.ho_ten} ({u.ten_dang_nhap})</option>
+                        ))}
+                      </select>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
 
@@ -524,8 +590,9 @@ const s = {
   progressLabel: { fontSize: 10, color: 'var(--text3)', whiteSpace: 'nowrap', fontFamily: "'JetBrains Mono', monospace", marginTop: 4 },
   occupancy:    { display: 'flex', gap: 20, alignItems: 'center', marginBottom: 4 },
   occLabel:     { fontSize: 10, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 },
-  quanLyChip:   { display: 'flex', alignItems: 'center', gap: 8, background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 10, padding: '6px 12px 6px 6px' },
+  quanLyChip:   { display: 'flex', alignItems: 'center', gap: 8, background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 10, padding: '6px 8px 6px 6px' },
   quanLyAvatar: { width: 28, height: 28, borderRadius: 8, background: 'linear-gradient(135deg, var(--accent), var(--accent2))', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: '#fff', flexShrink: 0 },
+  quanLyRemove: { background: 'transparent', border: 'none', color: 'var(--text3)', cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: '0 2px', marginLeft: 2 },
 };
 
 const f = {

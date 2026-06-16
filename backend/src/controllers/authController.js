@@ -85,4 +85,14 @@ const postDangKy = asyncWrapper(async (req, res) => {
   }, 'Đăng ký tài khoản thành công');
 });
 
-module.exports = { postLogin, postRefresh, postLogout, postDoiMatKhau, postDangKy };
+const getMe = asyncWrapper(async (req, res) => {
+  const user = await authService.getProfile(req.user.id);
+  sendSuccess(res, user);
+});
+
+const putMe = asyncWrapper(async (req, res) => {
+  const user = await authService.updateProfile(req.user.id, req.validatedBody);
+  sendSuccess(res, user, 'Cập nhật thông tin thành công');
+});
+
+module.exports = { postLogin, postRefresh, postLogout, postDoiMatKhau, postDangKy, getMe, putMe };

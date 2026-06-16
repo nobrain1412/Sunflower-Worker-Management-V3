@@ -178,13 +178,17 @@ async function parseExcel(buffer) {
     // Skip row hoàn toàn trống (không có mã thẻ + không có ngày)
     if (!row.ma_van_tay && !row.ngay) continue;
 
-    // Tính tổng giờ
-    row.so_gio    = row.h_day + row.h_night + row.h_sunday + row.h_holiday;
-    row.so_gio_ot = row.ot_before_945 + row.ot_after_945 + row.ot_night + row.ot_sunday + row.ot_holiday;
+    // Phân loại vào 4 cột HC/TC × ngày/đêm.
+    // Chủ nhật + ngày lễ gộp vào ca NGÀY (không tách riêng ở chấm công thủ công).
+    const round2 = (n) => Math.round(n * 100) / 100;
+    row.gio_hc_ngay = round2(row.h_day + row.h_sunday + row.h_holiday);
+    row.gio_hc_dem  = round2(row.h_night);
+    row.gio_tc_ngay = round2(row.ot_before_945 + row.ot_after_945 + row.ot_sunday + row.ot_holiday);
+    row.gio_tc_dem  = round2(row.ot_night);
 
-    // Round 2 chữ số (numeric(4,2))
-    row.so_gio    = Math.round(row.so_gio * 100) / 100;
-    row.so_gio_ot = Math.round(row.so_gio_ot * 100) / 100;
+    // Tổng giờ (giữ lại cho tính lương/CTV/báo cáo cũ)
+    row.so_gio    = round2(row.gio_hc_ngay + row.gio_hc_dem);
+    row.so_gio_ot = round2(row.gio_tc_ngay + row.gio_tc_dem);
 
     // ca_lam
     if (row.so_gio === 0 && row.so_gio_ot === 0) {
@@ -295,17 +299,24 @@ async function commitImport(rows, createdBy) {
     for (const r of toUpsert) {
       try {
         const { rows: res } = await db.query(
-          `INSERT INTO cham_cong (phan_cong_id, ngay, so_gio, so_gio_ot, ca_lam, ghi_chu)
-           VALUES ($1, $2, $3, $4, $5, $6)
+          `INSERT INTO cham_cong
+             (phan_cong_id, ngay, so_gio, so_gio_ot,
+              gio_hc_ngay, gio_tc_ngay, gio_hc_dem, gio_tc_dem, ca_lam, ghi_chu)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
            ON CONFLICT (phan_cong_id, ngay) DO UPDATE
-             SET so_gio    = EXCLUDED.so_gio,
-                 so_gio_ot = EXCLUDED.so_gio_ot,
-                 ca_lam    = EXCLUDED.ca_lam,
-                 ghi_chu   = EXCLUDED.ghi_chu,
+             SET so_gio      = EXCLUDED.so_gio,
+                 so_gio_ot   = EXCLUDED.so_gio_ot,
+                 gio_hc_ngay = EXCLUDED.gio_hc_ngay,
+                 gio_tc_ngay = EXCLUDED.gio_tc_ngay,
+                 gio_hc_dem  = EXCLUDED.gio_hc_dem,
+                 gio_tc_dem  = EXCLUDED.gio_tc_dem,
+                 ca_lam      = EXCLUDED.ca_lam,
+                 ghi_chu     = EXCLUDED.ghi_chu,
                  updated_at = NOW()
            RETURNING (xmax = 0) AS is_insert`,
           [
-            r.phan_cong_id, r.ngay, r.so_gio, r.so_gio_ot, r.ca_lam,
+            r.phan_cong_id, r.ngay, r.so_gio, r.so_gio_ot,
+            r.gio_hc_ngay, r.gio_tc_ngay, r.gio_hc_dem, r.gio_tc_dem, r.ca_lam,
             'Import từ máy vân tay',
           ],
         );

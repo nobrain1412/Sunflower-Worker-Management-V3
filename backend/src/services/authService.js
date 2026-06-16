@@ -162,6 +162,34 @@ async function logout(refreshToken) {
   await refreshTokenModel.revokeByHash(tokenHash);
 }
 
+// ─── Hồ sơ cá nhân (self-service) ────────────────────────────
+// Các trường user TỰ sửa được. KHÔNG cho đổi: tên đăng nhập, vai trò,
+// active, quyền KTX, mã vender, công ty quản lý (admin kiểm soát).
+const SELF_EDITABLE = ['ho_ten', 'so_dien_thoai', 'ngan_hang', 'so_tai_khoan', 'ten_chu_tk'];
+
+async function getProfile(userId) {
+  const user = await userModel.findById(userId);
+  if (!user) {
+    const err = new Error('Không tìm thấy user');
+    err.statusCode = 404; err.code = 'USER_NOT_FOUND';
+    throw err;
+  }
+  user.cong_ty_ids = await userModel.findCongTyIds(userId);
+  user.cong_ty_quan_ly = await userModel.findCongTyQuanLy(userId);
+  return user;
+}
+
+async function updateProfile(userId, data) {
+  const patch = {};
+  for (const k of SELF_EDITABLE) {
+    if (k in data) patch[k] = data[k] === '' ? null : data[k];
+  }
+  if (Object.keys(patch).length > 0) {
+    await userModel.update(userId, patch);
+  }
+  return getProfile(userId);
+}
+
 // Đổi mật khẩu cho user đang đăng nhập. Yêu cầu nhập đúng mật khẩu cũ để xác thực.
 async function changePassword(userId, matKhauCu, matKhauMoi) {
   const user = await userModel.findById(userId);
@@ -239,4 +267,4 @@ async function register({ ten_dang_nhap, ho_ten, so_dien_thoai, mat_khau }, sess
   };
 }
 
-module.exports = { login, refreshToken, logout, changePassword, register };
+module.exports = { login, refreshToken, logout, changePassword, register, getProfile, updateProfile };

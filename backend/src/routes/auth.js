@@ -35,4 +35,16 @@ router.post('/refresh',       ctrl.postRefresh);
 router.post('/logout',        ctrl.postLogout);
 router.post('/doi-mat-khau',  authenticate, validate(doiMatKhauSchema), ctrl.postDoiMatKhau);
 
+// ─── Hồ sơ cá nhân (self-service) ────────────────────────────
+const capNhatHoSoSchema = z.object({
+  ho_ten:        z.string().trim().min(2, 'Họ tên tối thiểu 2 ký tự').max(100).optional(),
+  so_dien_thoai: z.string().trim().max(20).optional().or(z.literal('')),
+  ngan_hang:     z.string().trim().max(100).optional().or(z.literal('')),
+  so_tai_khoan:  z.string().trim().max(50).optional().or(z.literal('')),
+  ten_chu_tk:    z.string().trim().max(100).optional().or(z.literal('')),
+});
+
+router.get('/me', authenticate, ctrl.getMe);
+router.put('/me', authenticate, validate(capNhatHoSoSchema), ctrl.putMe);
+
 module.exports = router;

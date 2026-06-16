@@ -39,7 +39,9 @@ async function findPhanCongByCongNhan(congNhanId, { thang, nam } = {}) {
 // Chấm công trong tháng cho 1 phan_cong
 async function findByPhanCongThang(phanCongId, thang, nam) {
   const r = await db.query(
-    `SELECT id, phan_cong_id, ngay, so_gio, so_gio_ot, ca_lam, ghi_chu, created_at, updated_at
+    `SELECT id, phan_cong_id, ngay, so_gio, so_gio_ot,
+            gio_hc_ngay, gio_tc_ngay, gio_hc_dem, gio_tc_dem,
+            ca_lam, ghi_chu, created_at, updated_at
      FROM cham_cong
      WHERE phan_cong_id = $1
        AND EXTRACT(MONTH FROM ngay) = $2
@@ -50,8 +52,39 @@ async function findByPhanCongThang(phanCongId, thang, nam) {
   return r.rows;
 }
 
+// Chuẩn hoá 1 entry → 4 loại giờ + tổng. Hỗ trợ cả client cũ (chỉ gửi so_gio/so_gio_ot):
+//   - nếu có bất kỳ cột gio_* nào → dùng 4 loại giờ
+//   - nếu không → coi so_gio = HC ngày, so_gio_ot = TC ngày (giữ tương thích ngược)
+function normalizeEntry(e) {
+  const num = (v) => {
+    const n = Number(v);
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  };
+  const hasBuckets = ['gio_hc_ngay', 'gio_tc_ngay', 'gio_hc_dem', 'gio_tc_dem']
+    .some((k) => e[k] !== undefined && e[k] !== null);
+
+  let gioHcNgay = num(e.gio_hc_ngay);
+  let gioTcNgay = num(e.gio_tc_ngay);
+  const gioHcDem = num(e.gio_hc_dem);
+  const gioTcDem = num(e.gio_tc_dem);
+  if (!hasBuckets) {
+    gioHcNgay = num(e.so_gio);
+    gioTcNgay = num(e.so_gio_ot);
+  }
+
+  const caLam = e.ca_lam || null;
+  // Nghỉ phép / nghỉ việc → mọi giờ = 0
+  if (caLam === 'nghi_phep' || caLam === 'nghi_viec') {
+    return { gioHcNgay: 0, gioTcNgay: 0, gioHcDem: 0, gioTcDem: 0, soGio: 0, soGioOt: 0, caLam };
+  }
+  const soGio   = gioHcNgay + gioHcDem;
+  const soGioOt = gioTcNgay + gioTcDem;
+  return { gioHcNgay, gioTcNgay, gioHcDem, gioTcDem, soGio, soGioOt, caLam };
+}
+
 // Upsert 1 batch entries cho 1 phan_cong
-// entries: [{ ngay: 'YYYY-MM-DD', so_gio, so_gio_ot, ca_lam, ghi_chu }]
+// entries: [{ ngay, gio_hc_ngay, gio_tc_ngay, gio_hc_dem, gio_tc_dem, ca_lam, ghi_chu }]
+//          (vẫn nhận so_gio/so_gio_ot cho client cũ)
 // Trả về: { inserted, updated, deleted, baoNghi: [{ ngay, ca_lam }] }
 async function upsertBatch(phanCongId, entries) {
   if (!Array.isArray(entries) || entries.length === 0) {
@@ -100,13 +133,11 @@ async function upsertBatch(phanCongId, entries) {
   await db.query('BEGIN');
   try {
     for (const e of entries) {
-      const soGio = Number(e.so_gio || 0);
-      const soGioOt = Number(e.so_gio_ot || 0);
-      const caLam = e.ca_lam || null;
+      const n = normalizeEntry(e);
       const ghiChu = e.ghi_chu || null;
 
       // Xoá entry nếu cả giờ và ca đều rỗng (cell trống = bỏ chấm)
-      if (soGio === 0 && soGioOt === 0 && !caLam) {
+      if (n.soGio === 0 && n.soGioOt === 0 && !n.caLam) {
         const del = await db.query(
           `DELETE FROM cham_cong WHERE phan_cong_id = $1 AND ngay = $2 RETURNING id`,
           [phanCongId, e.ngay],
@@ -116,21 +147,28 @@ async function upsertBatch(phanCongId, entries) {
       }
 
       const res = await db.query(
-        `INSERT INTO cham_cong (phan_cong_id, ngay, so_gio, so_gio_ot, ca_lam, ghi_chu)
-         VALUES ($1,$2,$3,$4,$5,$6)
+        `INSERT INTO cham_cong
+           (phan_cong_id, ngay, so_gio, so_gio_ot,
+            gio_hc_ngay, gio_tc_ngay, gio_hc_dem, gio_tc_dem, ca_lam, ghi_chu)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
          ON CONFLICT (phan_cong_id, ngay) DO UPDATE
            SET so_gio = EXCLUDED.so_gio,
                so_gio_ot = EXCLUDED.so_gio_ot,
+               gio_hc_ngay = EXCLUDED.gio_hc_ngay,
+               gio_tc_ngay = EXCLUDED.gio_tc_ngay,
+               gio_hc_dem = EXCLUDED.gio_hc_dem,
+               gio_tc_dem = EXCLUDED.gio_tc_dem,
                ca_lam = EXCLUDED.ca_lam,
                ghi_chu = EXCLUDED.ghi_chu,
                updated_at = NOW()
          RETURNING (xmax = 0) AS inserted`,
-        [phanCongId, e.ngay, soGio, soGioOt, caLam, ghiChu],
+        [phanCongId, e.ngay, n.soGio, n.soGioOt,
+         n.gioHcNgay, n.gioTcNgay, n.gioHcDem, n.gioTcDem, n.caLam, ghiChu],
       );
       if (res.rows[0]?.inserted) inserted += 1; else updated += 1;
 
-      if (caLam === 'nghi_phep' || caLam === 'nghi_viec') {
-        baoNghi.push({ ngay: e.ngay, ca_lam: caLam });
+      if (n.caLam === 'nghi_phep' || n.caLam === 'nghi_viec') {
+        baoNghi.push({ ngay: e.ngay, ca_lam: n.caLam });
       }
     }
     await db.query('COMMIT');
@@ -179,11 +217,15 @@ async function findThangByScope({ thang, nam, scope, cong_ty_id, nguoi_tuyen_id 
             cn.nguoi_tuyen_id,
             ct.ten_cong_ty,
             COALESCE(json_agg(json_build_object(
-              'ngay',      to_char(cc.ngay, 'YYYY-MM-DD'),
-              'so_gio',    cc.so_gio,
-              'so_gio_ot', cc.so_gio_ot,
-              'ca_lam',    cc.ca_lam,
-              'ghi_chu',   cc.ghi_chu
+              'ngay',        to_char(cc.ngay, 'YYYY-MM-DD'),
+              'so_gio',      cc.so_gio,
+              'so_gio_ot',   cc.so_gio_ot,
+              'gio_hc_ngay', cc.gio_hc_ngay,
+              'gio_tc_ngay', cc.gio_tc_ngay,
+              'gio_hc_dem',  cc.gio_hc_dem,
+              'gio_tc_dem',  cc.gio_tc_dem,
+              'ca_lam',      cc.ca_lam,
+              'ghi_chu',     cc.ghi_chu
             ) ORDER BY cc.ngay) FILTER (WHERE cc.id IS NOT NULL), '[]'::json) AS cham_cong,
             COALESCE(SUM(cc.so_gio + cc.so_gio_ot), 0) AS tong_gio,
             COALESCE(SUM(cc.so_gio), 0)                AS tong_gio_thuong,

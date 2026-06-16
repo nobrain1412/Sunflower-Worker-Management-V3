@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useCongTyList } from '../hooks/useCongNhan';
-import DoiMatKhauModal from './DoiMatKhauModal';
+import TaiKhoanModal from './TaiKhoanModal';
 
 // Nav items có thêm `roles` để lọc theo quyền
 const NAV = [
@@ -143,7 +143,7 @@ export default function Sidebar({ onClose }) {
   const { user, logout, isQuanLy, selectedCongTyId, chonCongTy } = useAuth();
   const navigate = useNavigate();
   const vaiTro = user?.vai_tro ?? 'vender';
-  const [openDoiMatKhau, setOpenDoiMatKhau] = useState(false);
+  const [openTaiKhoan, setOpenTaiKhoan] = useState(false);
 
   async function handleLogout() {
     await logout();
@@ -151,8 +151,8 @@ export default function Sidebar({ onClose }) {
     navigate('/login');
   }
 
-  function handleOpenDoiMatKhau() {
-    setOpenDoiMatKhau(true);
+  function handleOpenTaiKhoan() {
+    setOpenTaiKhoan(true);
     if (onClose) onClose(); // đóng sidebar mobile nếu đang mở
   }
 
@@ -210,9 +210,9 @@ export default function Sidebar({ onClose }) {
         <div style={s.divider} />
         <div style={s.userRow}>
           <button
-            onClick={handleOpenDoiMatKhau}
+            onClick={handleOpenTaiKhoan}
             style={s.userBtn}
-            title="Đổi mật khẩu"
+            title="Thông tin cá nhân"
           >
             <div style={s.avatar}>
               {user?.ho_ten?.[0]?.toUpperCase() ?? 'A'}
@@ -232,8 +232,8 @@ export default function Sidebar({ onClose }) {
         </div>
       </div>
 
-      {openDoiMatKhau && (
-        <DoiMatKhauModal onClose={() => setOpenDoiMatKhau(false)} />
+      {openTaiKhoan && (
+        <TaiKhoanModal onClose={() => setOpenTaiKhoan(false)} />
       )}
     </aside>
   );

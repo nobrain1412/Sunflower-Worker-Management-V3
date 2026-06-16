@@ -96,11 +96,17 @@ router.get('/cong-nhan/:congNhanId',
 );
 
 const entrySchema = z.object({
-  ngay:       z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Ngày không hợp lệ (định dạng YYYY-MM-DD)'),
-  so_gio:     z.number().min(0).max(24).optional(),
-  so_gio_ot:  z.number().min(0).max(24).optional(),
-  ca_lam:     z.string().max(20).nullable().optional(),
-  ghi_chu:    z.string().max(500).nullable().optional(),
+  ngay:        z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Ngày không hợp lệ (định dạng YYYY-MM-DD)'),
+  // 4 loại giờ — hành chính / tăng ca × ca ngày / ca đêm
+  gio_hc_ngay: z.number().min(0).max(24).optional(),
+  gio_tc_ngay: z.number().min(0).max(24).optional(),
+  gio_hc_dem:  z.number().min(0).max(24).optional(),
+  gio_tc_dem:  z.number().min(0).max(24).optional(),
+  // Giữ tương thích ngược với client cũ (so_gio = HC ngày, so_gio_ot = TC ngày)
+  so_gio:      z.number().min(0).max(24).optional(),
+  so_gio_ot:   z.number().min(0).max(24).optional(),
+  ca_lam:      z.string().max(20).nullable().optional(),
+  ghi_chu:     z.string().max(500).nullable().optional(),
 });
 
 // POST /api/cham-cong/batch
