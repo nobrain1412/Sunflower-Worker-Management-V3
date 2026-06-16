@@ -29,6 +29,14 @@ async function findAll({ page = 1, limit = 20, sort = 'ten_cong_ty', order = 'as
             ct.tien_cong_quan_ly_theo_gio,
             ct.mo_ta_cong_viec, ct.media_urls,
             ct.active, ct.created_at,
+            -- Số công nhân ĐANG làm tại công ty = số phan_cong còn mở (ngay_ket_thuc IS NULL).
+            -- Bám phan_cong cho nhất quán với bảng công, không đếm theo cong_nhan.cong_ty_id.
+            COALESCE((SELECT COUNT(DISTINCT pc.cong_nhan_id)
+                      FROM phan_cong pc
+                      JOIN cong_nhan cn ON cn.id = pc.cong_nhan_id
+                      WHERE pc.cong_ty_id = ct.id
+                        AND pc.ngay_ket_thuc IS NULL
+                        AND cn.deleted_at IS NULL), 0) AS so_luong_hien_tai,
             -- Danh sách quản lý của công ty (id, họ tên, đăng nhập, SĐT)
             COALESCE((SELECT json_agg(json_build_object(
                        'id', u.id, 'ho_ten', u.ho_ten,

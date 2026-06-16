@@ -187,9 +187,12 @@ async function findThangByScope({ thang, nam, scope, cong_ty_id, nguoi_tuyen_id 
   const params = [thang, nam];
   const conditions = ['cn.deleted_at IS NULL'];
 
+  // Lọc theo công ty PHẢI bám vào phan_cong (pc.cong_ty_id), KHÔNG bám cong_nhan.cong_ty_id.
+  // Bảng công là per-phan_cong (mỗi công ty 1 bảng riêng); nếu lọc theo cn.cong_ty_id thì
+  // sẽ kéo nhầm các phan_cong thuộc công ty khác của cùng công nhân → hiển thị sai công ty.
   if (scope?.type === 'cong_ty' && scope.ids?.length > 0) {
     params.push(scope.ids);
-    conditions.push(`cn.cong_ty_id = ANY($${params.length}::int[])`);
+    conditions.push(`pc.cong_ty_id = ANY($${params.length}::int[])`);
   } else if (scope?.type === 'nguoi_tuyen') {
     params.push(scope.userId);
     conditions.push(`cn.nguoi_tuyen_id = $${params.length}`);
@@ -197,7 +200,7 @@ async function findThangByScope({ thang, nam, scope, cong_ty_id, nguoi_tuyen_id 
 
   if (cong_ty_id) {
     params.push(cong_ty_id);
-    conditions.push(`cn.cong_ty_id = $${params.length}`);
+    conditions.push(`pc.cong_ty_id = $${params.length}`);
   }
   if (nguoi_tuyen_id) {
     params.push(nguoi_tuyen_id);
