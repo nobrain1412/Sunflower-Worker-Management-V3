@@ -82,6 +82,7 @@ export default function ImportExcel() {
       data:         r.data,
       vender_name:  r.vender_name ?? null,
       cong_ty_name: r.cong_ty_name ?? null,
+      action:       r.action ?? null, // hành động cho dòng trùng CCCD
     }));
   }
 
@@ -91,12 +92,21 @@ export default function ImportExcel() {
       if (!prev) return prev;
       const rows = prev.rows.map((r) => {
         if (r.rowNumber !== rowNumber) return r;
+        if (field === '__action') return { ...r, action: value };
         if (field === 'vender_name' || field === 'cong_ty_name') {
           return { ...r, [field]: value };
         }
         return { ...r, data: { ...r.data, [field]: value } };
       });
       return { ...prev, rows };
+    });
+  }
+
+  // Xoá hẳn 1 dòng khỏi danh sách import (không gửi lên nữa)
+  function removeRow(rowNumber) {
+    setPreview((prev) => {
+      if (!prev) return prev;
+      return { ...prev, rows: prev.rows.filter((r) => r.rowNumber !== rowNumber) };
     });
   }
 
@@ -117,7 +127,7 @@ export default function ImportExcel() {
   async function doCommit() {
     if (!preview) return;
     if (!window.confirm(
-      `Sắp insert ${preview.summary.ready} công nhân vào DB. ${preview.summary.skipRows} dòng sẽ skip (CCCD trùng), ${preview.summary.errorRows} dòng lỗi sẽ bị bỏ qua. Tiếp tục?`
+      `Sắp xử lý ${preview.summary.ready} dòng (thêm mới / cập nhật / đổi công ty / chờ duyệt). ${preview.summary.skipRows} dòng bỏ qua, ${preview.summary.errorRows} dòng lỗi sẽ bị bỏ qua. Tiếp tục?`
     )) return;
 
     setCommitting(true);
@@ -233,9 +243,13 @@ export default function ImportExcel() {
           <div style={s.tip}>
             ✏️ Bạn có thể <strong>sửa trực tiếp</strong> các ô trong bảng (đặc biệt là dòng bị lỗi),
             rồi bấm <strong>Kiểm tra lại</strong> để xác thực trước khi import.
+            <br />
+            ⚠️ Dòng <strong>trùng CCCD</strong> có ô chọn <strong>Hành động</strong>: bỏ qua, cập nhật người cũ,
+            đổi công ty (báo nghỉ cty cũ → gán cty mới), hoặc thêm mới chờ duyệt. Sau khi chọn nhớ bấm
+            <strong> Kiểm tra lại</strong>. Bấm <strong>✕</strong> ở cột # để xoá hẳn 1 dòng khỏi danh sách.
           </div>
 
-          <PreviewTable rows={preview.rows} onEdit={editRow} />
+          <PreviewTable rows={preview.rows} onEdit={editRow} onRemove={removeRow} />
 
           <div style={s.commitRow}>
             <button onClick={reset} style={s.btnGhost}>Huỷ, chọn file khác</button>
@@ -266,7 +280,10 @@ export default function ImportExcel() {
               <div style={s.successTitle}>Import thành công</div>
               <div style={s.successText}>
                 Đã thêm <b>{result.inserted}</b> công nhân.
-                {result.skipped > 0 && ` Skip ${result.skipped} dòng (CCCD trùng).`}
+                {result.updated > 0 && ` Cập nhật ${result.updated} hồ sơ.`}
+                {result.doiCongTy > 0 && ` Đổi công ty ${result.doiCongTy}.`}
+                {result.choDuyet > 0 && ` ${result.choDuyet} chờ duyệt (trùng CCCD).`}
+                {result.skipped > 0 && ` Bỏ qua ${result.skipped} dòng.`}
                 {result.errorRows > 0 && ` ${result.errorRows} dòng bị lỗi.`}
               </div>
             </div>
@@ -308,29 +325,38 @@ function dmyToIso(v) {
   return `${y}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
 }
 
-function EditCell({ value, onChange, mono, placeholder }) {
+function EditCell({ value, onChange, mono, placeholder, wide }) {
   return (
     <input
       value={value ?? ''}
       placeholder={placeholder ?? ''}
       onChange={(e) => onChange(e.target.value)}
-      style={{ ...s.cellInput, ...(mono ? s.cellInputMono : null) }}
+      style={{ ...s.cellInput, ...(mono ? s.cellInputMono : null), ...(wide ? s.cellInputWide : null) }}
     />
   );
 }
 
-function PreviewTable({ rows, onEdit }) {
+// Các hành động cho dòng TRÙNG CCCD
+const DUP_ACTION_OPTIONS = [
+  { value: 'skip',        label: 'Bỏ qua (không thêm)' },
+  { value: 'update',      label: 'Cập nhật người cũ (bổ sung ô trống)' },
+  { value: 'doi_cong_ty', label: 'Đổi công ty (nghỉ cty cũ → gán mới)' },
+  { value: 'them_moi',    label: 'Thêm mới — chờ duyệt' },
+];
+
+function PreviewTable({ rows, onEdit, onRemove }) {
   return (
     <div style={s.tableWrap}>
       <table style={s.table}>
         <thead>
           <tr>
             <th style={s.th}>#</th>
-            <th style={s.th}>Trạng thái</th>
+            <th style={s.th}>Trạng thái / Hành động</th>
             <th style={s.th}>Họ tên</th>
             <th style={s.th}>CCCD</th>
             <th style={s.th}>Ngày sinh</th>
             <th style={s.th}>SĐT</th>
+            <th style={s.th}>Địa chỉ (tỉnh ở cuối)</th>
             <th style={s.th}>Vender (tên/mã)</th>
             <th style={s.th}>Công ty</th>
             <th style={s.th}>Ngày vào</th>
@@ -348,17 +374,32 @@ function PreviewTable({ rows, onEdit }) {
 
             const venderNotFound = r.vender_name && !r.data.nguoi_tuyen_id;
             const congTyNotFound = r.cong_ty_name && !r.data.cong_ty_id;
+            const action = r.action || 'skip';
 
             return (
               <tr key={r.rowNumber} style={hasError ? s.rowError : willSkip ? s.rowSkip : null}>
-                <td style={s.td}>{r.rowNumber}</td>
+                <td style={s.td}>
+                  <div>{r.rowNumber}</div>
+                  <button onClick={() => onRemove(r.rowNumber)} style={s.removeBtn} title="Xoá dòng khỏi danh sách">✕</button>
+                </td>
                 <td style={s.td}>
                   <span style={{ ...s.pill, color: statusColor, borderColor: statusColor }}>
                     {statusLabel}
                   </span>
+                  {r.isDuplicate && (
+                    <select
+                      value={action}
+                      onChange={(e) => onEdit(r.rowNumber, '__action', e.target.value)}
+                      style={s.actionSelect}
+                    >
+                      {DUP_ACTION_OPTIONS.map((o) => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
+                    </select>
+                  )}
                 </td>
                 <td style={s.td}>
-                  <EditCell value={r.data.ho_ten} onChange={(v) => onEdit(r.rowNumber, 'ho_ten', v)} />
+                  <EditCell value={r.data.ho_ten} wide onChange={(v) => onEdit(r.rowNumber, 'ho_ten', v)} />
                 </td>
                 <td style={s.td}>
                   <EditCell value={r.data.cccd} mono onChange={(v) => onEdit(r.rowNumber, 'cccd', v)} placeholder="12 số" />
@@ -370,6 +411,11 @@ function PreviewTable({ rows, onEdit }) {
                 </td>
                 <td style={s.td}>
                   <EditCell value={r.data.so_dien_thoai} mono onChange={(v) => onEdit(r.rowNumber, 'so_dien_thoai', v)} />
+                </td>
+                <td style={s.td}>
+                  <EditCell value={r.data.que_quan} wide
+                    onChange={(v) => onEdit(r.rowNumber, 'que_quan', v)}
+                    placeholder="..., Tỉnh" />
                 </td>
                 <td style={s.td}>
                   <EditCell value={r.vender_name}
@@ -387,6 +433,11 @@ function PreviewTable({ rows, onEdit }) {
                     placeholder="dd/mm/yyyy" />
                 </td>
                 <td style={s.td}>
+                  {r.isDuplicate && r.existing && (
+                    <div style={{ fontSize: 11, color: 'var(--text2)', marginBottom: 4 }}>
+                      Hồ sơ hiện có: <b>{r.existing.ho_ten}</b> · Cty: {r.existing.cong_ty_ten ?? '—'}
+                    </div>
+                  )}
                   {[...r.errors, ...r.warnings].length === 0 ? '—' : [...r.errors, ...r.warnings].map((m, i) => (
                     <div key={i} style={{
                       fontSize: 11,
@@ -404,7 +455,7 @@ function PreviewTable({ rows, onEdit }) {
 }
 
 const s = {
-  root: { padding: 24, maxWidth: 1200, fontFamily: "'Be Vietnam Pro', sans-serif" },
+  root: { padding: 24, maxWidth: 1640, fontFamily: "'Be Vietnam Pro', sans-serif" },
   header: { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, marginBottom: 24 },
   title: { fontSize: 20, fontWeight: 700, color: 'var(--text1)', marginBottom: 6 },
   subtitle: { fontSize: 13, color: 'var(--text2)' },
@@ -518,6 +569,18 @@ const s = {
     fontFamily: "'Be Vietnam Pro', sans-serif", outline: 'none',
   },
   cellInputMono: { fontFamily: "'JetBrains Mono', monospace", fontSize: 11 },
+  cellInputWide: { minWidth: 170 },
+  removeBtn: {
+    marginTop: 4, background: 'transparent', border: '1px solid var(--border2)',
+    color: 'var(--red)', borderRadius: 6, padding: '0 6px', fontSize: 11,
+    cursor: 'pointer', lineHeight: '18px',
+  },
+  actionSelect: {
+    display: 'block', marginTop: 6, maxWidth: 210,
+    background: 'var(--bg3)', border: '1px solid var(--border2)',
+    borderRadius: 6, padding: '4px 6px', fontSize: 11, color: 'var(--text1)',
+    fontFamily: "'Be Vietnam Pro', sans-serif", outline: 'none', cursor: 'pointer',
+  },
   rowError: { background: 'rgba(255,95,114,0.04)' },
   rowSkip:  { background: 'rgba(255,179,68,0.04)' },
   pill: {

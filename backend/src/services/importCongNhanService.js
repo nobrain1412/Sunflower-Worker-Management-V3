@@ -464,14 +464,22 @@ async function resolveAndValidate(rows) {
     }
   }
 
-  // Check CCCD đã tồn tại
-  const existingCccds = new Set();
+  // Check CCCD đã tồn tại — lấy luôn hồ sơ hiện có để FE hiển thị + cho phép
+  // cập nhật / đổi công ty. CCCD nay không còn unique nên 1 cccd có thể ứng nhiều
+  // bản ghi → lấy bản ghi id nhỏ nhất (cũ nhất) làm "công nhân hiện có" đại diện.
+  const existingByCccd = new Map(); // cccd → { id, ho_ten, ...field hiện tại, cong_ty_ten }
   if (cccds.length > 0) {
     const { rows: eRows } = await db.query(
-      `SELECT cccd FROM cong_nhan WHERE cccd = ANY($1::text[]) AND deleted_at IS NULL`,
+      `SELECT cn.id, cn.ho_ten, cn.cccd, cn.ngay_sinh, cn.que_quan, cn.so_dien_thoai,
+              cn.ngay_vao_lam, cn.ma_van_tay, cn.ghi_chu, cn.nguoi_tuyen_id,
+              cn.cong_ty_id, cn.trang_thai, ct.ten_cong_ty AS cong_ty_ten
+         FROM cong_nhan cn
+         LEFT JOIN cong_ty ct ON ct.id = cn.cong_ty_id
+        WHERE cn.cccd = ANY($1::text[]) AND cn.deleted_at IS NULL
+        ORDER BY cn.id`,
       [cccds],
     );
-    for (const e of eRows) existingCccds.add(e.cccd);
+    for (const e of eRows) if (!existingByCccd.has(e.cccd)) existingByCccd.set(e.cccd, e);
   }
 
   // Cũng dedup trong chính file (CCCD trùng nhau trong file)
@@ -487,9 +495,11 @@ async function resolveAndValidate(rows) {
     if (d.cccd) {
       if (!CCCD_REGEX.test(d.cccd)) {
         r.errors.push(`CCCD "${d.cccd}" không hợp lệ (cần 12 số)`);
-      } else if (existingCccds.has(d.cccd)) {
-        r.warnings.push(`CCCD đã tồn tại trong DB → sẽ skip`);
-        r.skip = true;
+      } else if (existingByCccd.has(d.cccd)) {
+        // Trùng CCCD trong DB → gắn hồ sơ hiện có, quyết định xử lý ở cuối vòng
+        // (sau khi đã resolve công ty mới, vì hành động "đổi công ty" cần cong_ty_id).
+        r.existing = existingByCccd.get(d.cccd);
+        r._duplicate = true;
       } else if (cccdInFile.has(d.cccd)) {
         r.warnings.push(`CCCD trùng với dòng ${cccdInFile.get(d.cccd)} trong file → sẽ skip`);
         r.skip = true;
@@ -530,9 +540,42 @@ async function resolveAndValidate(rows) {
         r.errors.push(`Công ty "${r._congTyName}" không tìm thấy trong DB`);
       }
     }
+
+    // Dòng trùng CCCD: áp hành động người dùng chọn (mặc định = bỏ qua)
+    if (r._duplicate) applyDuplicateAction(r);
   }
 
   return rows;
+}
+
+// Quyết định cách xử lý 1 dòng trùng CCCD theo r.action:
+//   skip (mặc định) → bỏ qua, không import
+//   update          → cập nhật công nhân hiện có (chỉ bổ sung ô đang trống)
+//   doi_cong_ty     → báo nghỉ công ty cũ + gán công ty mới
+//   them_moi        → thêm mới riêng biệt dù trùng CCCD → trạng thái "Chờ duyệt"
+const DUP_ACTIONS = new Set(['skip', 'update', 'doi_cong_ty', 'them_moi']);
+function applyDuplicateAction(r) {
+  const ten = r.existing?.ho_ten || 'công nhân';
+  const ctyCu = r.existing?.cong_ty_ten ?? '—';
+  let action = r.action || 'skip';
+  if (!DUP_ACTIONS.has(action)) action = 'skip';
+
+  if (action === 'update') {
+    r.warnings.push(`CCCD trùng "${ten}" → CẬP NHẬT hồ sơ hiện có (chỉ bổ sung ô đang trống)`);
+  } else if (action === 'doi_cong_ty') {
+    if (!r.data.cong_ty_id) {
+      r.errors.push('Đổi công ty: cần nhập "Công ty" mới hợp lệ ở cột Công ty');
+    } else if (r.existing && r.existing.cong_ty_id === r.data.cong_ty_id) {
+      r.errors.push(`Công ty mới trùng công ty hiện tại (${ctyCu}) — không cần đổi`);
+    } else {
+      r.warnings.push(`CCCD trùng "${ten}" → báo nghỉ công ty cũ (${ctyCu}) và gán "${r._congTyName}"`);
+    }
+  } else if (action === 'them_moi') {
+    r.warnings.push(`CCCD trùng "${ten}" → THÊM MỚI riêng biệt, trạng thái "Chờ duyệt" (cần admin duyệt)`);
+  } else {
+    r.skip = true;
+    r.warnings.push(`CCCD đã tồn tại trong DB (${ten}) → mặc định BỎ QUA. Chọn hành động khác nếu muốn cập nhật / đổi công ty / thêm mới.`);
+  }
 }
 
 /**
@@ -558,55 +601,124 @@ function rebuildRowsFromPayload(payloadRows = []) {
       data,
       _venderName: r.vender_name || null,
       _congTyName: r.cong_ty_name || null,
+      action: r.action || null, // hành động cho dòng trùng CCCD (skip/update/doi_cong_ty/them_moi)
       errors: [],
       warnings: [],
     };
   });
 }
 
+// ISO yyyy-mm-dd → ngày hôm trước (dùng cho mốc kết thúc công ty cũ khi đổi việc)
+function prevDayISO(iso) {
+  const m = String(iso ?? '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return iso;
+  const dt = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
+  dt.setUTCDate(dt.getUTCDate() - 1);
+  return dt.toISOString().slice(0, 10);
+}
+
+// Insert 1 công nhân mới với trạng thái cho trước. Trả id.
+async function insertCongNhan(d, trangThai) {
+  const ins = await db.query(
+    `INSERT INTO cong_nhan
+       (ho_ten, cccd, ngay_sinh, que_quan, so_dien_thoai,
+        ngay_vao_lam, ma_van_tay, ghi_chu,
+        nguoi_tuyen_id, cong_ty_id, trang_thai)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+     RETURNING id`,
+    [
+      d.ho_ten, d.cccd ?? null, d.ngay_sinh ?? null, d.que_quan ?? null,
+      d.so_dien_thoai ?? null, d.ngay_vao_lam ?? null, d.ma_van_tay ?? null,
+      d.ghi_chu ?? null, d.nguoi_tuyen_id ?? null, d.cong_ty_id ?? null, trangThai,
+    ],
+  );
+  return ins.rows[0].id;
+}
+
+// Cập nhật công nhân hiện có nhưng CHỈ bổ sung các ô đang trống trong DB
+// (COALESCE: field cũ có giá trị → giữ nguyên; đang NULL → lấy giá trị từ file).
+// Không đụng cong_ty_id ở đây — việc gán công ty đi qua hành động "đổi công ty".
+async function updateFillEmpty(id, d) {
+  await db.query(
+    `UPDATE cong_nhan SET
+        ngay_sinh      = COALESCE(ngay_sinh, $2),
+        que_quan       = COALESCE(que_quan, $3),
+        so_dien_thoai  = COALESCE(so_dien_thoai, $4),
+        ngay_vao_lam   = COALESCE(ngay_vao_lam, $5),
+        ma_van_tay     = COALESCE(ma_van_tay, $6),
+        ghi_chu        = COALESCE(ghi_chu, $7),
+        nguoi_tuyen_id = COALESCE(nguoi_tuyen_id, $8)
+      WHERE id = $1`,
+    [
+      id, d.ngay_sinh ?? null, d.que_quan ?? null, d.so_dien_thoai ?? null,
+      d.ngay_vao_lam ?? null, d.ma_van_tay ?? null, d.ghi_chu ?? null,
+      d.nguoi_tuyen_id ?? null,
+    ],
+  );
+}
+
 /**
- * Insert thực sự vào DB. Trả về { inserted, skipped, errors }.
+ * Ghi vào DB theo hành động từng dòng. Trả thống kê các loại xử lý.
+ *   - dòng mới thường        → INSERT trạng thái 'moi_vao' + phan_cong
+ *   - trùng + update         → bổ sung ô trống cho CN cũ
+ *   - trùng + doi_cong_ty    → đóng phan_cong cũ + tạo phan_cong mới + đổi công ty hiện tại
+ *   - trùng + them_moi       → INSERT trạng thái 'cho_duyet' (chờ admin duyệt)
  */
 async function commitImport(rows, createdBy) {
-  const toInsert = rows.filter((r) => r.errors.length === 0 && !r.skip);
-  let inserted = 0;
+  const toProcess = rows.filter((r) => r.errors.length === 0 && !r.skip);
+  let inserted = 0, updated = 0, doiCongTy = 0, choDuyet = 0;
   const failed = [];
+  const today = new Date().toISOString().slice(0, 10);
 
   await db.query('BEGIN');
   try {
-    for (const r of toInsert) {
+    for (const r of toProcess) {
       const d = r.data;
+      const action = r._duplicate ? (r.action || 'skip') : 'new';
       try {
-        const ins = await db.query(
-          `INSERT INTO cong_nhan
-             (ho_ten, cccd, ngay_sinh, que_quan, so_dien_thoai,
-              ngay_vao_lam, ma_van_tay, ghi_chu,
-              nguoi_tuyen_id, cong_ty_id, trang_thai)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'moi_vao')
-           RETURNING id`,
-          [
-            d.ho_ten,
-            d.cccd ?? null,
-            d.ngay_sinh ?? null,
-            d.que_quan ?? null,
-            d.so_dien_thoai ?? null,
-            d.ngay_vao_lam ?? null,
-            d.ma_van_tay ?? null,
-            d.ghi_chu ?? null,
-            d.nguoi_tuyen_id ?? null,
-            d.cong_ty_id ?? null,
-          ],
-        );
-        // Có công ty → tạo luôn phan_cong để công nhân hiện trong bảng công.
-        // (Bảng chấm công bám theo phan_cong, không bám cong_nhan.cong_ty_id.)
-        if (d.cong_ty_id) {
+        if (action === 'update') {
+          await updateFillEmpty(r.existing.id, d);
+          updated++;
+        } else if (action === 'doi_cong_ty') {
+          await updateFillEmpty(r.existing.id, d);
+          const start = d.ngay_vao_lam || today;       // bắt đầu công ty mới
+          const end = prevDayISO(start);                // công ty cũ kết thúc hôm trước
+          // Đóng mọi phan_cong đang mở của CN này
+          await db.query(
+            `UPDATE phan_cong SET ngay_ket_thuc = $1
+              WHERE cong_nhan_id = $2 AND ngay_ket_thuc IS NULL`,
+            [end, r.existing.id],
+          );
+          // Tạo phan_cong mới ở công ty mới
           await db.query(
             `INSERT INTO phan_cong (cong_nhan_id, cong_ty_id, ngay_bat_dau)
              VALUES ($1, $2, $3)`,
-            [ins.rows[0].id, d.cong_ty_id, d.ngay_vao_lam || new Date().toISOString().slice(0, 10)],
+            [r.existing.id, d.cong_ty_id, start],
           );
+          // Cập nhật công ty hiện tại (denormalized); nếu đang nghỉ việc → cho đi làm lại
+          await db.query(
+            `UPDATE cong_nhan
+                SET cong_ty_id = $1,
+                    ngay_nghi_viec = NULL,
+                    trang_thai = CASE WHEN trang_thai = 'nghi_viec' THEN 'dang_lam' ELSE trang_thai END
+              WHERE id = $2`,
+            [d.cong_ty_id, r.existing.id],
+          );
+          doiCongTy++;
+        } else {
+          // 'new' hoặc 'them_moi' (trùng CCCD → chờ duyệt)
+          const trangThai = action === 'them_moi' ? 'cho_duyet' : 'moi_vao';
+          const id = await insertCongNhan(d, trangThai);
+          // Có công ty → tạo luôn phan_cong để CN hiện trong bảng công.
+          if (d.cong_ty_id) {
+            await db.query(
+              `INSERT INTO phan_cong (cong_nhan_id, cong_ty_id, ngay_bat_dau)
+               VALUES ($1, $2, $3)`,
+              [id, d.cong_ty_id, d.ngay_vao_lam || today],
+            );
+          }
+          if (action === 'them_moi') choDuyet++; else inserted++;
         }
-        inserted++;
       } catch (err) {
         failed.push({ rowNumber: r.rowNumber, message: err.message });
       }
@@ -617,15 +729,17 @@ async function commitImport(rows, createdBy) {
     throw err;
   }
 
+  const tongXuLy = inserted + updated + doiCongTy + choDuyet;
   // Log activity (audit). Bọc try để không fail flow chính nếu schema chưa khớp.
-  if (createdBy && inserted > 0) {
+  if (createdBy && tongXuLy > 0) {
     try {
       await db.query(
         `INSERT INTO hoat_dong_log (loai, du_lieu, ghi_chu, created_by, muc_do)
          VALUES ('import_excel', $1::jsonb, $2, $3, 'quan_trong')`,
         [
-          JSON.stringify({ inserted, total: rows.length, skipped: rows.filter((r) => r.skip).length }),
-          `Import ${inserted}/${rows.length} công nhân từ Excel`,
+          JSON.stringify({ inserted, updated, doiCongTy, choDuyet, total: rows.length,
+            skipped: rows.filter((r) => r.skip).length }),
+          `Import Excel: thêm ${inserted}, cập nhật ${updated}, đổi công ty ${doiCongTy}, chờ duyệt ${choDuyet}`,
           createdBy,
         ],
       );
@@ -634,6 +748,9 @@ async function commitImport(rows, createdBy) {
 
   return {
     inserted,
+    updated,
+    doiCongTy,
+    choDuyet,
     skipped: rows.filter((r) => r.skip).length,
     errorRows: rows.filter((r) => r.errors.length > 0).length,
     failed,

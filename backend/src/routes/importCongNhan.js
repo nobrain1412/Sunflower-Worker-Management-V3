@@ -46,6 +46,16 @@ function toPreviewPayload(rows) {
     errors:       r.errors,
     warnings:     r.warnings,
     skip:         !!r.skip,
+    // Trùng CCCD: FE hiện hồ sơ CN hiện có + cho chọn hành động xử lý
+    isDuplicate:  !!r._duplicate,
+    action:       r.action ?? null,
+    existing:     r.existing ? {
+      id:           r.existing.id,
+      ho_ten:       r.existing.ho_ten,
+      cong_ty_id:   r.existing.cong_ty_id ?? null,
+      cong_ty_ten:  r.existing.cong_ty_ten ?? null,
+      trang_thai:   r.existing.trang_thai ?? null,
+    } : null,
   }));
 }
 
@@ -55,6 +65,7 @@ function toSummary(rows) {
     ready:     rows.filter((r) => r.errors.length === 0 && !r.skip).length,
     errorRows: rows.filter((r) => r.errors.length > 0).length,
     skipRows:  rows.filter((r) => r.skip).length,
+    dupRows:   rows.filter((r) => r._duplicate).length,
   };
 }
 
@@ -65,6 +76,8 @@ const editedRowsSchema = z.object({
     data:         z.record(z.any()).default({}),
     vender_name:  z.string().nullable().optional(),
     cong_ty_name: z.string().nullable().optional(),
+    // Hành động cho dòng trùng CCCD: skip | update | doi_cong_ty | them_moi
+    action:       z.enum(['skip', 'update', 'doi_cong_ty', 'them_moi']).nullable().optional(),
   })).min(1, 'Không có dòng nào để xử lý'),
 });
 

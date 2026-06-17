@@ -60,7 +60,7 @@ const taoMoiSchema = z.object({
   so_dien_thoai:    nullableRegex(sdtRegex, 'Số điện thoại không hợp lệ', 20),
   ngay_cap_cccd:    nullableDate('Ngày cấp CCCD không hợp lệ (YYYY-MM-DD)'),
   noi_cap_cccd:     nullableStr(200),
-  trang_thai:       z.enum(['dang_lam', 'nghi_phep', 'moi_vao', 'nghi_viec', 'doi_viec']).default('moi_vao'),
+  trang_thai:       z.enum(['dang_lam', 'nghi_phep', 'moi_vao', 'nghi_viec', 'doi_viec', 'cho_duyet']).default('moi_vao'),
   ngay_vao_lam:     nullableDate('Ngày vào làm không hợp lệ (YYYY-MM-DD)'),
   ngay_nghi_viec:   nullableDate('Ngày nghỉ không hợp lệ (YYYY-MM-DD)'),
   ghi_chu:          nullableStr(1000),
