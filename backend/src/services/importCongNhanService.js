@@ -69,6 +69,7 @@ const CCCD_REGEX = /^\d{12}$/;
 const SDT_REGEX  = /^(0[3578]\d{8}|0[6789]\d{8})$/;
 
 function normalizeHeader(raw) {
+  raw = extractText(raw); // header cũng có thể là rich text / object ExcelJS
   if (raw == null) return '';
   return String(raw)
     .toLowerCase()
@@ -104,10 +105,26 @@ function toTitleCaseVN(raw) {
     .replace(/(^|[\s\-/().,])(\p{L})/gu, (_m, sep, ch) => sep + ch.toUpperCase());
 }
 
-function cleanCell(value) {
+// Trích text thuần từ giá trị ô ExcelJS. Ô có thể là object ở nhiều dạng:
+//   - rich text:  { richText: [{ text }, ...] }   ← hay gặp khi copy-paste từ Word
+//   - hyperlink:  { text, hyperlink }
+//   - công thức:  { formula, result }  (result lại có thể là rich text → đệ quy)
+//   - lỗi:        { error: '#N/A' }
+// Các object này nếu để String() sẽ ra "[object Object]" → phải bóc text trước.
+function extractText(value) {
   if (value == null) return null;
-  if (typeof value === 'object' && 'text' in value) value = value.text;     // rich text
-  if (typeof value === 'object' && 'result' in value) value = value.result; // formula
+  if (value instanceof Date) return value;
+  if (typeof value !== 'object') return value;
+  if (Array.isArray(value.richText)) return value.richText.map((p) => p?.text ?? '').join('');
+  if ('result' in value) return extractText(value.result); // công thức → đọc kết quả
+  if ('text' in value)   return extractText(value.text);   // hyperlink (text có thể lại là rich text)
+  if ('error' in value)  return null;                      // ô lỗi #N/A, #REF!...
+  return null; // object lạ → coi như rỗng thay vì "[object Object]"
+}
+
+function cleanCell(value) {
+  value = extractText(value);
+  if (value == null) return null;
   if (value instanceof Date) return value;
   const s = String(value).trim();
   if (!s || s === '#N/A' || s === '#REF!' || s === '#VALUE!') return null;
