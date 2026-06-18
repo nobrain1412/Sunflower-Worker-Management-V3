@@ -86,6 +86,14 @@ export function useGiuongList(phongId) {
   });
 }
 
+export function useCapNhatGiuong(phongId) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ giuongId, ...data }) => api.put(`/ktx/giuong/${giuongId}`, data),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: ['ktx', 'phong', phongId, 'giuong'] }),
+  });
+}
+
 // ─── THUE_PHONG ────────────────────────────────────────────
 export function useXepGiuong(phongId) {
   const qc = useQueryClient();

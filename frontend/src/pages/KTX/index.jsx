@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useKtxList, useTaoKtx, useCapNhatKtx, useXoaKtx, usePhongList, useTaoPhong, useCapNhatPhong, useXoaPhong, useGiuongList, useXepGiuong, useTraPhong, useHoaDonList, useTaoHoaDon, useHoaDonThangTruoc, useUngVienXepPhong } from '../../hooks/useKtx';
+import { useKtxList, useTaoKtx, useCapNhatKtx, useXoaKtx, usePhongList, useTaoPhong, useCapNhatPhong, useXoaPhong, useGiuongList, useCapNhatGiuong, useXepGiuong, useTraPhong, useHoaDonList, useTaoHoaDon, useHoaDonThangTruoc, useUngVienXepPhong } from '../../hooks/useKtx';
 import { usePhongTroList, useTaoPhongTro, useCapNhatPhongTro, useXoaPhongTro, usePhongTroThue, useTraPhongTro } from '../../hooks/usePhongTro';
 import { useAuth } from '../../context/AuthContext';
 import { isEmbeddableMapUrl, normalizeMapUrl } from '../../constants/mapUrl';
@@ -55,6 +55,41 @@ function AddKtxModal({ onClose }) {
   );
 }
 
+// ─── Modal sửa thông tin KTX ──────────────────────────────
+function EditKtxModal({ ktx, onClose }) {
+  const capNhat = useCapNhatKtx(ktx.id);
+  const [form, setForm] = useState({ ten: ktx.ten ?? '', dia_chi: ktx.dia_chi ?? '', ghi_chu: ktx.ghi_chu ?? '' });
+  const [err, setErr] = useState('');
+
+  async function handle() {
+    setErr('');
+    if (!form.ten.trim()) { setErr('Vui lòng nhập tên khu'); return; }
+    try {
+      await capNhat.mutateAsync({ ten: form.ten.trim(), dia_chi: form.dia_chi || undefined, ghi_chu: form.ghi_chu || undefined });
+      onClose();
+    } catch (e) { setErr(e?.response?.data?.error?.message ?? 'Lỗi'); }
+  }
+
+  return (
+    <div style={M.overlay} onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div style={M.modal}>
+        <div style={M.title}>Sửa thông tin khu KTX</div>
+        {[['ten','Tên khu *'],['dia_chi','Địa chỉ'],['ghi_chu','Ghi chú']].map(([k, lb]) => (
+          <div key={k} style={{ marginBottom: 10 }}>
+            <label className="form-label">{lb}</label>
+            <input className="form-input" value={form[k]} onChange={(e) => setForm((f) => ({ ...f, [k]: e.target.value }))} />
+          </div>
+        ))}
+        {err && <div style={M.err}>{err}</div>}
+        <div style={M.actions}>
+          <button className="btn-ghost" onClick={onClose}>Hủy</button>
+          <button className="btn-primary" onClick={handle} disabled={capNhat.isPending}>{capNhat.isPending ? 'Đang lưu...' : 'Lưu thay đổi'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Modal thêm phòng ─────────────────────────────────────
 function AddPhongModal({ ktxId, onClose }) {
   const tao = useTaoPhong(ktxId);
@@ -96,6 +131,103 @@ function AddPhongModal({ ktxId, onClose }) {
         <div style={M.actions}>
           <button className="btn-ghost" onClick={onClose}>Hủy</button>
           <button className="btn-primary" onClick={handle} disabled={tao.isPending}>{tao.isPending ? 'Đang lưu...' : 'Thêm phòng'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Modal sửa phòng ──────────────────────────────────────
+function EditPhongModal({ phong, ktxId, onClose }) {
+  const capNhat = useCapNhatPhong(ktxId);
+  const [form, setForm] = useState({
+    ten_phong: phong.ten_phong ?? '',
+    tang: String(phong.tang ?? 1),
+    suc_chua: String(phong.suc_chua ?? 6),
+    tien_phong: String(phong.tien_phong ?? 0),
+    ghi_chu: phong.ghi_chu ?? '',
+  });
+  const [err, setErr] = useState('');
+
+  async function handle() {
+    setErr('');
+    if (!form.ten_phong.trim()) { setErr('Vui lòng nhập tên phòng'); return; }
+    try {
+      await capNhat.mutateAsync({
+        phongId: phong.id,
+        ten_phong: form.ten_phong.trim(),
+        tang: parseInt(form.tang, 10),
+        suc_chua: parseInt(form.suc_chua, 10),
+        tien_phong: parseFloat(form.tien_phong),
+        ghi_chu: form.ghi_chu || undefined,
+      });
+      onClose();
+    } catch (e) { setErr(e?.response?.data?.error?.message ?? 'Lỗi'); }
+  }
+
+  return (
+    <div style={M.overlay} onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div style={M.modal}>
+        <div style={M.title}>Sửa phòng — {phong.ten_phong}</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+          {[['ten_phong','Tên phòng *','text'],['tang','Tầng','number'],['suc_chua','Sức chứa (giường)','number'],['tien_phong','Tiền phòng (VNĐ/tháng)','number']].map(([k, lb, type]) => (
+            <div key={k} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <label className="form-label">{lb}</label>
+              <input className="form-input" type={type} value={form[k]} onChange={(e) => setForm((f) => ({ ...f, [k]: e.target.value }))} />
+            </div>
+          ))}
+          <div style={{ gridColumn: 'span 2', display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <label className="form-label">Ghi chú</label>
+            <input className="form-input" value={form.ghi_chu} onChange={(e) => setForm((f) => ({ ...f, ghi_chu: e.target.value }))} />
+          </div>
+        </div>
+        <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 10 }}>
+          Tăng sức chứa sẽ tự thêm giường mới. Giảm sức chứa không xoá giường đã có người.
+        </div>
+        {err && <div style={M.err}>{err}</div>}
+        <div style={M.actions}>
+          <button className="btn-ghost" onClick={onClose}>Hủy</button>
+          <button className="btn-primary" onClick={handle} disabled={capNhat.isPending}>{capNhat.isPending ? 'Đang lưu...' : 'Lưu thay đổi'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Modal sửa giường ─────────────────────────────────────
+function EditGiuongModal({ giuong, phongId, onClose }) {
+  const capNhat = useCapNhatGiuong(phongId);
+  const [form, setForm] = useState({ so_thu_tu: String(giuong.so_thu_tu ?? 1), ghi_chu: giuong.ghi_chu ?? '' });
+  const [err, setErr] = useState('');
+
+  async function handle() {
+    setErr('');
+    try {
+      await capNhat.mutateAsync({
+        giuongId: giuong.id,
+        so_thu_tu: parseInt(form.so_thu_tu, 10),
+        ghi_chu: form.ghi_chu || null,
+      });
+      onClose();
+    } catch (e) { setErr(e?.response?.data?.error?.message ?? 'Lỗi'); }
+  }
+
+  return (
+    <div style={M.overlay} onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div style={{ ...M.modal, maxWidth: 360 }}>
+        <div style={M.title}>Sửa giường {giuong.so_thu_tu}</div>
+        <div style={{ marginBottom: 10 }}>
+          <label className="form-label">Số thứ tự giường</label>
+          <input className="form-input" type="number" value={form.so_thu_tu} onChange={(e) => setForm((f) => ({ ...f, so_thu_tu: e.target.value }))} />
+        </div>
+        <div style={{ marginBottom: 10 }}>
+          <label className="form-label">Ghi chú</label>
+          <input className="form-input" value={form.ghi_chu} onChange={(e) => setForm((f) => ({ ...f, ghi_chu: e.target.value }))} placeholder="VD: giường tầng trên..." />
+        </div>
+        {err && <div style={M.err}>{err}</div>}
+        <div style={M.actions}>
+          <button className="btn-ghost" onClick={onClose}>Hủy</button>
+          <button className="btn-primary" onClick={handle} disabled={capNhat.isPending}>{capNhat.isPending ? 'Đang lưu...' : 'Lưu'}</button>
         </div>
       </div>
     </div>
@@ -342,12 +474,14 @@ function HoaDonModal({ phong, onClose }) {
 }
 
 // ─── Chi tiết phòng ───────────────────────────────────────
-function PhongDetail({ phong, ktxId }) {
+function PhongDetail({ phong, ktxId, isAdmin }) {
   const navigate = useNavigate();
   const { data: giuongRes } = useGiuongList(phong.id);
   const giuongList = giuongRes?.data ?? [];
   const traPhong = useTraPhong(phong.id);
   const [xepModal, setXepModal] = useState(null);   // giuong object
+  const [editGiuong, setEditGiuong] = useState(null); // giuong object
+  const [editPhong, setEditPhong] = useState(false);
   const [hoaDonModal, setHoaDonModal] = useState(false);
 
   async function handleTra(tp) {
@@ -364,7 +498,10 @@ function PhongDetail({ phong, ktxId }) {
             {phong.so_dang_o ?? 0}/{phong.suc_chua} giường · Tiền phòng: {fmt(phong.tien_phong)}/tháng
           </div>
         </div>
-        <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => setHoaDonModal(true)}>💡 Hóa đơn</button>
+        <div style={{ display: 'flex', gap: 6 }}>
+          {isAdmin && <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => setEditPhong(true)}>✏️ Sửa phòng</button>}
+          <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => setHoaDonModal(true)}>💡 Hóa đơn</button>
+        </div>
       </div>
       <div style={s.bedsGrid}>
         {giuongList.map((g) => (
@@ -373,7 +510,14 @@ function PhongDetail({ phong, ktxId }) {
             background: g.cong_nhan_id ? 'rgba(79,124,255,0.1)' : 'var(--bg3)',
             border: `1px solid ${g.cong_nhan_id ? 'rgba(79,124,255,0.3)' : 'var(--border)'}`,
           }}>
-            <div style={{ fontSize: 10, fontWeight: 700, color: g.cong_nhan_id ? 'var(--accent)' : 'var(--text3)', marginBottom: 4 }}>Giường {g.so_thu_tu}</div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: g.cong_nhan_id ? 'var(--accent)' : 'var(--text3)', marginBottom: 4 }}>Giường {g.so_thu_tu}</div>
+              {isAdmin && (
+                <button title="Sửa giường" onClick={() => setEditGiuong(g)}
+                  style={{ background: 'transparent', border: 'none', color: 'var(--text3)', cursor: 'pointer', fontSize: 11, padding: 0, lineHeight: 1 }}>✏️</button>
+              )}
+            </div>
+            {g.ghi_chu && <div style={{ fontSize: 10, color: 'var(--text3)', fontStyle: 'italic', marginBottom: 2 }}>{g.ghi_chu}</div>}
             {g.cong_nhan_id ? (
               <>
                 <button
@@ -395,6 +539,8 @@ function PhongDetail({ phong, ktxId }) {
         ))}
       </div>
       {xepModal && <XepGiuongModal giuong={xepModal} phongId={phong.id} onClose={() => setXepModal(null)} />}
+      {editGiuong && <EditGiuongModal giuong={editGiuong} phongId={phong.id} onClose={() => setEditGiuong(null)} />}
+      {editPhong && <EditPhongModal phong={phong} ktxId={ktxId} onClose={() => setEditPhong(false)} />}
       {hoaDonModal && <HoaDonModal phong={phong} onClose={() => setHoaDonModal(false)} />}
     </div>
   );
@@ -417,6 +563,7 @@ export default function KTX({ forcePhongTro = false }) {
   const [selectedPhongId, setSelectedPhongId] = useState(null);
   const [addKtxModal, setAddKtxModal] = useState(false);
   const [addPhongModal, setAddPhongModal] = useState(false);
+  const [editKtxInfo, setEditKtxInfo] = useState(false);
   const [editingKtxMedia, setEditingKtxMedia] = useState(false);
   const [ktxMediaUrls, setKtxMediaUrls] = useState([]);
 
@@ -517,9 +664,12 @@ export default function KTX({ forcePhongTro = false }) {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
               <div style={s.cardTitle}>Chi tiết khu KTX</div>
               {isAdmin && (
-                <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => setEditingKtxMedia((v) => !v)}>
-                  {editingKtxMedia ? 'Đóng sửa ảnh' : 'Sửa ảnh KTX'}
-                </button>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => setEditKtxInfo(true)}>✏️ Sửa thông tin</button>
+                  <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => setEditingKtxMedia((v) => !v)}>
+                    {editingKtxMedia ? 'Đóng sửa ảnh' : 'Sửa ảnh KTX'}
+                  </button>
+                </div>
               )}
             </div>
             <div style={{ fontSize: 12, color: 'var(--text2)', marginBottom: 8 }}>
@@ -623,7 +773,7 @@ export default function KTX({ forcePhongTro = false }) {
 
           {/* Chi tiết phòng */}
           {selectedPhong ? (
-            <PhongDetail phong={selectedPhong} ktxId={activeKtxId} />
+            <PhongDetail phong={selectedPhong} ktxId={activeKtxId} isAdmin={isAdmin} />
           ) : (
             <div style={{ ...s.card, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 8, minHeight: 200 }}>
               <div style={{ fontSize: 32 }}>🛏️</div>
@@ -636,6 +786,9 @@ export default function KTX({ forcePhongTro = false }) {
       </div>)}
 
       {addKtxModal  && <AddKtxModal  onClose={() => setAddKtxModal(false)} />}
+      {editKtxInfo && selectedKtx && (
+        <EditKtxModal ktx={selectedKtx} onClose={() => setEditKtxInfo(false)} />
+      )}
       {addPhongModal && activeKtxId && (
         <AddPhongModal ktxId={activeKtxId} onClose={() => setAddPhongModal(false)} />
       )}

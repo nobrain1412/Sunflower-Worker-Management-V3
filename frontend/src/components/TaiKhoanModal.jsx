@@ -112,8 +112,18 @@ export default function TaiKhoanModal({ onClose }) {
             ))
           )}
 
-          {/* Công ty đang quản lý — chỉ quan_ly */}
-          {me.vai_tro === 'quan_ly' && (
+          {/* Mã vender — chỉ xem, admin kiểm soát */}
+          {(me.vai_tro === 'vender' || me.ma_vender) && (
+            <div style={s.field}>
+              <div style={s.label}>Mã vender</div>
+              <div style={{ ...s.value, fontFamily: "'JetBrains Mono', monospace", color: me.ma_vender ? 'var(--text1)' : 'var(--text3)' }}>
+                {me.ma_vender || 'Chưa có mã'}
+              </div>
+            </div>
+          )}
+
+          {/* Công ty đang quản lý — quan_ly & vender, chỉ xem */}
+          {(me.vai_tro === 'quan_ly' || me.vai_tro === 'vender') && (
             <div style={s.field}>
               <div style={s.label}>Công ty đang quản lý</div>
               {congTyQuanLy.length === 0 ? (

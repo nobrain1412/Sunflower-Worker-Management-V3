@@ -16,8 +16,14 @@ function fmtDate(s) {
 
 export default function DuyetQueue() {
   const { isAdmin } = useAuth();
-  const { data, isLoading } = useCongNhanList({ trang_thai: 'doi_viec', limit: 100 });
-  const rows = data?.data ?? [];
+  // 2 nhóm cần duyệt: 'doi_viec' (phỏng vấn đạt) và 'cho_duyet' (import trùng CCCD thêm mới).
+  const doiViecQ  = useCongNhanList({ trang_thai: 'doi_viec',  limit: 100 });
+  const choDuyetQ = useCongNhanList({ trang_thai: 'cho_duyet', limit: 100 });
+  const isLoading = doiViecQ.isLoading || choDuyetQ.isLoading;
+  const rows = [
+    ...(choDuyetQ.data?.data ?? []),
+    ...(doiViecQ.data?.data ?? []),
+  ];
 
   return (
     <div style={s.root}>
@@ -26,8 +32,8 @@ export default function DuyetQueue() {
           <h1 style={s.title}>Duyệt công nhân</h1>
           <p style={s.subtitle}>
             {isAdmin
-              ? 'Công nhân đang đợi việc (chờ phỏng vấn) trong toàn hệ thống'
-              : 'Công nhân đang đợi việc thuộc công ty bạn quản lý'}
+              ? 'Công nhân đợi việc (chờ phỏng vấn) và trùng CCCD thêm mới — chờ duyệt'
+              : 'Công nhân đợi việc / trùng CCCD thuộc công ty bạn quản lý'}
           </p>
         </div>
         <span style={s.countBadge}>{rows.length} đang chờ</span>
@@ -65,7 +71,10 @@ function DuyetCard({ cn }) {
     <div style={s.card}>
       <div style={s.avatar}>{cn.ho_ten?.[0]?.toUpperCase() ?? '?'}</div>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={s.name}>{cn.ho_ten}</div>
+        <div style={s.name}>
+          {cn.ho_ten}
+          {cn.trang_thai === 'cho_duyet' && <span style={s.dupBadge}>Trùng CCCD</span>}
+        </div>
         <div style={s.meta}>
           <span>🏭 {cn.ten_cong_ty ?? 'Chưa chọn công ty'}</span>
           <span>· 👤 {cn.nguoi_tuyen_ho_ten ?? '—'}</span>
@@ -108,7 +117,11 @@ const s = {
     display: 'flex', alignItems: 'center', justifyContent: 'center',
     fontSize: 16, fontWeight: 700, color: '#fff',
   },
-  name: { fontSize: 14, fontWeight: 700, color: 'var(--text1)', marginBottom: 4 },
+  name: { fontSize: 14, fontWeight: 700, color: 'var(--text1)', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 },
+  dupBadge: {
+    fontSize: 10, fontWeight: 700, color: 'var(--amber)',
+    background: 'rgba(255,179,68,0.14)', borderRadius: 6, padding: '2px 7px',
+  },
   meta: { fontSize: 11, color: 'var(--text3)', display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 2 },
   btnApprove: {
     flexShrink: 0,

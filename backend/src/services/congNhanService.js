@@ -219,18 +219,20 @@ async function capNhat(id, data, actorUserId = null, scope = null) {
   return updated;
 }
 
-// Quản lý công ty duyệt 1 CN đang "đợi việc" (phỏng vấn đạt) → chính thức vào làm.
-// - Phải đang ở trạng thái 'doi_viec'
+// Quản lý công ty duyệt 1 CN đang chờ → chính thức vào làm.
+// - Phải đang ở trạng thái 'doi_viec' (phỏng vấn đạt) HOẶC 'cho_duyet'
+//   (import trùng CCCD thêm mới riêng biệt → cần admin duyệt).
 // - quan_ly chỉ duyệt được CN thuộc công ty mình quản lý (admin duyệt bất kỳ)
 // - Duyệt xong: trang_thai = 'moi_vao', ngay_vao_lam = ngày duyệt (nếu chưa có)
+const DUYET_STATES = ['doi_viec', 'cho_duyet'];
 async function duyet(id, user) {
   const before = await congNhanModel.findById(id);
   if (!before) {
     const err = new Error('Không tìm thấy công nhân');
     err.statusCode = 404; err.code = 'NOT_FOUND'; throw err;
   }
-  if (before.trang_thai !== 'doi_viec') {
-    const err = new Error('Công nhân không ở trạng thái đợi việc');
+  if (!DUYET_STATES.includes(before.trang_thai)) {
+    const err = new Error('Công nhân không ở trạng thái chờ duyệt');
     err.statusCode = 400; err.code = 'INVALID_STATE'; throw err;
   }
   if (user?.vai_tro === 'quan_ly') {
@@ -273,7 +275,7 @@ async function duyet(id, user) {
       cong_nhan_id: id,
       nguoi_tuyen_id: updated.nguoi_tuyen_id,
       du_lieu: { cong_ty_id: before.cong_ty_id },
-      ghi_chu: `Duyệt vào làm: ${updated.ho_ten} (đợi việc → mới vào)`,
+      ghi_chu: `Duyệt vào làm: ${updated.ho_ten} (${before.trang_thai} → mới vào)`,
       created_by: user?.id ?? null,
     });
   } catch (logErr) {

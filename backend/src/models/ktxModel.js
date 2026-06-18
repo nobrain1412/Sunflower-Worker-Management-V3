@@ -74,6 +74,41 @@ async function findPhongById(id) {
 }
 
 async function createPhong(data) {
+  // Bảng phong có UNIQUE(ktx_id, ten_phong) trên toàn bảng (kể cả phòng đã xoá mềm).
+  // Nếu đã tồn tại phòng cùng tên:
+  //   - đang active  → báo lỗi trùng tên
+  //   - đã xoá mềm   → BỎ soft delete (active = TRUE) + cập nhật lại thông tin
+  const existed = await db.query(
+    `SELECT * FROM phong WHERE ktx_id = $1 AND ten_phong = $2`,
+    [data.ktx_id, data.ten_phong],
+  );
+  if (existed.rows[0]) {
+    const cu = existed.rows[0];
+    if (cu.active) {
+      const err = new Error(`Phòng "${data.ten_phong}" đã tồn tại trong khu KTX này`);
+      err.statusCode = 400; err.code = 'PHONG_DUPLICATE';
+      throw err;
+    }
+    // Khôi phục phòng đã xoá mềm với thông tin mới
+    const sucChua = data.suc_chua ?? cu.suc_chua;
+    const reactivated = await db.query(
+      `UPDATE phong
+          SET active = TRUE, tang = $2, suc_chua = $3, tien_phong = $4, ghi_chu = $5
+        WHERE id = $1 RETURNING *`,
+      [cu.id, data.tang ?? cu.tang, sucChua, data.tien_phong ?? 0, data.ghi_chu ?? null],
+    );
+    const phong = reactivated.rows[0];
+    // Đảm bảo đủ giường theo sức chứa (giữ giường cũ, chỉ thêm số còn thiếu)
+    const g = await db.query(`SELECT so_thu_tu FROM giuong WHERE phong_id = $1`, [phong.id]);
+    const have = new Set(g.rows.map((r) => r.so_thu_tu));
+    for (let i = 1; i <= sucChua; i++) {
+      if (!have.has(i)) {
+        await db.query(`INSERT INTO giuong (phong_id, so_thu_tu) VALUES ($1,$2)`, [phong.id, i]);
+      }
+    }
+    return phong;
+  }
+
   const result = await db.query(
     `INSERT INTO phong (ktx_id, ten_phong, tang, suc_chua, tien_phong, ghi_chu)
      VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
@@ -103,13 +138,87 @@ async function updatePhong(id, data) {
     `UPDATE phong SET ${fields.join(', ')} WHERE id = $${params.length} RETURNING *`,
     params,
   );
+  const phong = result.rows[0] || null;
+  // Nếu tăng sức chứa → tự thêm giường còn thiếu (giữ nguyên giường/người hiện có)
+  if (phong && 'suc_chua' in data) {
+    const g = await db.query(`SELECT so_thu_tu FROM giuong WHERE phong_id = $1`, [phong.id]);
+    const have = new Set(g.rows.map((r) => r.so_thu_tu));
+    for (let i = 1; i <= phong.suc_chua; i++) {
+      if (!have.has(i)) {
+        await db.query(`INSERT INTO giuong (phong_id, so_thu_tu) VALUES ($1,$2)`, [phong.id, i]);
+      }
+    }
+  }
+  return phong;
+}
+
+// Xoá mềm phòng. Nếu phòng đang có người ở: đóng bản ghi thuê + chuyển những
+// người đó về trạng thái "chưa có phòng" (không có chỗ ở).
+async function deletePhong(id) {
+  const today = new Date().toISOString().slice(0, 10);
+  await db.query('BEGIN');
+  try {
+    // Lấy danh sách người đang ở (thue_phong còn mở) thuộc các giường của phòng này
+    const occ = await db.query(
+      `SELECT tp.id AS thue_phong_id, tp.cong_nhan_id
+         FROM thue_phong tp
+         JOIN giuong g ON g.id = tp.giuong_id
+        WHERE g.phong_id = $1 AND tp.ngay_ra IS NULL`,
+      [id],
+    );
+
+    for (const row of occ.rows) {
+      // Đóng bản ghi thuê phòng
+      await db.query(
+        `UPDATE thue_phong SET ngay_ra = $1 WHERE id = $2 AND ngay_ra IS NULL`,
+        [today, row.thue_phong_id],
+      );
+      // Nếu không còn chỗ ở nào khác (KTX/phòng trọ) → về 'chua_co_phong'
+      const stillKtx = await db.query(
+        `SELECT 1 FROM thue_phong WHERE cong_nhan_id = $1 AND ngay_ra IS NULL LIMIT 1`,
+        [row.cong_nhan_id],
+      );
+      const inTro = await db.query(
+        `SELECT 1 FROM thue_phong_tro WHERE cong_nhan_id = $1 AND ngay_ra IS NULL LIMIT 1`,
+        [row.cong_nhan_id],
+      );
+      if (!stillKtx.rows.length && !inTro.rows.length) {
+        await db.query(
+          `UPDATE cong_nhan SET trang_thai_noi_o = 'chua_co_phong' WHERE id = $1`,
+          [row.cong_nhan_id],
+        );
+      }
+    }
+
+    const result = await db.query(
+      `UPDATE phong SET active = FALSE WHERE id = $1 RETURNING id`, [id],
+    );
+    await db.query('COMMIT');
+    return result.rows[0] || null;
+  } catch (err) {
+    await db.query('ROLLBACK');
+    throw err;
+  }
+}
+
+// ─── GIUONG: sửa thông tin giường (số thứ tự, ghi chú) ─────
+async function updateGiuong(id, data) {
+  const allowed = ['so_thu_tu', 'ghi_chu'];
+  const fields = [], params = [];
+  for (const f of allowed) {
+    if (f in data) { params.push(data[f]); fields.push(`${f} = $${params.length}`); }
+  }
+  if (!fields.length) return findGiuongById(id);
+  params.push(id);
+  const result = await db.query(
+    `UPDATE giuong SET ${fields.join(', ')} WHERE id = $${params.length} RETURNING *`,
+    params,
+  );
   return result.rows[0] || null;
 }
 
-async function deletePhong(id) {
-  const result = await db.query(
-    `UPDATE phong SET active = FALSE WHERE id = $1 RETURNING id`, [id],
-  );
+async function findGiuongById(id) {
+  const result = await db.query(`SELECT * FROM giuong WHERE id = $1`, [id]);
   return result.rows[0] || null;
 }
 
@@ -322,7 +431,7 @@ async function createHoaDon(data) {
 module.exports = {
   findAllKtx, findKtxById, createKtx, updateKtx,
   findPhongByKtx, findPhongById, createPhong, updatePhong, deletePhong,
-  findGiuongByPhong,
+  findGiuongByPhong, findGiuongById, updateGiuong,
   xepGiuong, traPhong, findThuephongByCongNhan, findUngVienXepPhong,
   findHoaDonByPhong, findHoaDonThang, findSoThangTruoc, createHoaDon,
 };

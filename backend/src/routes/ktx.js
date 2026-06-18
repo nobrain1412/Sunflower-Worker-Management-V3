@@ -110,6 +110,19 @@ router.get('/phong/:phongId/giuong', requireKtxAccess, asyncWrapper(async (req, 
   sendSuccess(res, data);
 }));
 
+// Sửa thông tin giường (số thứ tự, ghi chú)
+router.put('/giuong/:giuongId', requireKtxAccess,
+  validate(z.object({
+    so_thu_tu: z.number().int().min(1).max(50).optional(),
+    ghi_chu:   z.string().max(200).nullable().optional(),
+  })),
+  asyncWrapper(async (req, res) => {
+    const data = await ktxModel.updateGiuong(toPositiveInt(req.params.giuongId, 'ID giường'), req.validatedBody);
+    if (!data) { const e = new Error('Không tìm thấy giường'); e.statusCode = 404; throw e; }
+    sendSuccess(res, data, 'Cập nhật giường thành công');
+  }),
+);
+
 // ─── THUE_PHONG ────────────────────────────────────────────
 const xepSchema = z.object({
   cong_nhan_id: z.number().int().positive(),
