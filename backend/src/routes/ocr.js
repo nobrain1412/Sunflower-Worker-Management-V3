@@ -14,6 +14,13 @@ router.post('/scan',
   asyncWrapper(ctrl.postScan),
 );
 
+// Chỉ lưu ảnh CCCD (luồng quét QR) — không chạy OCR
+router.post('/upload-anh',
+  requireRole('admin', 'quan_ly', 'vender'),
+  uploadOcr.single('anh'),
+  asyncWrapper(ctrl.postUploadAnh),
+);
+
 router.post('/:id/approve',
   requireRole('admin', 'quan_ly'),
   asyncWrapper(ctrl.postApprove),

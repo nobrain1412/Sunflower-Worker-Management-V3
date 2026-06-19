@@ -48,6 +48,28 @@ async function postScan(req, res) {
   }, 'OCR thành công');
 }
 
+// Chỉ upload ảnh CCCD lên Cloudinary (KHÔNG chạy OCR) — dùng cho luồng quét QR.
+// Trả URL để frontend gắn vào anh_cccd_truoc khi tạo công nhân.
+async function postUploadAnh(req, res) {
+  const file = req.file;
+  if (!file) {
+    const e = new Error('Chưa upload file ảnh'); e.statusCode = 400; throw e;
+  }
+
+  const now    = new Date();
+  const folder = `workeros/cccd/${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+  let duongDanAnh;
+  try {
+    ({ secure_url: duongDanAnh } = await uploadBuffer(file.buffer, { folder }));
+  } catch (err) {
+    logger.error({ originalMessage: err.message, stack: err.stack }, 'Upload ảnh CCCD failed');
+    const e = new Error(`Upload ảnh lỗi: ${err.message}`); e.statusCode = 502; throw e;
+  }
+
+  sendSuccess(res, { duong_dan_anh: duongDanAnh }, 'Upload ảnh thành công');
+}
+
 async function postApprove(req, res) {
   const id = parseInt(req.params.id, 10);
   const { rows } = await db.query(
@@ -72,4 +94,4 @@ async function postReject(req, res) {
   sendSuccess(res, rows[0], 'Từ chối thành công');
 }
 
-module.exports = { postScan, postApprove, postReject };
+module.exports = { postScan, postUploadAnh, postApprove, postReject };

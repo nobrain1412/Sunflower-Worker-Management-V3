@@ -1,9 +1,11 @@
-import { useState, useRef, useMemo } from 'react';
+import { useState, useRef, useMemo, useEffect } from 'react';
+import QrScanner from 'qr-scanner';
 import api from '../../hooks/useApi';
 import { useAuth } from '../../context/AuthContext';
 import { useCongTyList, useVenders } from '../../hooks/useCongNhan';
+import { parseCccdQr } from '../../utils/parseCccdQr';
 
-// FPT.AI trả ngày DD/MM/YYYY, DB cần YYYY-MM-DD
+// dd/mm/yyyy → YYYY-MM-DD (DB cần ISO)
 function ddmmyyyyToIso(s) {
   if (!s) return null;
   const m = String(s).match(/^(\d{2})[\/\-.](\d{2})[\/\-.](\d{4})$/);
@@ -19,7 +21,6 @@ function isoToDdmmyyyy(s) {
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
-// CCCD parser đôi khi để space/ký tự lạ
 function cleanCccd(s) {
   if (!s) return null;
   const d = String(s).replace(/\D/g, '');
@@ -33,29 +34,39 @@ function formatDateInput(v) {
   return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
 }
 
+const EMPTY_FORM = {
+  ho_ten: '', cccd: '', ngay_sinh: '', gioi_tinh: '',
+  que_quan: '', dia_chi: '', ngay_cap: '', noi_cap: '',
+  ngay_vao_lam: isoToDdmmyyyy(todayIso()),
+  cong_ty_id: '', nguoi_tuyen_id: '', ma_van_tay: '',
+};
+
 export default function ScanCCCD() {
-  // stage: upload | processing | review | creating | done
-  const [stage, setStage]     = useState('upload');
-  const [front, setFront]     = useState(null);
-  const [back, setBack]       = useState(null);
-  const [form, setForm]       = useState({
-    ho_ten: '', cccd: '', ngay_sinh: '', gioi_tinh: '',
-    que_quan: '', dia_chi: '', ngay_cap: '', noi_cap: '',
-    ngay_vao_lam: isoToDdmmyyyy(todayIso()),
-    cong_ty_id: '', nguoi_tuyen_id: '', ma_van_tay: '',
-  });
-  const [errors, setErrors]   = useState({});
+  // mode: camera | upload   ·   stage: scan | processing | review | creating | done
+  const [mode, setMode]   = useState('camera');
+  const [stage, setStage] = useState('scan');
+  const [form, setForm]   = useState(EMPTY_FORM);
+  const [errors, setErrors]       = useState({});
   const [submitErr, setSubmitErr] = useState(null);
+  const [scanErr, setScanErr]     = useState(null);
   const [createdName, setCreatedName] = useState('');
-  const frontRef = useRef();
-  const backRef  = useRef();
+
+  // Ảnh upload — chỉ lưu khi dùng mode upload
+  const [preview, setPreview] = useState(null);
+  const [anhFile, setAnhFile] = useState(null);
+  const [anhUrl, setAnhUrl]   = useState(null);
+  const [uploadingAnh, setUploadingAnh] = useState(false);
+
+  const videoRef   = useRef(null);
+  const scannerRef = useRef(null);
+  const fileRef    = useRef(null);
+  const handledRef = useRef(false); // chặn xử lý 1 mã QR nhiều lần
 
   const { user, isAdmin, isQuanLy } = useAuth();
   const congTyArr = useCongTyList().data?.data ?? [];
   const venderArr = useVenders().data?.data ?? [];
   const canPickVender = isAdmin || isQuanLy;
 
-  // Quản lý chỉ thấy công ty mình quản lý; vender thấy tất cả nhưng default công ty rỗng
   const congTyOptions = useMemo(() => {
     if (isQuanLy) {
       const ids = user?.cong_ty_ids ?? [];
@@ -64,55 +75,98 @@ export default function ScanCCCD() {
     return congTyArr;
   }, [congTyArr, isQuanLy, user]);
 
-  // Default cong_ty_id cho quản lý = công ty đầu tiên họ quản lý
   function defaultCongTyId() {
     if (isQuanLy && congTyOptions.length === 1) return String(congTyOptions[0].id);
     return '';
   }
 
-  async function uploadOne(file) {
-    const fd = new FormData();
-    fd.append('anh', file);
-    fd.append('loai', 'cccd');
-    const res = await api.post('/ocr/scan', fd, { headers: { 'Content-Type': undefined } });
-    return {
-      preview: URL.createObjectURL(file),
-      anhUrl: res.data.duong_dan_anh,
-      ocrId:  res.data.ocr_id,
-      ketQua: res.data.ket_qua ?? {},
-    };
-  }
+  // ─── Camera lifecycle ──────────────────────────────────────────────────────
+  useEffect(() => {
+    if (mode !== 'camera' || stage !== 'scan' || !videoRef.current) return;
 
-  function applyOcr(f, b) {
-    const fk = f?.ketQua ?? {};
-    const bk = b?.ketQua ?? {};
+    handledRef.current = false;
+    const scanner = new QrScanner(
+      videoRef.current,
+      (result) => onDecoded(result?.data ?? result),
+      {
+        preferredCamera: 'environment',
+        highlightScanRegion: true,
+        highlightCodeOutline: true,
+        maxScansPerSecond: 5,
+        returnDetailedScanResult: true,
+      },
+    );
+    scannerRef.current = scanner;
+    scanner.start().catch((err) => {
+      setScanErr(`Không mở được camera: ${err?.message ?? err}. Hãy cấp quyền camera hoặc dùng tải ảnh.`);
+    });
+
+    return () => {
+      scanner.stop();
+      scanner.destroy();
+      scannerRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, stage]);
+
+  // ─── Đọc dữ liệu QR → đổ vào form ──────────────────────────────────────────
+  function onDecoded(rawData) {
+    if (handledRef.current) return;
+    const parsed = parseCccdQr(rawData);
+    if (!parsed) {
+      setScanErr('Mã QR không phải CCCD hợp lệ. Hãy quét đúng QR ở mặt trước CCCD gắn chip.');
+      return;
+    }
+    handledRef.current = true;
+    scannerRef.current?.stop();
+    setScanErr(null);
     setForm((cur) => ({
       ...cur,
-      ho_ten:    fk.ho_ten    || bk.ho_ten    || cur.ho_ten,
-      cccd:      fk.cccd      || bk.cccd      || cur.cccd,
-      ngay_sinh: fk.ngay_sinh || bk.ngay_sinh || cur.ngay_sinh,
-      gioi_tinh: fk.gioi_tinh || bk.gioi_tinh || cur.gioi_tinh,
-      que_quan:  fk.que_quan  || bk.que_quan  || cur.que_quan,
-      dia_chi:   fk.dia_chi   || bk.dia_chi   || cur.dia_chi,
-      ngay_cap:  bk.ngay_cap  || fk.ngay_cap  || cur.ngay_cap,
-      noi_cap:   bk.noi_cap   || fk.noi_cap   || cur.noi_cap,
+      ...parsed,
       cong_ty_id: cur.cong_ty_id || defaultCongTyId(),
     }));
+    setStage('review');
   }
 
-  async function handleFile(e, side) {
+  // ─── Upload ảnh → detect QR + lưu ảnh ───────────────────────────────────────
+  async function handleUpload(e) {
     const file = e.target.files?.[0];
+    e.target.value = ''; // cho phép chọn lại cùng 1 file
     if (!file) return;
-    setSubmitErr(null);
+    setScanErr(null);
     setStage('processing');
     try {
-      const r = await uploadOne(file);
-      if (side === 'truoc') { setFront(r); if (back)  applyOcr(r, back);  setStage(back ? 'review' : 'upload'); }
-      else                  { setBack(r);  if (front) applyOcr(front, r); setStage(front ? 'review' : 'upload'); }
+      const result = await QrScanner.scanImage(file, { returnDetailedScanResult: true });
+      const parsed = parseCccdQr(result?.data ?? result);
+      if (!parsed) {
+        setScanErr('Không tìm thấy QR CCCD hợp lệ trong ảnh.');
+        setStage('scan');
+        return;
+      }
+      setForm((cur) => ({ ...cur, ...parsed, cong_ty_id: cur.cong_ty_id || defaultCongTyId() }));
+      setPreview(URL.createObjectURL(file));
+      setAnhFile(file);
+      setAnhUrl(null);
+      setStage('review');
+      uploadAnhBackground(file); // lưu ảnh nền, không chặn UI
     } catch (err) {
-      setSubmitErr(err?.response?.data?.error?.message ?? err?.message ?? `Lỗi OCR mặt ${side === 'truoc' ? 'trước' : 'sau'}`);
-      setStage('upload');
+      setScanErr('Không đọc được QR trong ảnh. Ảnh cần rõ nét và thấy đủ mã QR ở góc CCCD.');
+      setStage('scan');
     }
+  }
+
+  // Upload ảnh lên Cloudinary, trả URL (best-effort)
+  async function uploadAnh(file) {
+    const fd = new FormData();
+    fd.append('anh', file);
+    const res = await api.post('/ocr/upload-anh', fd, { headers: { 'Content-Type': undefined } });
+    return res.data?.duong_dan_anh ?? null;
+  }
+  async function uploadAnhBackground(file) {
+    setUploadingAnh(true);
+    try { setAnhUrl(await uploadAnh(file)); }
+    catch { /* ảnh không bắt buộc — bỏ qua */ }
+    finally { setUploadingAnh(false); }
   }
 
   function setField(k, v) {
@@ -137,6 +191,12 @@ export default function ScanCCCD() {
     setErrors({});
     setStage('creating');
 
+    // Đảm bảo ảnh đã upload xong (nếu user duyệt trước khi upload hoàn tất)
+    let finalAnhUrl = anhUrl;
+    if (anhFile && !finalAnhUrl) {
+      try { finalAnhUrl = await uploadAnh(anhFile); } catch { /* bỏ qua */ }
+    }
+
     try {
       const payload = {
         ho_ten:           form.ho_ten.trim(),
@@ -149,90 +209,89 @@ export default function ScanCCCD() {
         noi_cap_cccd:     form.noi_cap  || null,
         ngay_vao_lam:     ddmmyyyyToIso(form.ngay_vao_lam),
         ma_van_tay:       form.ma_van_tay || null,
-        anh_cccd_truoc:   front?.anhUrl   || null,
-        anh_cccd_sau:     back?.anhUrl    || null,
+        anh_cccd_truoc:   finalAnhUrl || null,
       };
-      if (form.cong_ty_id)     payload.cong_ty_id     = parseInt(form.cong_ty_id, 10);
+      if (form.cong_ty_id) payload.cong_ty_id = parseInt(form.cong_ty_id, 10);
       if (canPickVender && form.nguoi_tuyen_id) {
         payload.nguoi_tuyen_id = parseInt(form.nguoi_tuyen_id, 10);
       }
 
-      const created = await api.post('/cong-nhan', payload);
+      await api.post('/cong-nhan', payload);
       setCreatedName(payload.ho_ten);
-
-      // Approve các OCR records (best-effort)
-      const approves = [];
-      if (front?.ocrId) approves.push(api.post(`/ocr/${front.ocrId}/approve`).catch(() => {}));
-      if (back?.ocrId)  approves.push(api.post(`/ocr/${back.ocrId}/approve`).catch(() => {}));
-      await Promise.all(approves);
-
       setStage('done');
     } catch (err) {
-      const det = err?.response?.data?.error?.details;
+      const det = err?.details ?? err?.response?.data?.error?.details;
       if (Array.isArray(det) && det.length) {
-        // Map field-level zod errors về form key
-        const map = {
-          dia_chi_hien_tai: 'dia_chi',
-          ngay_cap_cccd:    'ngay_cap',
-          noi_cap_cccd:     'noi_cap',
-        };
+        const map = { dia_chi_hien_tai: 'dia_chi', ngay_cap_cccd: 'ngay_cap', noi_cap_cccd: 'noi_cap' };
         const fieldErrs = {};
-        for (const d of det) {
-          const key = map[d.field] ?? d.field;
-          fieldErrs[key] = d.message;
-        }
+        for (const d of det) fieldErrs[map[d.field] ?? d.field] = d.message;
         setErrors(fieldErrs);
         setSubmitErr(`Có ${det.length} lỗi: ${det.map((d) => `${map[d.field] ?? d.field} (${d.message})`).join('; ')}`);
       } else {
-        setSubmitErr(err?.response?.data?.error?.message ?? err?.message ?? 'Không tạo được công nhân');
+        setSubmitErr(err?.message ?? err?.response?.data?.error?.message ?? 'Không tạo được công nhân');
       }
       setStage('review');
     }
   }
 
-  async function handleReject() {
-    const rejects = [];
-    if (front?.ocrId) rejects.push(api.post(`/ocr/${front.ocrId}/reject`).catch(() => {}));
-    if (back?.ocrId)  rejects.push(api.post(`/ocr/${back.ocrId}/reject`).catch(() => {}));
-    await Promise.all(rejects);
-    resetAll();
+  function resetAll() {
+    setForm(EMPTY_FORM);
+    setErrors({}); setSubmitErr(null); setScanErr(null);
+    setPreview(null); setAnhFile(null); setAnhUrl(null);
+    handledRef.current = false;
+    setStage('scan');
   }
 
-  function resetAll() {
-    setFront(null); setBack(null);
-    setForm({
-      ho_ten: '', cccd: '', ngay_sinh: '', gioi_tinh: '',
-      que_quan: '', dia_chi: '', ngay_cap: '', noi_cap: '',
-      ngay_vao_lam: isoToDdmmyyyy(todayIso()),
-      cong_ty_id: '', nguoi_tuyen_id: '', ma_van_tay: '',
-    });
-    setErrors({}); setSubmitErr(null);
-    setStage('upload');
+  function switchMode(next) {
+    if (next === mode) return;
+    setScanErr(null);
+    setMode(next);
   }
 
   return (
     <div style={s.root}>
       <div style={s.header}>
-        <h2 style={s.title}>Quét CCCD</h2>
-        <p style={s.sub}>Tải đủ 2 mặt CCCD để trích xuất thông tin tự động</p>
+        <h2 style={s.title}>Quét QR CCCD</h2>
+        <p style={s.sub}>Quét mã QR ở mặt trước CCCD gắn chip để lấy thông tin tự động</p>
       </div>
 
-      {(stage === 'upload' || stage === 'processing') && (
-        <div style={s.uploadCard}>
-          {submitErr && <div style={s.errorBox}>{submitErr}</div>}
-          <div className="cccd-upload-grid">
-            <SideSlot title="Mặt trước" hint="Ảnh chân dung, họ tên, CCCD, ngày sinh"
-              picked={front} processing={stage === 'processing' && !front}
-              onPick={() => frontRef.current?.click()} onClear={() => setFront(null)} />
-            <input ref={frontRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => handleFile(e, 'truoc')} />
-            <SideSlot title="Mặt sau" hint="Nơi thường trú, ngày cấp, nơi cấp"
-              picked={back} processing={stage === 'processing' && !back}
-              onPick={() => backRef.current?.click()} onClear={() => setBack(null)} />
-            <input ref={backRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => handleFile(e, 'sau')} />
+      {(stage === 'scan' || stage === 'processing') && (
+        <div style={s.scanCard}>
+          <div style={s.modeTabs}>
+            <button style={tabStyle(mode === 'camera')} onClick={() => switchMode('camera')}>📷 Quét bằng camera</button>
+            <button style={tabStyle(mode === 'upload')} onClick={() => switchMode('upload')}>🖼️ Tải ảnh CCCD</button>
           </div>
+
+          {scanErr && <div style={s.errorBox}>{scanErr}</div>}
+
+          {mode === 'camera' ? (
+            <div style={s.cameraWrap}>
+              <video ref={videoRef} style={s.video} muted playsInline />
+              <div style={s.scanHint}>Đưa mã QR ở mặt trước CCCD vào khung — hệ thống tự nhận diện</div>
+            </div>
+          ) : stage === 'processing' ? (
+            <div style={s.processing}>
+              <div style={s.spinner} />
+              <div style={{ fontSize: 13, color: 'var(--text2)' }}>Đang đọc mã QR trong ảnh...</div>
+            </div>
+          ) : (
+            <div style={s.dropzone} onClick={() => fileRef.current?.click()}>
+              <div style={{ fontSize: 38 }}>🪪</div>
+              <div style={s.dropTitle}>Tải ảnh mặt trước CCCD</div>
+              <div style={s.dropSub}>Ảnh sẽ được tự động dò mã QR và lưu vào hồ sơ công nhân</div>
+              <button className="btn-primary" style={{ marginTop: 12, padding: '7px 16px', fontSize: 12 }}
+                onClick={(e) => { e.stopPropagation(); fileRef.current?.click(); }}>Chọn ảnh</button>
+            </div>
+          )}
+          <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleUpload} />
+
           <div style={s.tips}>
-            <div style={s.tipTitle}>Lưu ý khi chụp:</div>
-            {['Chụp đủ 2 mặt, rõ nét, không bị mờ', 'Đảm bảo ánh sáng đủ, không bị chói', 'Đặt CCCD trên nền sẫm màu'].map((t) => (
+            <div style={s.tipTitle}>Lưu ý:</div>
+            {[
+              'Chỉ CCCD gắn chip (12 số, cấp từ 2021) mới có mã QR',
+              'Quét đúng mã QR ở góc trên mặt trước, không phải mã ở mặt sau',
+              'Quê quán & nơi cấp không có trong QR — bổ sung tay nếu cần',
+            ].map((t) => (
               <div key={t} style={s.tip}>✓ {t}</div>
             ))}
           </div>
@@ -243,15 +302,28 @@ export default function ScanCCCD() {
         <div className="cccd-review-grid">
           <div style={s.card}>
             <div style={s.cardTitle}>Ảnh CCCD</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 8 }}>
-              {front?.preview && <ImgWithLabel src={front.preview} label="Mặt trước" />}
-              {back?.preview  && <ImgWithLabel src={back.preview}  label="Mặt sau" />}
-            </div>
-            <div style={s.ocrBadge}>OCR hoàn tất</div>
+            {preview ? (
+              <>
+                <div style={{ marginTop: 8 }}>
+                  <img src={preview} alt="Mặt trước CCCD" style={{ width: '100%', borderRadius: 8, border: '1px solid var(--border)' }} />
+                  <div style={s.imgCaption}>Mặt trước</div>
+                </div>
+                <div style={s.ocrBadge}>
+                  {uploadingAnh ? '⏳ Đang lưu ảnh...' : '✓ QR đã đọc · ảnh sẽ lưu vào hồ sơ'}
+                </div>
+              </>
+            ) : (
+              <div style={s.noImg}>
+                <div style={{ fontSize: 32, marginBottom: 8 }}>📷</div>
+                <div style={{ fontSize: 12, color: 'var(--text2)' }}>Quét bằng camera — không lưu ảnh.</div>
+                <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>Dùng "Tải ảnh CCCD" nếu muốn lưu ảnh vào hồ sơ.</div>
+                <div style={s.ocrBadge}>✓ QR đã đọc</div>
+              </div>
+            )}
           </div>
 
           <div style={s.card}>
-            <div style={s.cardTitle}>Thông tin trích xuất</div>
+            <div style={s.cardTitle}>Thông tin từ QR</div>
             <div style={s.cardSub}>Kiểm tra & bổ sung trước khi thêm vào hệ thống</div>
             {submitErr && <div style={{ ...s.errorBox, marginBottom: 10 }}>{submitErr}</div>}
 
@@ -274,7 +346,7 @@ export default function ScanCCCD() {
                 </select>
               </Field>
               <Field label="Quê quán" error={errors.que_quan} span2>
-                <input className="form-input" value={form.que_quan} onChange={(e) => setField('que_quan', e.target.value)} />
+                <input className="form-input" value={form.que_quan} onChange={(e) => setField('que_quan', e.target.value)} placeholder="Không có trong QR — nhập nếu cần" />
               </Field>
               <Field label="Địa chỉ thường trú" error={errors.dia_chi} span2>
                 <input className="form-input" value={form.dia_chi} onChange={(e) => setField('dia_chi', e.target.value)} />
@@ -283,7 +355,7 @@ export default function ScanCCCD() {
                 <input className="form-input" value={form.ngay_cap} onChange={(e) => setField('ngay_cap', formatDateInput(e.target.value))} placeholder="dd/mm/yyyy" maxLength={10} />
               </Field>
               <Field label="Nơi cấp CCCD" error={errors.noi_cap}>
-                <input className="form-input" value={form.noi_cap} onChange={(e) => setField('noi_cap', e.target.value)} />
+                <input className="form-input" value={form.noi_cap} onChange={(e) => setField('noi_cap', e.target.value)} placeholder="Không có trong QR — nhập nếu cần" />
               </Field>
 
               <div style={s.divider} />
@@ -319,8 +391,8 @@ export default function ScanCCCD() {
             </div>
 
             <div style={s.reviewActions}>
-              <button className="btn-ghost" style={{ color: 'var(--red)' }} onClick={handleReject}>Từ chối</button>
-              <button className="btn-primary" onClick={handleApprove}>✓ Duyệt & Thêm vào hệ thống</button>
+              <button className="btn-ghost" style={{ color: 'var(--red)' }} onClick={resetAll}>Quét lại</button>
+              <button className="btn-primary" onClick={handleApprove}>✓ Thêm vào hệ thống</button>
             </div>
           </div>
         </div>
@@ -338,7 +410,7 @@ export default function ScanCCCD() {
         <div style={s.doneCard}>
           <div style={s.doneIcon}>✅</div>
           <div style={s.doneTitle}>Thêm thành công!</div>
-          <div style={s.doneSub}>Công nhân <b>{createdName}</b> đã được thêm vào hệ thống cùng ảnh CCCD 2 mặt</div>
+          <div style={s.doneSub}>Công nhân <b>{createdName}</b> đã được thêm vào hệ thống{preview ? ' cùng ảnh CCCD mặt trước' : ''}</div>
           <div style={s.doneActions}>
             <button className="btn-ghost" onClick={resetAll}>Quét tiếp</button>
             <a href="/cong-nhan" className="btn-primary" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 8, padding: '7px 14px', fontSize: 12, fontWeight: 600, borderRadius: 8, background: 'linear-gradient(135deg, var(--accent), var(--accent2))', color: '#fff' }}>
@@ -361,62 +433,24 @@ function Field({ label, error, span2, children }) {
   );
 }
 
-function ImgWithLabel({ src, label }) {
-  return (
-    <div>
-      <img src={src} alt={label} style={{ width: '100%', borderRadius: 8 }} />
-      <div style={s.imgCaption}>{label}</div>
-    </div>
-  );
-}
-
-function SideSlot({ title, hint, picked, processing, onPick, onClear }) {
-  return (
-    <div style={ss.slot}>
-      <div style={ss.head}>
-        <span style={ss.title}>{title}</span>
-        {picked && <button style={ss.clearBtn} onClick={onClear}>Đổi ảnh</button>}
-      </div>
-      {picked ? (
-        <div style={ss.previewWrap}>
-          <img src={picked.preview} alt={title} style={ss.previewImg} />
-          <div style={ss.okPill}>✓ Đã quét</div>
-        </div>
-      ) : processing ? (
-        <div style={ss.placeholder}>
-          <div style={ss.spinner} />
-          <div style={{ fontSize: 12, color: 'var(--text2)' }}>Đang xử lý OCR...</div>
-        </div>
-      ) : (
-        <div style={ss.dropzone} onClick={onPick}>
-          <div style={{ fontSize: 32 }}>🪪</div>
-          <div style={ss.dropTitle}>{title}</div>
-          <div style={ss.dropSub}>{hint}</div>
-          <button className="btn-primary" style={{ marginTop: 12, padding: '6px 14px', fontSize: 12 }} onClick={(e) => { e.stopPropagation(); onPick(); }}>Chọn ảnh</button>
-        </div>
-      )}
-    </div>
-  );
+function tabStyle(active) {
+  return {
+    flex: 1,
+    padding: '10px 14px',
+    fontSize: 13,
+    fontWeight: 600,
+    fontFamily: 'inherit',
+    cursor: 'pointer',
+    borderRadius: 10,
+    border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
+    background: active ? 'rgba(79,124,255,0.14)' : 'var(--bg2)',
+    color: active ? 'var(--accent)' : 'var(--text2)',
+  };
 }
 
 const f = {
   field: { display: 'flex', flexDirection: 'column', gap: 5 },
   err:   { fontSize: 11, color: 'var(--red)', marginTop: 3 },
-};
-
-const ss = {
-  slot:       { background: 'var(--bg1)', border: '1px solid var(--border)', borderRadius: 14, padding: 14, display: 'flex', flexDirection: 'column', gap: 10 },
-  head:       { display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
-  title:      { fontSize: 12, fontWeight: 700, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '0.06em' },
-  clearBtn:   { background: 'none', border: 'none', color: 'var(--accent)', fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' },
-  previewWrap:{ position: 'relative' },
-  previewImg: { width: '100%', borderRadius: 10, border: '1px solid var(--border)' },
-  okPill:     { position: 'absolute', top: 8, right: 8, background: 'rgba(34,201,134,0.18)', color: 'var(--green)', fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 20 },
-  placeholder:{ background: 'var(--bg2)', borderRadius: 10, padding: '32px 14px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 },
-  spinner:    { width: 28, height: 28, borderRadius: '50%', border: '3px solid var(--bg3)', borderTopColor: 'var(--accent)', animation: 'spin 0.8s linear infinite' },
-  dropzone:   { background: 'var(--bg2)', border: '2px dashed var(--border2)', borderRadius: 10, padding: '24px 14px', display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: 'pointer', textAlign: 'center', gap: 4 },
-  dropTitle:  { fontSize: 13, fontWeight: 600, color: 'var(--text1)' },
-  dropSub:    { fontSize: 11, color: 'var(--text3)', textAlign: 'center' },
 };
 
 const s = {
@@ -425,7 +459,15 @@ const s = {
   title: { fontSize: 15, fontWeight: 700, color: 'var(--text1)' },
   sub:   { fontSize: 12, color: 'var(--text2)', marginTop: 3 },
   errorBox: { background: 'rgba(255,95,114,0.12)', border: '1px solid var(--red)', borderRadius: 10, padding: '10px 14px', fontSize: 12, color: 'var(--red)' },
-  uploadCard: { display: 'flex', flexDirection: 'column', gap: 16 },
+  scanCard: { display: 'flex', flexDirection: 'column', gap: 16 },
+  modeTabs: { display: 'flex', gap: 10 },
+  cameraWrap: { display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'center' },
+  video: { width: '100%', maxWidth: 460, aspectRatio: '4 / 3', objectFit: 'cover', borderRadius: 14, border: '1px solid var(--border)', background: '#000' },
+  scanHint: { fontSize: 12, color: 'var(--text2)', textAlign: 'center' },
+  processing: { background: 'var(--bg1)', border: '1px solid var(--border)', borderRadius: 14, padding: '48px 14px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 },
+  dropzone: { background: 'var(--bg1)', border: '2px dashed var(--border2)', borderRadius: 14, padding: '40px 18px', display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: 'pointer', textAlign: 'center', gap: 4 },
+  dropTitle: { fontSize: 14, fontWeight: 600, color: 'var(--text1)', marginTop: 4 },
+  dropSub: { fontSize: 12, color: 'var(--text3)' },
   tips: { background: 'var(--bg1)', border: '1px solid var(--border)', borderRadius: 12, padding: '14px 18px' },
   tipTitle: { fontSize: 12, fontWeight: 700, color: 'var(--text2)', marginBottom: 8 },
   tip: { fontSize: 12, color: 'var(--text2)', padding: '3px 0', display: 'flex', alignItems: 'center', gap: 8 },
@@ -434,6 +476,7 @@ const s = {
   cardTitle: { fontSize: 13, fontWeight: 700, color: 'var(--text1)' },
   cardSub: { fontSize: 11, color: 'var(--text2)', marginTop: 3, marginBottom: 14 },
   imgCaption: { fontSize: 10, color: 'var(--text3)', textAlign: 'center', marginTop: 3, textTransform: 'uppercase', letterSpacing: '0.06em' },
+  noImg: { marginTop: 8, padding: '28px 14px', background: 'var(--bg2)', borderRadius: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' },
   ocrBadge: { display: 'inline-block', marginTop: 10, padding: '4px 10px', background: 'rgba(34,201,134,0.12)', color: 'var(--green)', borderRadius: 20, fontSize: 11, fontWeight: 600 },
   divider: { gridColumn: 'span 2', height: 1, background: 'var(--border)', margin: '4px 0' },
   reviewActions: { display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--border)', flexWrap: 'wrap' },
