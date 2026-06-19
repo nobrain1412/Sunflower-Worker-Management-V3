@@ -290,7 +290,7 @@ export default function ScanCCCD() {
             {[
               'Chỉ CCCD gắn chip (12 số, cấp từ 2021) mới có mã QR',
               'Quét đúng mã QR ở góc trên mặt trước, không phải mã ở mặt sau',
-              'Quê quán & nơi cấp không có trong QR — bổ sung tay nếu cần',
+              'Quê quán không có trong QR — bổ sung tay nếu cần',
             ].map((t) => (
               <div key={t} style={s.tip}>✓ {t}</div>
             ))}
@@ -355,7 +355,7 @@ export default function ScanCCCD() {
                 <input className="form-input" value={form.ngay_cap} onChange={(e) => setField('ngay_cap', formatDateInput(e.target.value))} placeholder="dd/mm/yyyy" maxLength={10} />
               </Field>
               <Field label="Nơi cấp CCCD" error={errors.noi_cap}>
-                <input className="form-input" value={form.noi_cap} onChange={(e) => setField('noi_cap', e.target.value)} placeholder="Không có trong QR — nhập nếu cần" />
+                <input className="form-input" value={form.noi_cap} onChange={(e) => setField('noi_cap', e.target.value)} placeholder="Cục Cảnh sát QLHC về TTXH" />
               </Field>
 
               <div style={s.divider} />
