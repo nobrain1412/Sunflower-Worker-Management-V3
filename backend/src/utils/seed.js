@@ -339,8 +339,8 @@ async function seed() {
       const ngayNghiViec = status === 'nghi_viec' ? addDays(ngayVao, rand(30, 200)) : null;
       const r = await queryWithRetry(
         `INSERT INTO cong_nhan
-          (ho_ten, cccd, ngay_sinh, gioi_tinh, que_quan, dia_chi_hien_tai, so_dien_thoai,
-           ngay_cap_cccd, noi_cap_cccd, trang_thai, ngay_vao_lam, ngay_nghi_viec, ghi_chu,
+          (ho_ten, cccd, ngay_sinh, gioi_tinh, dia_chi_hien_tai, so_dien_thoai,
+           ngay_cap_cccd, trang_thai, ngay_vao_lam, ngay_nghi_viec, ghi_chu,
            nguoi_tuyen_id, cong_ty_id,
            anh_cccd_truoc, anh_cccd_sau, anh_chan_dung, anh_xe,
            da_tra_dong_phuc, da_viet_don_nghi,
@@ -348,20 +348,18 @@ async function seed() {
            cccd_da_tra, trang_thai_noi_o, muon_xe, loai_xe, xe_da_tra, ngay_muon_xe,
            ma_van_tay)
          VALUES
-          ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,
-           $16,$17,$18,$19,
-           $20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31)
+          ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,
+           $14,$15,$16,$17,
+           $18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29)
          RETURNING id, ngay_vao_lam, cong_ty_id, nguoi_tuyen_id, trang_thai, muon_xe`,
         [
           fullName(i),
           cccd(i),
           ngaySinh,
           gioi_tinh,
-          pick(PROVINCES),
           `${rand(1, 999)} Khu pho ${rand(1, 20)}, ${pick(PROVINCES)}`,
           phone(500 + i),
           ngayCap,
-          'Cuc Canh Sat QLHC',
           status,
           ngayVao,
           ngayNghiViec,

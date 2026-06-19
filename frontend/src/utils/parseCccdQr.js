@@ -1,11 +1,7 @@
 // Parse chuỗi QR ở mặt trước CCCD gắn chip (chuẩn C06 Bộ Công an).
 // Định dạng 7 trường, ngăn cách bởi dấu "|":
 //   CCCD | CMND_cũ | Họ tên | NgàySinh(DDMMYYYY) | Giới tính | Nơi thường trú | NgàyCấp(DDMMYYYY)
-// QR KHÔNG chứa: quê quán → để trống cho người dùng tự nhập.
-// Nơi cấp KHÔNG có trong QR nhưng mọi CCCD gắn chip đều do cùng một nơi cấp → điền cố định.
-
-// Nơi cấp cố định cho CCCD gắn chip (đơn vị duy nhất cấp loại thẻ có QR)
-const NOI_CAP_CCCD = 'Cục Cảnh sát quản lý hành chính về trật tự xã hội';
+// QR chỉ có địa chỉ thường trú (→ dia_chi); không có quê quán / nơi cấp.
 
 // DDMMYYYY (8 số liền) → dd/mm/yyyy để khớp input form
 function compactDateToSlash(s) {
@@ -16,7 +12,7 @@ function compactDateToSlash(s) {
 
 /**
  * @param {string} raw chuỗi thô đọc từ QR
- * @returns {null | { cccd, ho_ten, ngay_sinh, gioi_tinh, dia_chi, ngay_cap, noi_cap }}
+ * @returns {null | { cccd, ho_ten, ngay_sinh, gioi_tinh, dia_chi, ngay_cap }}
  *          null nếu không đúng định dạng QR CCCD
  */
 export function parseCccdQr(raw) {
@@ -38,6 +34,5 @@ export function parseCccdQr(raw) {
     gioi_tinh: ['Nam', 'Nữ', 'Khác'].includes(gt) ? gt : '',
     dia_chi:   String(diaChi ?? '').trim(),
     ngay_cap:  compactDateToSlash(ngayCap),
-    noi_cap:   NOI_CAP_CCCD,
   };
 }

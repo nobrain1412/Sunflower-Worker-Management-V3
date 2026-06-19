@@ -88,7 +88,7 @@ export default function BulkReview() {
           cccd:      cleanCccd(r.cccd),
           ngay_sinh: ddmmyyyyToIso(r.ngay_sinh),
           gioi_tinh: ['Nam','Nữ','Khác'].includes(r.gioi_tinh) ? r.gioi_tinh : null,
-          que_quan:  r.que_quan || null,
+          dia_chi_hien_tai: r.dia_chi_hien_tai || null,
         });
         ok += 1;
       } catch (err) {
@@ -183,7 +183,7 @@ export default function BulkReview() {
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr>
-                  {['', 'Họ tên', 'CCCD', 'Ngày sinh', 'Giới tính', 'Quê quán', 'TT', ''].map((h) => (
+                  {['', 'Họ tên', 'CCCD', 'Ngày sinh', 'Giới tính', 'Địa chỉ', 'TT', ''].map((h) => (
                     <th key={h} style={{ fontSize: 10, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', textAlign: 'left', padding: '10px 14px', borderBottom: '1px solid var(--border)' }}>{h}</th>
                   ))}
                 </tr>
@@ -196,7 +196,7 @@ export default function BulkReview() {
                   editRow === row.id ? (
                     <tr key={row.id} style={{ background: 'rgba(79,124,255,0.06)', borderBottom: '1px solid var(--border)' }}>
                       <td style={{ padding: '8px 14px' }} />
-                      {['ho_ten','cccd','ngay_sinh','gioi_tinh','que_quan'].map((k) => (
+                      {['ho_ten','cccd','ngay_sinh','gioi_tinh','dia_chi_hien_tai'].map((k) => (
                         <td key={k} style={{ padding: '8px 8px' }}>
                           <input className="form-input" style={{ fontSize: 12, padding: '5px 8px' }} value={row[k] || ''} onChange={(e) => handleEdit(row.id, k, e.target.value)} />
                         </td>
@@ -215,7 +215,7 @@ export default function BulkReview() {
                       <td style={{ padding: '10px 10px', fontSize: 12, color: 'var(--text2)', fontFamily: "'JetBrains Mono', monospace" }}>{row.cccd || <span style={{ color: 'var(--amber)' }}>—</span>}</td>
                       <td style={{ padding: '10px 10px', fontSize: 12, color: 'var(--text2)' }}>{row.ngay_sinh || '—'}</td>
                       <td style={{ padding: '10px 10px', fontSize: 12, color: 'var(--text2)' }}>{row.gioi_tinh || '—'}</td>
-                      <td style={{ padding: '10px 10px', fontSize: 12, color: 'var(--text2)' }}>{row.que_quan || '—'}</td>
+                      <td style={{ padding: '10px 10px', fontSize: 12, color: 'var(--text2)' }}>{row.dia_chi_hien_tai || '—'}</td>
                       <td style={{ padding: '10px 10px' }}>
                         <span className={`pill ${row.status === 'ok' ? 'pill-green' : 'pill-amber'}`}>
                           {row.status === 'ok' ? 'OK' : 'Thiếu'}

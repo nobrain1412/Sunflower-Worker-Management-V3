@@ -137,11 +137,9 @@ CREATE TABLE cong_nhan (
   cccd              VARCHAR(12),
   ngay_sinh         DATE,
   gioi_tinh         VARCHAR(10) CHECK (gioi_tinh IN ('Nam', 'Nữ', 'Khác')),
-  que_quan          VARCHAR(200),
   dia_chi_hien_tai  TEXT,
   so_dien_thoai     VARCHAR(15),
   ngay_cap_cccd     DATE,
-  noi_cap_cccd      VARCHAR(200),
   -- Trạng thái
   trang_thai        VARCHAR(20) NOT NULL DEFAULT 'moi_vao'
                     CHECK (trang_thai IN ('dang_lam', 'nghi_phep', 'moi_vao', 'nghi_viec')),

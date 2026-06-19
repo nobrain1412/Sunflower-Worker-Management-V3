@@ -413,8 +413,8 @@ function PreviewTable({ rows, onEdit, onRemove }) {
                   <EditCell value={r.data.so_dien_thoai} mono onChange={(v) => onEdit(r.rowNumber, 'so_dien_thoai', v)} />
                 </td>
                 <td style={s.td}>
-                  <EditCell value={r.data.que_quan} wide
-                    onChange={(v) => onEdit(r.rowNumber, 'que_quan', v)}
+                  <EditCell value={r.data.dia_chi_hien_tai} wide
+                    onChange={(v) => onEdit(r.rowNumber, 'dia_chi_hien_tai', v)}
                     placeholder="..., Tỉnh" />
                 </td>
                 <td style={s.td}>

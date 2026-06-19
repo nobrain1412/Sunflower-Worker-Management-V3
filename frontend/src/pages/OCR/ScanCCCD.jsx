@@ -36,7 +36,7 @@ function formatDateInput(v) {
 
 const EMPTY_FORM = {
   ho_ten: '', cccd: '', ngay_sinh: '', gioi_tinh: '',
-  que_quan: '', dia_chi: '', ngay_cap: '', noi_cap: '',
+  dia_chi: '', ngay_cap: '',
   ngay_vao_lam: isoToDdmmyyyy(todayIso()),
   cong_ty_id: '', nguoi_tuyen_id: '', ma_van_tay: '',
 };
@@ -203,10 +203,8 @@ export default function ScanCCCD() {
         cccd:             cleanCccd(form.cccd),
         ngay_sinh:        ddmmyyyyToIso(form.ngay_sinh),
         gioi_tinh:        ['Nam','Nữ','Khác'].includes(form.gioi_tinh) ? form.gioi_tinh : null,
-        que_quan:         form.que_quan || null,
         dia_chi_hien_tai: form.dia_chi  || null,
         ngay_cap_cccd:    ddmmyyyyToIso(form.ngay_cap),
-        noi_cap_cccd:     form.noi_cap  || null,
         ngay_vao_lam:     ddmmyyyyToIso(form.ngay_vao_lam),
         ma_van_tay:       form.ma_van_tay || null,
         anh_cccd_truoc:   finalAnhUrl || null,
@@ -222,7 +220,7 @@ export default function ScanCCCD() {
     } catch (err) {
       const det = err?.details ?? err?.response?.data?.error?.details;
       if (Array.isArray(det) && det.length) {
-        const map = { dia_chi_hien_tai: 'dia_chi', ngay_cap_cccd: 'ngay_cap', noi_cap_cccd: 'noi_cap' };
+        const map = { dia_chi_hien_tai: 'dia_chi', ngay_cap_cccd: 'ngay_cap' };
         const fieldErrs = {};
         for (const d of det) fieldErrs[map[d.field] ?? d.field] = d.message;
         setErrors(fieldErrs);
@@ -345,19 +343,12 @@ export default function ScanCCCD() {
                   <option value="Khác">Khác</option>
                 </select>
               </Field>
-              <Field label="Quê quán" error={errors.que_quan} span2>
-                <input className="form-input" value={form.que_quan} onChange={(e) => setField('que_quan', e.target.value)} placeholder="Không có trong QR — nhập nếu cần" />
-              </Field>
               <Field label="Địa chỉ thường trú" error={errors.dia_chi} span2>
                 <input className="form-input" value={form.dia_chi} onChange={(e) => setField('dia_chi', e.target.value)} />
               </Field>
               <Field label="Ngày cấp CCCD" error={errors.ngay_cap}>
                 <input className="form-input" value={form.ngay_cap} onChange={(e) => setField('ngay_cap', formatDateInput(e.target.value))} placeholder="dd/mm/yyyy" maxLength={10} />
               </Field>
-              <Field label="Nơi cấp CCCD" error={errors.noi_cap}>
-                <input className="form-input" value={form.noi_cap} onChange={(e) => setField('noi_cap', e.target.value)} placeholder="Cục Cảnh sát QLHC về TTXH" />
-              </Field>
-
               <div style={s.divider} />
 
               <Field label="Công ty" error={errors.cong_ty_id}>

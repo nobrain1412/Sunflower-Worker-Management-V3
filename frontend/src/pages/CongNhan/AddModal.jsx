@@ -2,7 +2,6 @@ import { useState, useMemo } from 'react';
 import { useTaoMoiCongNhan, useCongTyList, useVenders, useNoiOTruyCap } from '../../hooks/useCongNhan';
 import { usePhongList, useGiuongList } from '../../hooks/useKtx';
 import { useAuth } from '../../context/AuthContext';
-import ProvinceSelect from '../../components/ProvinceSelect';
 import api from '../../hooks/useApi';
 
 function todayDMY() {
@@ -12,8 +11,8 @@ function todayDMY() {
 
 const INIT = {
   ho_ten: '', cccd: '', ngay_sinh: '', gioi_tinh: '',
-  que_quan: '', dia_chi_hien_tai: '', so_dien_thoai: '',
-  ngay_cap_cccd: '', noi_cap_cccd: '',
+  dia_chi_hien_tai: '', so_dien_thoai: '',
+  ngay_cap_cccd: '',
   trang_thai: 'moi_vao', ngay_vao_lam: todayDMY(), ghi_chu: '',
   cong_ty_id: '',
   nguoi_tuyen_id: '',
@@ -117,7 +116,7 @@ export default function AddCongNhanModal({ onClose }) {
     if (Object.keys(errs).length) { setErrors(errs); return; }
 
     const payload = { ho_ten: form.ho_ten, trang_thai: form.trang_thai };
-    ['cccd','gioi_tinh','que_quan','dia_chi_hien_tai','so_dien_thoai','noi_cap_cccd','ghi_chu',
+    ['cccd','gioi_tinh','dia_chi_hien_tai','so_dien_thoai','ghi_chu',
      'ngan_hang','so_tai_khoan','ten_chu_tk','ma_van_tay']
       .forEach((k) => { if (form[k]) payload[k] = form[k]; });
     payload.cccd_da_tra = !!form.cccd_da_tra;
@@ -226,19 +225,8 @@ export default function AddCongNhanModal({ onClose }) {
             <FormField label="Ngày cấp CCCD" error={errors.ngay_cap_cccd}>
               <input className="form-input" name="ngay_cap_cccd" value={form.ngay_cap_cccd} onChange={handleDateChange('ngay_cap_cccd')} placeholder="dd/mm/yyyy" maxLength={10} />
             </FormField>
-            <FormField label="Quê quán" style={{ gridColumn: 'span 2' }}>
-              <ProvinceSelect
-                onChange={(val) => setForm((f) => ({ ...f, que_quan: val }))}
-              />
-              {form.que_quan && (
-                <div style={{ fontSize: 11, color: 'var(--accent)', marginTop: 4 }}>✓ {form.que_quan}</div>
-              )}
-            </FormField>
-            <FormField label="Địa chỉ hiện tại" style={{ gridColumn: 'span 2' }}>
-              <input className="form-input" name="dia_chi_hien_tai" value={form.dia_chi_hien_tai} onChange={handleChange} placeholder="Số 123, Đường ABC..." />
-            </FormField>
-            <FormField label="Nơi cấp CCCD" style={{ gridColumn: 'span 2' }}>
-              <input className="form-input" name="noi_cap_cccd" value={form.noi_cap_cccd} onChange={handleChange} placeholder="Cục CS QLHC về TTXH" />
+            <FormField label="Địa chỉ thường trú" style={{ gridColumn: 'span 2' }}>
+              <input className="form-input" name="dia_chi_hien_tai" value={form.dia_chi_hien_tai} onChange={handleChange} placeholder="Số 123, Đường ABC, Tỉnh..." />
             </FormField>
 
             <div style={{ gridColumn: 'span 2', height: 1, background: 'var(--border)', margin: '4px 0' }} />

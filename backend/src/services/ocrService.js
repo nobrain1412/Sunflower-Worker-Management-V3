@@ -48,10 +48,8 @@ async function recognizeCCCDViaFPT(imageBuffer, apiKey) {
     cccd:     d.id        ?? '',
     ngay_sinh:d.dob       ?? '',
     gioi_tinh:mapFptSex(d.sex),
-    que_quan: d.home      ?? '',
     dia_chi:  d.address   ?? '',
     ngay_cap: d.issue_date ?? '',
-    noi_cap:  d.issue_loc  ?? '',
     _provider: 'fpt_ai',
     _type:     d.type_new || d.type || '',
   };
@@ -82,7 +80,7 @@ function parseCCCD(fullText) {
 
   const result = {
     ho_ten: '', cccd: '', ngay_sinh: '', gioi_tinh: '',
-    que_quan: '', dia_chi: '', ngay_cap: '', noi_cap: '',
+    dia_chi: '', ngay_cap: '',
   };
 
   const cccdMatch = fullText.match(/\b(\d{12})\b/);
@@ -113,11 +111,6 @@ function parseCCCD(fullText) {
       else if (/\bn[ữu]\b/.test(ctx)) result.gioi_tinh = 'Nữ';
     }
 
-    if (/qu[eê]\s*qu[áa]n|place\s+of\s+origin/i.test(lo)) {
-      const val = nxt.replace(/[:\/]/g, '').trim();
-      if (val && !/nơi|place\s+of\s+res/i.test(val)) result.que_quan = val;
-    }
-
     if (/n[oơ]i\s+th[uư][oờ]ng\s+tr[uú]|place\s+of\s+res/i.test(lo)) {
       const parts = [nxt, nxt2].filter((l) => l && !/c[oó]\s+gi[áa]\s+tr[ịi]|date\s+of\s+exp/i.test(l));
       result.dia_chi = parts.join(', ').replace(/[:\/]/g, '').trim();
@@ -126,10 +119,6 @@ function parseCCCD(fullText) {
     if (/ng[àa]y.*c[aấ]p|date\s+of\s+issue/i.test(lo)) {
       const m = (lines[i] + ' ' + nxt).match(/\d{2}[\/\-.]\d{2}[\/\-.]\d{4}/);
       if (m) result.ngay_cap = m[0].replace(/[\-.]/g, '/');
-    }
-
-    if (/n[oơ]i\s+c[aấ]p|place\s+of\s+issue/i.test(lo)) {
-      result.noi_cap = nxt.replace(/[:\/]/g, '').trim();
     }
   }
 
@@ -148,7 +137,7 @@ function parseDanhSach(textLines) {
     if (row.trim().length < 3) continue;
     if (/h[oọ]\s*(v[aà]\s*)?t[eêế]n|stt|ng[àa]y\s+sinh|cccd|cmnd|qu[eê]\s*qu[áa]n|gi[ớo]i\s*t[íi]nh|^tt\b/i.test(row)) continue;
 
-    const person = { ho_ten: '', cccd: '', ngay_sinh: '', gioi_tinh: '', que_quan: '' };
+    const person = { ho_ten: '', cccd: '', ngay_sinh: '', gioi_tinh: '', dia_chi_hien_tai: '' };
 
     const dateM = row.match(/\d{2}[\/\-.]\d{2}[\/\-.]\d{4}/);
     if (dateM) person.ngay_sinh = dateM[0].replace(/[\-.]/g, '/');
@@ -169,7 +158,7 @@ function parseDanhSach(textLines) {
 
     const parts = rest.split(/\t|\s{3,}/).map((p) => p.trim()).filter(Boolean);
     if (parts[0]) person.ho_ten = parts[0];
-    if (parts[1]) person.que_quan = parts[1];
+    if (parts[1]) person.dia_chi_hien_tai = parts[1];
 
     if (person.ho_ten || person.cccd) people.push(person);
   }

@@ -1,0 +1,8 @@
+feat(cong-nhan): xoa truong que_quan & noi_cap, gom ve dia_chi_hien_tai
+
+- DB: migration 024 DROP COLUMN que_quan, noi_cap_cccd (migrate.js tu backup truoc khi chay)
+- Loc "Tinh" + import/export Excel cot "Dia chi" nay chay tren dia_chi_hien_tai
+- Bo o Que quan (ProvinceSelect) & Noi cap khoi: form them tay, sua ho so, quet QR, bulk review, hien thi chi tiet
+- Form quet QR chi lay tu QR: ho ten, CCCD, ngay sinh, gioi tinh, dia chi thuong tru, ngay cap
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>

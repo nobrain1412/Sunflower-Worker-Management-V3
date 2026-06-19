@@ -6,7 +6,7 @@
  *   - CCCD / CMT / Căn cước    → cccd          (12 số, dedup key)
  *   - Ngày sinh / Ngày tháng năm sinh → ngay_sinh
  *   - Ngày vào / Ngày vào làm  → ngay_vao_lam
- *   - Địa chỉ / Quê quán       → que_quan
+ *   - Địa chỉ / Quê quán       → dia_chi_hien_tai
  *   - SĐT / Số điện thoại      → so_dien_thoai
  *   - Mã vân tay               → ma_van_tay
  *   - Vender / Người tuyển     → resolve theo ho_ten của users
@@ -32,8 +32,8 @@ const HEADER_MAP = {
   'ngay thang nam sinh':     'ngay_sinh',
   'ngay vao':                'ngay_vao_lam',
   'ngay vao lam':            'ngay_vao_lam',
-  'dia chi':                 'que_quan',
-  'que quan':                'que_quan',
+  'dia chi':                 'dia_chi_hien_tai',
+  'que quan':                'dia_chi_hien_tai',
   'sdt':                     'so_dien_thoai',
   'so dien thoai':           'so_dien_thoai',
   'dien thoai':              'so_dien_thoai',
@@ -59,7 +59,7 @@ const HEADER_FUZZY = [
   { field: '__vender_name',  keywords: ['vender', 'vendor', 'nguoi tuyen', 'ma vd'] },
   { field: 'ho_ten',         keywords: ['ho ten', 'ho va ten', 'hoten', 'ten cong nhan', 'ten nhan vien', 'ten nv', 'full name', 'fullname'], exact: ['ten'] },
   { field: 'so_dien_thoai',  keywords: ['so dien thoai', 'dien thoai', 'sdt', 'so dt', 'phone', 'mobile', 'lien he'] },
-  { field: 'que_quan',       keywords: ['que quan', 'dia chi', 'noi o', 'thuong tru', 'address', 'que'] },
+  { field: 'dia_chi_hien_tai',       keywords: ['que quan', 'dia chi', 'noi o', 'thuong tru', 'address', 'que'] },
   { field: 'ma_van_tay',     keywords: ['ma van tay', 'van tay', 'ma vt', 'ma cham cong', 'fingerprint'] },
   { field: '__cong_ty_name', keywords: ['cong ty', 'doanh nghiep', 'cty', 'company'] },
   { field: 'ghi_chu',        keywords: ['ghi chu', 'bo phan', 'note', 'remark', 'chu thich'] },
@@ -355,16 +355,16 @@ async function parseExcel(buffer) {
       }
       // dòng nhập nhằng: chưa cảnh báo ở đây — xử lý ở lượt thống kê cột bên dưới
     }
-    if (data.que_quan) data.que_quan = toTitleCaseVN(data.que_quan);
+    if (data.dia_chi_hien_tai) data.dia_chi_hien_tai = toTitleCaseVN(data.dia_chi_hien_tai);
 
-    // Chuẩn hoá tỉnh trong que_quan → đảm bảo filter "Tỉnh" bắt được
-    if (data.que_quan) {
-      const { normalized, originalTinh, matchedTinh } = normalizeQueQuan(data.que_quan);
-      data.que_quan = normalized;
+    // Chuẩn hoá tỉnh trong dia_chi_hien_tai → đảm bảo filter "Tỉnh" bắt được
+    if (data.dia_chi_hien_tai) {
+      const { normalized, originalTinh, matchedTinh } = normalizeQueQuan(data.dia_chi_hien_tai);
+      data.dia_chi_hien_tai = normalized;
       if (matchedTinh && originalTinh && originalTinh !== matchedTinh) {
         warnings.push(`Tỉnh: "${originalTinh}" → chuẩn hoá thành "${matchedTinh}"`);
       } else if (!matchedTinh) {
-        warnings.push(`Không nhận diện được tỉnh trong "${data.que_quan}" → filter Tỉnh có thể không hoạt động`);
+        warnings.push(`Không nhận diện được tỉnh trong "${data.dia_chi_hien_tai}" → filter Tỉnh có thể không hoạt động`);
       }
     }
 
@@ -470,7 +470,7 @@ async function resolveAndValidate(rows) {
   const existingByCccd = new Map(); // cccd → { id, ho_ten, ...field hiện tại, cong_ty_ten }
   if (cccds.length > 0) {
     const { rows: eRows } = await db.query(
-      `SELECT cn.id, cn.ho_ten, cn.cccd, cn.ngay_sinh, cn.que_quan, cn.so_dien_thoai,
+      `SELECT cn.id, cn.ho_ten, cn.cccd, cn.ngay_sinh, cn.dia_chi_hien_tai, cn.so_dien_thoai,
               cn.ngay_vao_lam, cn.ma_van_tay, cn.ghi_chu, cn.nguoi_tuyen_id,
               cn.cong_ty_id, cn.trang_thai, ct.ten_cong_ty AS cong_ty_ten
          FROM cong_nhan cn
@@ -591,7 +591,7 @@ function rebuildRowsFromPayload(payloadRows = []) {
     delete data.cong_ty_id;
     // Normalize lại các field nhạy cảm
     if (data.ho_ten) data.ho_ten = toTitleCaseVN(data.ho_ten);
-    if (data.que_quan) data.que_quan = toTitleCaseVN(data.que_quan);
+    if (data.dia_chi_hien_tai) data.dia_chi_hien_tai = toTitleCaseVN(data.dia_chi_hien_tai);
     if (data.cccd) data.cccd = normalizeCccd(data.cccd);
     if (data.so_dien_thoai) data.so_dien_thoai = normalizePhone(data.so_dien_thoai);
     if (data.ngay_sinh) data.ngay_sinh = parseDate(data.ngay_sinh) ?? data.ngay_sinh;
@@ -621,13 +621,13 @@ function prevDayISO(iso) {
 async function insertCongNhan(d, trangThai) {
   const ins = await db.query(
     `INSERT INTO cong_nhan
-       (ho_ten, cccd, ngay_sinh, que_quan, so_dien_thoai,
+       (ho_ten, cccd, ngay_sinh, dia_chi_hien_tai, so_dien_thoai,
         ngay_vao_lam, ma_van_tay, ghi_chu,
         nguoi_tuyen_id, cong_ty_id, trang_thai)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
      RETURNING id`,
     [
-      d.ho_ten, d.cccd ?? null, d.ngay_sinh ?? null, d.que_quan ?? null,
+      d.ho_ten, d.cccd ?? null, d.ngay_sinh ?? null, d.dia_chi_hien_tai ?? null,
       d.so_dien_thoai ?? null, d.ngay_vao_lam ?? null, d.ma_van_tay ?? null,
       d.ghi_chu ?? null, d.nguoi_tuyen_id ?? null, d.cong_ty_id ?? null, trangThai,
     ],
@@ -642,7 +642,7 @@ async function updateFillEmpty(id, d) {
   await db.query(
     `UPDATE cong_nhan SET
         ngay_sinh      = COALESCE(ngay_sinh, $2),
-        que_quan       = COALESCE(que_quan, $3),
+        dia_chi_hien_tai       = COALESCE(dia_chi_hien_tai, $3),
         so_dien_thoai  = COALESCE(so_dien_thoai, $4),
         ngay_vao_lam   = COALESCE(ngay_vao_lam, $5),
         ma_van_tay     = COALESCE(ma_van_tay, $6),
@@ -650,7 +650,7 @@ async function updateFillEmpty(id, d) {
         nguoi_tuyen_id = COALESCE(nguoi_tuyen_id, $8)
       WHERE id = $1`,
     [
-      id, d.ngay_sinh ?? null, d.que_quan ?? null, d.so_dien_thoai ?? null,
+      id, d.ngay_sinh ?? null, d.dia_chi_hien_tai ?? null, d.so_dien_thoai ?? null,
       d.ngay_vao_lam ?? null, d.ma_van_tay ?? null, d.ghi_chu ?? null,
       d.nguoi_tuyen_id ?? null,
     ],
@@ -770,7 +770,7 @@ async function buildTemplate() {
     { header: 'Họ tên',      key: 'ho_ten',     width: 28 },
     { header: 'Ngày sinh',   key: 'ngay_sinh',  width: 14 },
     { header: 'CCCD',        key: 'cccd',       width: 16 },
-    { header: 'Địa chỉ',     key: 'que_quan',   width: 36 },
+    { header: 'Địa chỉ',     key: 'dia_chi_hien_tai',   width: 36 },
     { header: 'SĐT',         key: 'sdt',        width: 14 },
     { header: 'Vender',      key: 'vender',     width: 16 },
     { header: 'Công ty',     key: 'cong_ty',    width: 24 },

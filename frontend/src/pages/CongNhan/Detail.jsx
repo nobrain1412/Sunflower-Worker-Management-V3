@@ -6,7 +6,6 @@ import { useLichSuPhong, usePhongList, useGiuongList } from '../../hooks/useKtx'
 import { useChamCongCongNhan } from '../../hooks/useChamCong';
 import { useHoatDongCongNhan } from '../../hooks/useHoatDong';
 import { useAuth } from '../../context/AuthContext';
-import ProvinceSelect from '../../components/ProvinceSelect';
 import ChuyenKhoanModal from '../../components/ChuyenKhoanModal';
 import api from '../../hooks/useApi';
 import { useQueryClient } from '@tanstack/react-query';
@@ -182,11 +181,9 @@ function EditModal({ cn, onClose, noiOHienTai, isAdmin }) {
     cccd:             cn.cccd   ?? '',
     ngay_sinh:        toInputDate(cn.ngay_sinh),
     gioi_tinh:        cn.gioi_tinh ?? '',
-    que_quan:         cn.que_quan  ?? '',
     dia_chi_hien_tai: cn.dia_chi_hien_tai ?? '',
     so_dien_thoai:    cn.so_dien_thoai    ?? '',
     ngay_cap_cccd:    toInputDate(cn.ngay_cap_cccd),
-    noi_cap_cccd:     cn.noi_cap_cccd ?? '',
     trang_thai:       cn.trang_thai   ?? 'moi_vao',
     ngay_vao_lam:     toInputDate(cn.ngay_vao_lam),
     ngay_nghi_viec:   toInputDate(cn.ngay_nghi_viec),
@@ -316,19 +313,14 @@ function EditModal({ cn, onClose, noiOHienTai, isAdmin }) {
             </select>
           </div>
           <div style={{ gridColumn: 'span 2', display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <label className="form-label">Quê quán</label>
-            <ProvinceSelect onChange={(val) => setForm((f) => ({ ...f, que_quan: val }))} />
-            {form.que_quan && <div style={{ fontSize: 11, color: 'var(--accent)' }}>Đã chọn: {form.que_quan}</div>}
-          </div>
-          <div style={{ gridColumn: 'span 2', display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <label className="form-label">Địa chỉ hiện tại</label>
+            <label className="form-label">Địa chỉ thường trú</label>
             <input className="form-input" name="dia_chi_hien_tai" value={form.dia_chi_hien_tai} onChange={handleChange} />
           </div>
         </div>
 
         <div style={{ ...m.section, marginTop: 14 }}>Thông tin CCCD</div>
         <div className="cn-edit-grid" style={m.grid}>
-          {[['ngay_cap_cccd','Ngày cấp','date'],['noi_cap_cccd','Nơi cấp','text']].map(([name, label, type]) => (
+          {[['ngay_cap_cccd','Ngày cấp','date']].map(([name, label, type]) => (
             <div key={name} style={m.fieldWrap}>
               <label className="form-label">{label}</label>
               <input className="form-input" name={name} type={type} value={form[name]} onChange={handleChange} />
@@ -678,8 +670,7 @@ export default function CongNhanDetail() {
             <Field label="Ngày sinh" value={cn.ngay_sinh ? new Date(cn.ngay_sinh).toLocaleDateString('vi-VN') : null} />
             <Field label="Giới tính" value={cn.gioi_tinh} />
             <Field label="Số điện thoại" value={cn.so_dien_thoai} />
-            <Field label="Quê quán" value={cn.que_quan} />
-            <Field label="Địa chỉ hiện tại" value={cn.dia_chi_hien_tai} />
+            <Field label="Địa chỉ thường trú" value={cn.dia_chi_hien_tai} />
           </div>
         </div>
 
@@ -689,7 +680,6 @@ export default function CongNhanDetail() {
           <div className="cn-detail-fields" style={s.fields}>
             <Field label="Số CCCD" value={cn.cccd} />
             <Field label="Ngày cấp" value={cn.ngay_cap_cccd ? new Date(cn.ngay_cap_cccd).toLocaleDateString('vi-VN') : null} />
-            <Field label="Nơi cấp" value={cn.noi_cap_cccd} />
           </div>
         </div>
 
