@@ -164,14 +164,16 @@ const EMPTY_FORM = {
 };
 
 export default function CongTy() {
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, isKeToan } = useAuth();
   const isQuanLy = user?.vai_tro === 'quan_ly';
+  // Kế toán được cấp quyền quản lý công ty tương đương admin (tạo/sửa/xoá, gán quản lý, đơn giá)
+  const canManage = isAdmin || isKeToan;
   const isMobile = useIsMobile();
   const { data: res, isLoading } = useCongTyData();
   const capNhat = useCapNhat();
   const taoMoi  = useTaoMoi();
   const xoa     = useXoaCongTy();
-  const quanLyUsers = useQuanLyUsers(isAdmin).data?.data ?? [];
+  const quanLyUsers = useQuanLyUsers(canManage).data?.data ?? [];
   const ganQuanLy = useGanQuanLy();
   const goQuanLy  = useGoQuanLy();
 
@@ -287,7 +289,7 @@ export default function CongTy() {
         <div style={s.card}>
           <div style={s.cardHeader}>
             <div style={s.cardTitle}>Công ty</div>
-            {isAdmin && (
+            {canManage && (
               <button className="btn-primary" style={{ padding: '6px 12px', fontSize: 12 }} onClick={() => { setForm(EMPTY_FORM); setAddModal(true); setErrMsg(''); }}>+ Thêm</button>
             )}
             {isQuanLy && (
@@ -332,7 +334,7 @@ export default function CongTy() {
                   <div style={{ fontSize: 12, color: 'var(--text2)', marginTop: 2 }}>{selected.dia_chi ?? '—'}</div>
                 </div>
                 <div style={{ display: 'flex', gap: 8 }}>
-                  {isAdmin && (
+                  {canManage && (
                     <button className="btn-ghost" onClick={editing ? () => setEditing(false) : openEdit}>
                       {editing ? 'Hủy' : '✏️ Chỉnh sửa'}
                     </button>
@@ -344,7 +346,7 @@ export default function CongTy() {
                       ✏️ Đề xuất sửa
                     </button>
                   )}
-                  {isAdmin && !editing && (
+                  {canManage && !editing && (
                     <button
                       onClick={async () => {
                         if (!window.confirm(`XOÁ VĨNH VIỄN công ty "${selected.ten_cong_ty}"?\n\nToàn bộ phân công, chấm công và phân quyền quản lý của công ty này sẽ bị xoá. Công nhân sẽ được gỡ khỏi công ty (không bị xoá). Hành động KHÔNG THỂ hoàn tác.`)) return;
@@ -383,7 +385,7 @@ export default function CongTy() {
                             {q.so_dien_thoai || q.ten_dang_nhap}
                           </div>
                         </div>
-                        {isAdmin && (
+                        {canManage && (
                           <button
                             title="Gỡ quản lý khỏi công ty"
                             onClick={async () => {
@@ -397,8 +399,8 @@ export default function CongTy() {
                     ))}
                   </div>
                 )}
-                {/* Admin: gán thêm quản lý */}
-                {isAdmin && (() => {
+                {/* Admin / kế toán: gán thêm quản lý */}
+                {canManage && (() => {
                   const assignedIds = new Set((selected.quan_ly ?? []).map((q) => q.id));
                   const choices = quanLyUsers.filter((u) => !assignedIds.has(u.id));
                   return (
@@ -482,8 +484,8 @@ export default function CongTy() {
                 </>
               )}
             </div>
-            {/* Đơn giá thưởng vender / CTV — chỉ admin xem & sửa */}
-            {isAdmin && (
+            {/* Đơn giá thưởng vender / CTV — admin & kế toán xem & sửa */}
+            {canManage && (
               <div style={s.card}>
                 <RateCongTyPanel congTyId={selected.id} canEdit />
               </div>

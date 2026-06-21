@@ -1,10 +1,13 @@
 /**
- * Trang Quản lý nhân sự — admin có 3 tab:
+ * Trang Quản lý nhân sự — admin có 4 tab:
  *   - Tất cả user (quản lý role, CRUD)
- *   - Nhân viên (admin/quan_ly/ke_toan/vender) — kèm công ty quản lý + tổng CN
+ *   - Nhân viên (admin/quan_ly/ke_toan) — kèm công ty quản lý + tổng CN
+ *   - Vender — tách riêng, kèm mã vender + số CN tuyển
  *   - Cộng tác viên — kèm số người tuyển + tiền công
+ *
+ * Mọi bảng (desktop) cho phép sort bằng cách bấm vào đầu cột.
  */
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useUserList, useCongTacVien, useTaoUser, useCapNhatUser, useXoaUser, useThanhToanCongTacVien } from '../../hooks/useUsers';
 import { useCongTyList } from '../../hooks/useCongNhan';
@@ -29,6 +32,78 @@ const ROLE_PILL = {
 
 function fmtMoney(n) {
   return Number(n || 0).toLocaleString('vi-VN') + 'đ';
+}
+
+/**
+ * Bảng có thể sort khi bấm vào đầu cột.
+ * columns: [{ key, label, render(row), sortValue(row)?, noClick? }]
+ *   - sortValue vắng mặt → cột không sort được (vd cột nút thao tác)
+ *   - noClick → ô không kích hoạt onRowClick (cho cột nút)
+ * Mỗi tab render 1 instance riêng nên sort tự reset khi đổi tab.
+ */
+function SortableTable({ columns, rows, emptyText, getRowKey, onRowClick, rowClickable }) {
+  const [sort, setSort] = useState({ key: null, dir: 'asc' });
+
+  function toggleSort(key) {
+    setSort((cur) => cur.key === key
+      ? { key, dir: cur.dir === 'asc' ? 'desc' : 'asc' }
+      : { key, dir: 'asc' });
+  }
+
+  const sorted = useMemo(() => {
+    const col = sort.key && columns.find((c) => c.key === sort.key && c.sortValue);
+    if (!col) return rows;
+    const arr = [...rows].sort((a, b) => {
+      const va = col.sortValue(a);
+      const vb = col.sortValue(b);
+      let cmp;
+      if (typeof va === 'number' && typeof vb === 'number') cmp = va - vb;
+      else cmp = String(va ?? '').localeCompare(String(vb ?? ''), 'vi', { numeric: true });
+      return sort.dir === 'asc' ? cmp : -cmp;
+    });
+    return arr;
+  }, [rows, sort, columns]);
+
+  return (
+    <table style={s.table}>
+      <thead>
+        <tr>
+          {columns.map((c) => {
+            const sortable = !!c.sortValue;
+            const active = sort.key === c.key;
+            return (
+              <th key={c.key}
+                style={{ ...s.th, ...(sortable ? s.thSortable : {}) }}
+                onClick={sortable ? () => toggleSort(c.key) : undefined}>
+                {c.label}
+                {sortable && (
+                  <span style={{ ...s.sortArrow, ...(active ? s.sortArrowActive : {}) }}>
+                    {active ? (sort.dir === 'asc' ? '▲' : '▼') : '↕'}
+                  </span>
+                )}
+              </th>
+            );
+          })}
+        </tr>
+      </thead>
+      <tbody>
+        {sorted.length === 0 ? (
+          <tr><td colSpan={columns.length} style={s.empty}>{emptyText}</td></tr>
+        ) : sorted.map((row) => (
+          <tr key={getRowKey(row)}
+            style={{ ...s.tr, cursor: rowClickable ? 'pointer' : 'default' }}
+            onClick={rowClickable && onRowClick ? () => onRowClick(row) : undefined}>
+            {columns.map((c) => (
+              <td key={c.key} style={s.td}
+                onClick={c.noClick ? (e) => e.stopPropagation() : undefined}>
+                {c.render(row)}
+              </td>
+            ))}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
 }
 
 function UserModal({ user, onClose }) {
@@ -221,7 +296,7 @@ function UserModal({ user, onClose }) {
 
 export default function NhanSu() {
   const navigate = useNavigate();
-  const { isAdmin, isQuanLy } = useAuth();
+  const { isAdmin } = useAuth();
   const defaultTab = isAdmin ? 'user' : 'ctv';
   const [tab, setTab] = useState(defaultTab);
   const [editing, setEditing] = useState(null);
@@ -243,8 +318,9 @@ export default function NhanSu() {
   const ctvs  = (ctvRes?.data ?? []).filter(matchQ);
   const isMobile = useIsMobile();
 
-  // Nhân viên = mọi role trừ cộng tác viên (theo nghĩa nội bộ)
-  const nhanVien = users.filter((u) => ['admin','quan_ly','ke_toan','vender'].includes(u.vai_tro));
+  // Nhân viên nội bộ = admin/quan_ly/ke_toan (KHÔNG gồm vender — vender có tab riêng)
+  const nhanVien = users.filter((u) => ['admin', 'quan_ly', 'ke_toan'].includes(u.vai_tro));
+  const venders  = users.filter((u) => u.vai_tro === 'vender');
 
   async function handleXoa(u) {
     if (!window.confirm(`Xoá vĩnh viễn user "${u.ho_ten}"?`)) return;
@@ -272,12 +348,87 @@ export default function NhanSu() {
     }
   }
 
+  // ─── Cấu hình cột cho từng bảng (desktop) ───────────────────
+  const editBtn = (u) => (
+    <button className="btn-ghost" style={{ fontSize: 11, padding: '4px 8px' }}
+      onClick={(e) => { e.stopPropagation(); setEditing(u); setShowAdd(true); }}>Sửa</button>
+  );
+  const delBtn = (u) => (
+    <button style={{ ...s.delBtn, marginLeft: 4 }}
+      onClick={(e) => { e.stopPropagation(); handleXoa(u); }}>🗑</button>
+  );
+  const rolePill = (u) => (
+    <span className={`pill ${ROLE_PILL[u.vai_tro] ?? 'pill-blue'}`}>{ROLE_LABEL[u.vai_tro] ?? u.vai_tro}</span>
+  );
+  const soCnDangLam = (u) => u.vai_tro === 'quan_ly' ? Number(u.so_cn_quan_ly || 0) : Number(u.so_cn_tuyen || 0);
+
+  const userColumns = [
+    { key: 'ho_ten', label: 'Tên', sortValue: (u) => u.ho_ten, render: (u) => <b style={{ color: 'var(--text1)' }}>{u.ho_ten}</b> },
+    { key: 'ten_dang_nhap', label: 'Đăng nhập', sortValue: (u) => u.ten_dang_nhap, render: (u) => <span style={s.mono}>{u.ten_dang_nhap}</span> },
+    { key: 'vai_tro', label: 'Vai trò', sortValue: (u) => ROLE_LABEL[u.vai_tro] ?? u.vai_tro, render: rolePill },
+    { key: 'so_dien_thoai', label: 'SĐT', sortValue: (u) => u.so_dien_thoai ?? '', render: (u) => <span style={s.sub}>{u.so_dien_thoai ?? '—'}</span> },
+    { key: 'active', label: 'Trạng thái', sortValue: (u) => (u.active ? 1 : 0),
+      render: (u) => <span className={`pill ${u.active ? 'pill-green' : 'pill-red'}`}>{u.active ? 'Hoạt động' : 'Đã khoá'}</span> },
+    { key: '_actions', label: '', noClick: true, render: (u) => <>{editBtn(u)}{delBtn(u)}</> },
+  ];
+
+  const nhanVienColumns = [
+    { key: 'ho_ten', label: 'Tên', sortValue: (u) => u.ho_ten, render: (u) => <b style={{ color: 'var(--text1)' }}>{u.ho_ten}</b> },
+    { key: 'vai_tro', label: 'Vai trò', sortValue: (u) => ROLE_LABEL[u.vai_tro] ?? u.vai_tro, render: rolePill },
+    { key: 'so_cn', label: 'Tổng CN đang làm', sortValue: soCnDangLam, render: (u) => <span style={s.mono}>{soCnDangLam(u)}</span> },
+    { key: 'cong_ty_quan_ly_ten', label: 'Công ty quản lý', sortValue: (u) => u.cong_ty_quan_ly_ten ?? '', render: (u) => <span style={s.sub}>{u.cong_ty_quan_ly_ten || '—'}</span> },
+    { key: '_actions', label: '', noClick: true, render: (u) => editBtn(u) },
+  ];
+
+  const venderColumns = [
+    { key: 'ho_ten', label: 'Tên', sortValue: (u) => u.ho_ten, render: (u) => <b style={{ color: 'var(--text1)' }}>{u.ho_ten}</b> },
+    { key: 'ten_dang_nhap', label: 'Đăng nhập', sortValue: (u) => u.ten_dang_nhap, render: (u) => <span style={s.mono}>{u.ten_dang_nhap}</span> },
+    { key: 'ma_vender', label: 'Mã vender', sortValue: (u) => u.ma_vender ?? '', render: (u) => <span style={s.mono}>{u.ma_vender || '—'}</span> },
+    { key: 'so_dien_thoai', label: 'SĐT', sortValue: (u) => u.so_dien_thoai ?? '', render: (u) => <span style={s.sub}>{u.so_dien_thoai ?? '—'}</span> },
+    { key: 'so_cn_tuyen', label: 'Số CN tuyển', sortValue: (u) => Number(u.so_cn_tuyen || 0), render: (u) => <span style={s.mono}>{Number(u.so_cn_tuyen || 0)}</span> },
+    { key: 'active', label: 'Trạng thái', sortValue: (u) => (u.active ? 1 : 0),
+      render: (u) => <span className={`pill ${u.active ? 'pill-green' : 'pill-red'}`}>{u.active ? 'Hoạt động' : 'Đã khoá'}</span> },
+    { key: '_actions', label: '', noClick: true, render: (u) => <>{editBtn(u)}{delBtn(u)}</> },
+  ];
+
+  const ctvColumns = [
+    { key: 'ho_ten', label: 'Tên', sortValue: (u) => u.ho_ten, render: (u) => <b style={{ color: 'var(--text1)' }}>{u.ho_ten}</b> },
+    { key: 'so_dien_thoai', label: 'SĐT', sortValue: (u) => u.so_dien_thoai ?? '', render: (u) => <span style={s.sub}>{u.so_dien_thoai ?? '—'}</span> },
+    { key: 'so_cn_tuyen', label: 'Số người tuyển', sortValue: (u) => Number(u.so_cn_tuyen || 0), render: (u) => <span style={s.mono}>{Number(u.so_cn_tuyen || 0)}</span> },
+    { key: 'so_cn_da_thanh_toan', label: 'Đã thanh toán', sortValue: (u) => Number(u.so_cn_da_thanh_toan || 0),
+      render: (u) => (
+        <>
+          <span style={{ ...s.mono, color: 'var(--teal)', fontWeight: 700 }}>{Number(u.so_cn_da_thanh_toan || 0)}</span>
+          {Number(u.tong_da_thanh_toan || 0) > 0 && (
+            <span style={{ ...s.sub, marginLeft: 6 }}>({fmtMoney(u.tong_da_thanh_toan)})</span>
+          )}
+        </>
+      ) },
+    { key: 'hinh_thuc', label: 'Hình thức', sortValue: (u) => u.hinh_thuc_thanh_toan === 'hang_thang' ? 'Nhận hàng tháng' : 'Lấy 1 lần',
+      render: (u) => <span style={s.sub}>{u.hinh_thuc_thanh_toan === 'hang_thang' ? 'Nhận hàng tháng' : 'Lấy 1 lần'}</span> },
+    { key: 'du_dieu_kien', label: 'Đủ điều kiện 1 lần', sortValue: (u) => Number(u.so_cn_du_dieu_kien_mot_lan || 0),
+      render: (u) => <span style={s.mono}>{u.hinh_thuc_thanh_toan === 'hang_thang' ? '—' : `${Number(u.so_cn_du_dieu_kien_mot_lan || 0)} người`}</span> },
+    { key: 'du_kien_thanh_toan', label: 'Dự kiến thanh toán', sortValue: (u) => Number(u.du_kien_thanh_toan || 0),
+      render: (u) => <span style={{ ...s.mono, color: 'var(--green)', fontWeight: 700 }}>{fmtMoney(u.du_kien_thanh_toan)}</span> },
+    { key: '_actions', label: '', noClick: true, render: (u) => (
+      <>
+        <button className="btn-ghost" style={{ fontSize: 11, padding: '4px 8px', marginRight: 4 }}
+          onClick={() => navigate(`/cong-tac-vien/${u.id}`)}>📊 Chi tiết</button>
+        <button className="btn-primary" style={{ fontSize: 11, padding: '4px 8px' }}
+          onClick={() => handleThanhToan(u)} disabled={thanhToanCtv.isPending}>Thanh toán</button>
+        <button className="btn-ghost" style={{ fontSize: 11, padding: '4px 8px' }}
+          onClick={() => { setEditing(u); setShowAdd(true); }}>Sửa</button>
+        {delBtn(u)}
+      </>
+    ) },
+  ];
+
   return (
     <div style={s.root}>
       <div style={{ ...s.header, ...(isMobile ? s.headerMobile : {}) }}>
         <div style={{ ...s.tabs, ...(isMobile ? s.tabsMobile : {}) }}>
           {(isAdmin
-            ? [['user','Tất cả user'],['nhan-vien','Nhân viên'],['ctv','Cộng tác viên']]
+            ? [['user','Tất cả user'],['nhan-vien','Nhân viên'],['vender','Vender'],['ctv','Cộng tác viên']]
             : [['ctv','Cộng tác viên']]
           ).map(([v, l]) => (
             <button key={v} style={{ ...s.tab, ...(tab === v ? s.tabActive : {}) }}
@@ -326,30 +477,14 @@ export default function NhanSu() {
               ))}
             </div>
           ) : (
-            <table style={s.table}>
-              <thead><tr>{['Tên','Đăng nhập','Vai trò','SĐT','Trạng thái',''].map((h, i) => <th key={i} style={s.th}>{h}</th>)}</tr></thead>
-              <tbody>
-                {users.length === 0 ? <tr><td colSpan={6} style={s.empty}>Chưa có user</td></tr> :
-                  users.map((u) => (
-                    <tr key={u.id} style={{ ...s.tr, cursor: isAdmin ? 'pointer' : 'default' }} onClick={() => isAdmin && navigate(`/nhan-vien/${u.id}`)}>
-                      <td style={s.td}><b style={{ color: 'var(--text1)' }}>{u.ho_ten}</b></td>
-                      <td style={s.td}><span style={s.mono}>{u.ten_dang_nhap}</span></td>
-                      <td style={s.td}><span className={`pill ${ROLE_PILL[u.vai_tro] ?? 'pill-blue'}`}>{ROLE_LABEL[u.vai_tro] ?? u.vai_tro}</span></td>
-                      <td style={s.td}><span style={s.sub}>{u.so_dien_thoai ?? '—'}</span></td>
-                      <td style={s.td}>
-                        <span className={`pill ${u.active ? 'pill-green' : 'pill-red'}`}>
-                          {u.active ? 'Hoạt động' : 'Đã khoá'}
-                        </span>
-                      </td>
-                      <td style={s.td}>
-                        <button className="btn-ghost" style={{ fontSize: 11, padding: '4px 8px' }}
-                          onClick={(e) => { e.stopPropagation(); setEditing(u); setShowAdd(true); }}>Sửa</button>
-                        <button style={{ ...s.delBtn, marginLeft: 4 }} onClick={(e) => { e.stopPropagation(); handleXoa(u); }}>🗑</button>
-                      </td>
-                    </tr>
-                  ))}
-              </tbody>
-            </table>
+            <SortableTable
+              columns={userColumns}
+              rows={users}
+              emptyText="Chưa có user"
+              getRowKey={(u) => u.id}
+              rowClickable={isAdmin}
+              onRowClick={(u) => navigate(`/nhan-vien/${u.id}`)}
+            />
           )
         )}
 
@@ -367,7 +502,7 @@ export default function NhanSu() {
                   <div style={m.metaGrid}>
                     <div style={m.metaItem}>
                       <span style={m.metaLabel}>Tổng CN đang làm</span>
-                      <span style={s.mono}>{u.vai_tro === 'quan_ly' ? Number(u.so_cn_quan_ly || 0) : Number(u.so_cn_tuyen || 0)}</span>
+                      <span style={s.mono}>{soCnDangLam(u)}</span>
                     </div>
                     <div style={{ ...m.metaItem, gridColumn: 'span 2' }}>
                       <span style={m.metaLabel}>Công ty quản lý</span>
@@ -381,28 +516,53 @@ export default function NhanSu() {
               ))}
             </div>
           ) : (
-            <table style={s.table}>
-              <thead><tr>{['Tên','Vai trò','Tổng CN đang làm','Công ty quản lý',''].map((h, i) => <th key={i} style={s.th}>{h}</th>)}</tr></thead>
-              <tbody>
-                {nhanVien.length === 0 ? <tr><td colSpan={5} style={s.empty}>Chưa có nhân viên</td></tr> :
-                  nhanVien.map((u) => (
-                    <tr key={u.id} style={{ ...s.tr, cursor: isAdmin ? 'pointer' : 'default' }} onClick={() => isAdmin && navigate(`/nhan-vien/${u.id}`)}>
-                      <td style={s.td}><b style={{ color: 'var(--text1)' }}>{u.ho_ten}</b></td>
-                      <td style={s.td}><span className={`pill ${ROLE_PILL[u.vai_tro] ?? 'pill-blue'}`}>{ROLE_LABEL[u.vai_tro]}</span></td>
-                      <td style={s.td}>
-                        <span style={s.mono}>
-                          {u.vai_tro === 'quan_ly' ? Number(u.so_cn_quan_ly || 0) : Number(u.so_cn_tuyen || 0)}
-                        </span>
-                      </td>
-                      <td style={s.td}><span style={s.sub}>{u.cong_ty_quan_ly_ten || '—'}</span></td>
-                      <td style={s.td}>
-                        <button className="btn-ghost" style={{ fontSize: 11, padding: '4px 8px' }}
-                          onClick={(e) => { e.stopPropagation(); setEditing(u); setShowAdd(true); }}>Sửa</button>
-                      </td>
-                    </tr>
-                  ))}
-              </tbody>
-            </table>
+            <SortableTable
+              columns={nhanVienColumns}
+              rows={nhanVien}
+              emptyText="Chưa có nhân viên"
+              getRowKey={(u) => u.id}
+              rowClickable={isAdmin}
+              onRowClick={(u) => navigate(`/nhan-vien/${u.id}`)}
+            />
+          )
+        )}
+
+        {tab === 'vender' && (
+          isMobile ? (
+            <div style={m.list}>
+              {venders.length === 0 ? (
+                <div style={s.empty}>Chưa có vender</div>
+              ) : venders.map((u) => (
+                <div key={u.id} style={m.card} onClick={() => isAdmin && navigate(`/nhan-vien/${u.id}`)}>
+                  <div style={m.head}>
+                    <b style={{ color: 'var(--text1)', fontSize: 14 }}>{u.ho_ten}</b>
+                    <span className="pill pill-amber">Vender</span>
+                  </div>
+                  <div style={m.metaGrid}>
+                    <div style={m.metaItem}><span style={m.metaLabel}>Đăng nhập</span><span style={s.mono}>{u.ten_dang_nhap}</span></div>
+                    <div style={m.metaItem}><span style={m.metaLabel}>Mã vender</span><span style={s.mono}>{u.ma_vender || '—'}</span></div>
+                    <div style={m.metaItem}><span style={m.metaLabel}>SĐT</span><span style={s.sub}>{u.so_dien_thoai ?? '—'}</span></div>
+                    <div style={m.metaItem}><span style={m.metaLabel}>Số CN tuyển</span><span style={s.mono}>{Number(u.so_cn_tuyen || 0)}</span></div>
+                    <div style={m.metaItem}><span style={m.metaLabel}>Trạng thái</span>
+                      <span className={`pill ${u.active ? 'pill-green' : 'pill-red'}`}>{u.active ? 'Hoạt động' : 'Đã khoá'}</span>
+                    </div>
+                  </div>
+                  <div style={m.actions}>
+                    <button className="btn-ghost" style={{ fontSize: 11, padding: '4px 8px' }} onClick={(e) => { e.stopPropagation(); setEditing(u); setShowAdd(true); }}>Sửa</button>
+                    <button style={{ ...s.delBtn, marginLeft: 4 }} onClick={(e) => { e.stopPropagation(); handleXoa(u); }}>🗑</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <SortableTable
+              columns={venderColumns}
+              rows={venders}
+              emptyText="Chưa có vender"
+              getRowKey={(u) => u.id}
+              rowClickable={isAdmin}
+              onRowClick={(u) => navigate(`/nhan-vien/${u.id}`)}
+            />
           )
         )}
 
@@ -443,47 +603,14 @@ export default function NhanSu() {
               ))}
             </div>
           ) : (
-            <table style={s.table}>
-              <thead><tr>{['Tên','SĐT','Số người tuyển','Đã thanh toán','Hình thức','Đủ điều kiện 1 lần','Dự kiến thanh toán',''].map((h, i) => <th key={i} style={s.th}>{h}</th>)}</tr></thead>
-              <tbody>
-                {ctvs.length === 0 ? <tr><td colSpan={8} style={s.empty}>Chưa có cộng tác viên</td></tr> :
-                  ctvs.map((u) => (
-                    <tr key={u.id} style={{ ...s.tr, cursor: 'pointer' }} onClick={() => navigate(`/cong-tac-vien/${u.id}`)}>
-                      <td style={s.td}><b style={{ color: 'var(--text1)' }}>{u.ho_ten}</b></td>
-                      <td style={s.td}><span style={s.sub}>{u.so_dien_thoai ?? '—'}</span></td>
-                      <td style={s.td}><span style={s.mono}>{Number(u.so_cn_tuyen || 0)}</span></td>
-                      <td style={s.td}>
-                        <span style={{ ...s.mono, color: 'var(--teal)', fontWeight: 700 }}>{Number(u.so_cn_da_thanh_toan || 0)}</span>
-                        {Number(u.tong_da_thanh_toan || 0) > 0 && (
-                          <span style={{ ...s.sub, marginLeft: 6 }}>({fmtMoney(u.tong_da_thanh_toan)})</span>
-                        )}
-                      </td>
-                      <td style={s.td}><span style={s.sub}>{u.hinh_thuc_thanh_toan === 'hang_thang' ? 'Nhận hàng tháng' : 'Lấy 1 lần'}</span></td>
-                      <td style={s.td}>
-                        <span style={s.mono}>
-                          {u.hinh_thuc_thanh_toan === 'hang_thang' ? '—' : `${Number(u.so_cn_du_dieu_kien_mot_lan || 0)} người`}
-                        </span>
-                      </td>
-                      <td style={s.td}><span style={{ ...s.mono, color: 'var(--green)', fontWeight: 700 }}>{fmtMoney(u.du_kien_thanh_toan)}</span></td>
-                      <td style={s.td} onClick={(e) => e.stopPropagation()}>
-                        <button className="btn-ghost" style={{ fontSize: 11, padding: '4px 8px', marginRight: 4 }}
-                          onClick={() => navigate(`/cong-tac-vien/${u.id}`)}>📊 Chi tiết</button>
-                        <button
-                          className="btn-primary"
-                          style={{ fontSize: 11, padding: '4px 8px' }}
-                          onClick={() => handleThanhToan(u)}
-                          disabled={thanhToanCtv.isPending}
-                        >
-                          Thanh toán
-                        </button>
-                        <button className="btn-ghost" style={{ fontSize: 11, padding: '4px 8px' }}
-                          onClick={() => { setEditing(u); setShowAdd(true); }}>Sửa</button>
-                        <button style={{ ...s.delBtn, marginLeft: 4 }} onClick={() => handleXoa(u)}>🗑</button>
-                      </td>
-                    </tr>
-                  ))}
-              </tbody>
-            </table>
+            <SortableTable
+              columns={ctvColumns}
+              rows={ctvs}
+              emptyText="Chưa có cộng tác viên"
+              getRowKey={(u) => u.id}
+              rowClickable
+              onRowClick={(u) => navigate(`/cong-tac-vien/${u.id}`)}
+            />
           )
         )}
       </div>
@@ -510,6 +637,9 @@ const s = {
   table: { width: '100%', borderCollapse: 'collapse' },
   th: { fontSize: 10, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase',
     letterSpacing: '0.06em', textAlign: 'left', padding: '0 12px 10px 0', borderBottom: '1px solid var(--border)' },
+  thSortable: { cursor: 'pointer', userSelect: 'none' },
+  sortArrow: { marginLeft: 4, fontSize: 9, color: 'var(--text3)' },
+  sortArrowActive: { color: 'var(--accent)' },
   tr: { borderBottom: '1px solid var(--border)' },
   td: { padding: '10px 12px 10px 0', verticalAlign: 'middle', fontSize: 13, color: 'var(--text2)' },
   sub: { fontSize: 12, color: 'var(--text2)' },

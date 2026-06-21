@@ -45,8 +45,9 @@ router.get('/assignable', asyncWrapper(async (_req, res) => {
   sendSuccess(res, result.rows);
 }));
 
-// GET /api/users — danh sách toàn bộ user (admin)
-router.get('/', requireRole('admin'), asyncWrapper(async (req, res) => {
+// GET /api/users — danh sách toàn bộ user (admin + kế toán)
+// Kế toán cần đọc danh sách quản lý/vender/CTV để quản lý công ty (gán quản lý, đơn giá).
+router.get('/', requireRole('admin', 'ke_toan'), asyncWrapper(async (req, res) => {
   const rows = await userModel.findAll({ vai_tro: req.query.vai_tro });
   sendSuccess(res, rows);
 }));

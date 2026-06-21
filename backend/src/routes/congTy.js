@@ -55,23 +55,23 @@ const capNhatSchema = taoMoiSchema.extend({
 router.get('/',    authenticate, ctrl.getDanhSach);
 router.get('/:id', authenticate, ctrl.getChiTiet);
 
-// Tạo/sửa: chỉ admin
-router.post('/',    requireRole('admin'), validate(taoMoiSchema),  ctrl.postTaoMoi);
-router.put('/:id',  requireRole('admin'), validate(capNhatSchema), ctrl.putCapNhat);
+// Tạo/sửa: admin + kế toán (kế toán được quyền quản lý công ty)
+router.post('/',    requireRole('admin', 'ke_toan'), validate(taoMoiSchema),  ctrl.postTaoMoi);
+router.put('/:id',  requireRole('admin', 'ke_toan'), validate(capNhatSchema), ctrl.putCapNhat);
 
-// Xoá thật công ty (admin) — kèm toàn bộ dữ liệu phụ thuộc
+// Xoá thật công ty (admin + kế toán) — kèm toàn bộ dữ liệu phụ thuộc
 const asyncWrapper = require('../utils/asyncWrapper');
 const { sendSuccess } = require('../utils/response');
 const congTyModel = require('../models/congTyModel');
-router.delete('/:id', requireRole('admin'), asyncWrapper(async (req, res) => {
+router.delete('/:id', requireRole('admin', 'ke_toan'), asyncWrapper(async (req, res) => {
   const data = await congTyModel.hardDelete(toPositiveInt(req.params.id, 'ID công ty'));
   if (!data) { const e = new Error('Không tìm thấy công ty'); e.statusCode = 404; throw e; }
   sendSuccess(res, null, 'Đã xoá công ty');
 }));
 
-// Quản lý phân công: chỉ admin
-router.post('/:id/quan-ly',           requireRole('admin'), ctrl.postGanQuanLy);
-router.delete('/:id/quan-ly/:userId', requireRole('admin'), ctrl.deleteGoQuanLy);
+// Quản lý phân công: admin + kế toán
+router.post('/:id/quan-ly',           requireRole('admin', 'ke_toan'), ctrl.postGanQuanLy);
+router.delete('/:id/quan-ly/:userId', requireRole('admin', 'ke_toan'), ctrl.deleteGoQuanLy);
 
 // ─── Đơn giá thưởng theo (user × công ty) ────────────────────
 // GET    /api/cong-ty/:id/rates              — danh sách rate của 1 công ty
@@ -92,7 +92,7 @@ router.get('/:id/rates',
 );
 
 router.put('/:id/rates/:userId',
-  requireRole('admin'),
+  requireRole('admin', 'ke_toan'),
   validate(rateSchema),
   asyncWrapper(async (req, res) => {
     const congTyId = toPositiveInt(req.params.id, 'ID công ty');
@@ -108,7 +108,7 @@ router.put('/:id/rates/:userId',
 );
 
 router.delete('/:id/rates/:userId',
-  requireRole('admin'),
+  requireRole('admin', 'ke_toan'),
   asyncWrapper(async (req, res) => {
     const congTyId = toPositiveInt(req.params.id, 'ID công ty');
     const userId   = toPositiveInt(req.params.userId, 'ID user');

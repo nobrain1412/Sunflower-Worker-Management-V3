@@ -96,6 +96,7 @@ export function AuthProvider({ children }) {
   const isAdmin   = user?.vai_tro === 'admin';
   const isQuanLy  = user?.vai_tro === 'quan_ly';
   const isVender  = user?.vai_tro === 'vender';
+  const isKeToan  = user?.vai_tro === 'ke_toan';
   const canEdit   = isAdmin || isQuanLy;  // có thể sửa CN
 
   useEffect(() => {
@@ -146,7 +147,7 @@ export function AuthProvider({ children }) {
     <AuthContext.Provider value={{
       user, login, logout, updateUser, isLoggedIn: !!user, isAuthReady,
       selectedCongTyId, chonCongTy,
-      isAdmin, isQuanLy, isVender, canEdit,
+      isAdmin, isQuanLy, isVender, isKeToan, canEdit,
     }}>
       {children}
     </AuthContext.Provider>
