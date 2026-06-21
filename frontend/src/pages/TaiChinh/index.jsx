@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { useGiaoDichList, useTongThang, useTaoGiaoDich, useXoaGiaoDich, useDanhMuc, useTaoDanhMuc, useCapNhatDanhMuc, useCapNhatHoanTien } from '../../hooks/useTaiChinh';
 import { useTongTheoThang } from '../../hooks/useDashboard';
@@ -283,6 +284,11 @@ export default function TaiChinh() {
   const [thang,         setThang]         = useState(now.getMonth() + 1);
   const [nam,           setNam]           = useState(now.getFullYear());
   const [filterLoai,    setFilterLoai]    = useState('');
+  const [filterNguoiNhan, setFilterNguoiNhan] = useState('');
+
+  // Tìm kiếm theo ?q= từ thanh search Topbar — lọc theo mô tả (danh mục) / ghi chú
+  const [urlParams, setUrlParams] = useSearchParams();
+  const q = (urlParams.get('q') ?? '').trim().toLowerCase();
 
   const { data: gdRes }      = useGiaoDichList({ thang, nam, loai: filterLoai || undefined });
   const { data: tongRes }    = useTongThang(thang, nam);
@@ -302,6 +308,32 @@ export default function TaiChinh() {
   const tongChi  = Number(tongData.tong_chi ?? 0) + Number(tongData.da_hoan ?? 0);
   const tongTieu = Number(tongData.tong_tieu ?? 0);
   const isMobile = useIsMobile();
+
+  // Danh sách người nhận (chỉ user — lấy từ nguoi_nhan_id; không gồm công nhân)
+  const nguoiNhanOptions = useMemo(() => {
+    const map = new Map();
+    gdList.forEach((g) => {
+      if (g.nguoi_nhan_id && !map.has(g.nguoi_nhan_id)) {
+        map.set(g.nguoi_nhan_id, g.nguoi_nhan_ten ?? `User #${g.nguoi_nhan_id}`);
+      }
+    });
+    return [...map.entries()].map(([id, ten]) => ({ id, ten }));
+  }, [gdList]);
+
+  // Lọc client-side: theo từ khoá (mô tả/ghi chú) + theo người nhận tiền (user)
+  const filteredList = useMemo(() => gdList.filter((g) => {
+    if (q) {
+      const hay = `${g.ghi_chu ?? ''} ${g.danh_muc_ten ?? ''}`.toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    if (filterNguoiNhan && String(g.nguoi_nhan_id ?? '') !== filterNguoiNhan) return false;
+    return true;
+  }), [gdList, q, filterNguoiNhan]);
+
+  const hasFilter = !!q || !!filterNguoiNhan;
+  const emptyMsg = hasFilter
+    ? 'Không tìm thấy giao dịch phù hợp với bộ lọc'
+    : `Không có giao dịch nào trong tháng ${thang}/${nam}`;
 
   async function handleXoa(gd) {
     if (!window.confirm(`Bạn chắc muốn xoá giao dịch ${fmt(gd.so_tien)} này?`)) return;
@@ -367,11 +399,27 @@ export default function TaiChinh() {
                     <option value="tieu">Tiêu</option>
                     <option value="tam_ung">Tạm ứng</option>
                   </select>
+                  {nguoiNhanOptions.length > 0 && (
+                    <select style={s.filterSelect} value={filterNguoiNhan} onChange={(e) => setFilterNguoiNhan(e.target.value)}>
+                      <option value="">Tất cả người nhận</option>
+                      {nguoiNhanOptions.map((o) => <option key={o.id} value={o.id}>{o.ten}</option>)}
+                    </select>
+                  )}
                 </>
               )}
               <button className="btn-primary" style={{ padding: '6px 12px', fontSize: 12 }} onClick={() => setAddModal(true)}>+ Thêm</button>
             </div>
           </div>
+
+          {tab === 'giao-dich' && q && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text2)', marginBottom: 12 }}>
+              Đang tìm: <b style={{ color: 'var(--text1)' }}>{urlParams.get('q')}</b>
+              <button className="btn-ghost" style={{ fontSize: 11, padding: '2px 8px' }}
+                onClick={() => { urlParams.delete('q'); setUrlParams(urlParams, { replace: true }); }}>
+                ✕ Xoá tìm
+              </button>
+            </div>
+          )}
 
           {tab === 'giao-dich' && isMobile && (
             <div style={mobile.filterPanel}>
@@ -390,16 +438,22 @@ export default function TaiChinh() {
                 <option value="tieu">Tiêu</option>
                 <option value="tam_ung">Tạm ứng</option>
               </select>
+              {nguoiNhanOptions.length > 0 && (
+                <select style={s.filterSelect} value={filterNguoiNhan} onChange={(e) => setFilterNguoiNhan(e.target.value)}>
+                  <option value="">Tất cả người nhận</option>
+                  {nguoiNhanOptions.map((o) => <option key={o.id} value={o.id}>{o.ten}</option>)}
+                </select>
+              )}
             </div>
           )}
 
           {tab === 'giao-dich' && isMobile && (
             <div>
-              {gdList.length === 0 ? (
-                <div style={{ padding: '24px 0', textAlign: 'center', color: 'var(--text3)' }}>Không có giao dịch nào trong tháng {thang}/{nam}</div>
+              {filteredList.length === 0 ? (
+                <div style={{ padding: '24px 0', textAlign: 'center', color: 'var(--text3)' }}>{emptyMsg}</div>
               ) : (
                 <div style={mobile.list}>
-                  {gdList.map((g) => (
+                  {filteredList.map((g) => (
                     <MobileGiaoDichCard
                       key={g.id}
                       g={g}
@@ -415,15 +469,15 @@ export default function TaiChinh() {
 
           {tab === 'giao-dich' && !isMobile && (
             <div className="table-scroll">
-              {gdList.length === 0 ? (
-                <div style={{ padding: '30px 0', textAlign: 'center', color: 'var(--text3)' }}>Không có giao dịch nào trong tháng {thang}/{nam}</div>
+              {filteredList.length === 0 ? (
+                <div style={{ padding: '30px 0', textAlign: 'center', color: 'var(--text3)' }}>{emptyMsg}</div>
               ) : (
                 <table style={s.table}>
                   <thead><tr>
                     {['Loại','Danh mục','Số tiền','Ngày','Ghi chú','Hoàn',''].map((h, i) => <th key={i} style={s.th}>{h}</th>)}
                   </tr></thead>
                   <tbody>
-                    {gdList.map((g) => {
+                    {filteredList.map((g) => {
                       const loai  = LOAI_LABEL[g.loai];
                       const isThu = loai?.type === 'thu';
                       const isTieu = loai?.type === 'tieu';

@@ -16,6 +16,7 @@ const PAGE_TITLE = {
 const SEARCH_PLACEHOLDER = {
   '/cong-nhan': 'Tìm công nhân (tên / CCCD / SĐT)...',
   '/nhan-su':   'Tìm nhân viên (tên / SĐT / mã vender)...',
+  '/tai-chinh': 'Tìm giao dịch (mô tả / ghi chú)...',
 };
 
 export default function Topbar({ onMenuClick }) {
