@@ -9,6 +9,8 @@ import { useAuth } from '../../context/AuthContext';
 import ChuyenKhoanModal from '../../components/ChuyenKhoanModal';
 import api from '../../hooks/useApi';
 import { useQueryClient } from '@tanstack/react-query';
+import QrScanner from 'qr-scanner';
+import { parseCccdQr } from '../../utils/parseCccdQr';
 
 const TRANG_THAI_PILL = {
   cho_duyet: { cls: 'pill-amber', label: 'Chờ duyệt' },
@@ -169,6 +171,19 @@ const up = {
   fieldLabel: { fontSize: 10, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', textAlign: 'center' },
 };
 
+// dd/mm/yyyy (từ QR CCCD) → YYYY-MM-DD (định dạng input type="date")
+function ddmmyyyyToIso(s) {
+  if (!s) return '';
+  const m = String(s).match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  return m ? `${m[3]}-${m[2]}-${m[1]}` : '';
+}
+// YYYY-MM-DD → dd/mm/yyyy để hiển thị (không qua Date, tránh lệch múi giờ)
+function isoToDisplay(s) {
+  if (!s) return '';
+  const m = String(s).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : String(s);
+}
+
 // ─── Modal chỉnh sửa ──────────────────────────────────────
 function EditModal({ cn, onClose, noiOHienTai, isAdmin }) {
   const capNhat = useCapNhatCongNhan(cn.id);
@@ -208,6 +223,87 @@ function EditModal({ cn, onClose, noiOHienTai, isAdmin }) {
   const [err, setErr] = useState('');
   const [saving, setSaving] = useState(false);
 
+  // Quét QR CCCD: tự điền field còn trống, field khác biệt → cho chọn ghi đè/giữ nguyên
+  const [cccdFile, setCccdFile]       = useState(null);
+  const [cccdPreview, setCccdPreview] = useState(null);
+  const [scanStatus, setScanStatus]   = useState(''); // '' | 'scanning' | 'ok' | 'error'
+  const [scanErr, setScanErr]         = useState('');
+  const [conflicts, setConflicts]     = useState([]);
+
+  async function handleCccdScan(file) {
+    if (!file) return;
+    setCccdFile(file);
+    setScanErr('');
+    const reader = new FileReader();
+    reader.onload = (e) => setCccdPreview(e.target.result);
+    reader.readAsDataURL(file);
+
+    setScanStatus('scanning');
+    let parsed = null;
+    try {
+      const result = await QrScanner.scanImage(file, { returnDetailedScanResult: true });
+      parsed = parseCccdQr(result?.data ?? result);
+    } catch {
+      parsed = null;
+    }
+    if (!parsed) {
+      setConflicts([]);
+      setScanStatus('error');
+      setScanErr('Không đọc được mã QR CCCD trong ảnh. Ảnh vẫn được lưu khi bấm Lưu — bạn có thể tự nhập thông tin.');
+      return;
+    }
+
+    // Map field QR → field trong form chỉnh sửa
+    const mapping = [
+      { key: 'cccd',             qr: parsed.cccd,      label: 'Số CCCD',            isDate: false },
+      { key: 'ho_ten',           qr: parsed.ho_ten,    label: 'Họ và tên',          isDate: false },
+      { key: 'ngay_sinh',        qr: parsed.ngay_sinh, label: 'Ngày sinh',          isDate: true  },
+      { key: 'gioi_tinh',        qr: parsed.gioi_tinh, label: 'Giới tính',          isDate: false },
+      { key: 'dia_chi_hien_tai', qr: parsed.dia_chi,   label: 'Địa chỉ thường trú', isDate: false },
+      { key: 'ngay_cap_cccd',    qr: parsed.ngay_cap,  label: 'Ngày cấp CCCD',      isDate: true  },
+    ];
+
+    const autofill = {};
+    const newConflicts = [];
+    for (const item of mapping) {
+      const qrRaw = (item.qr ?? '').toString().trim();
+      if (!qrRaw) continue;
+      const qrValue = item.isDate ? ddmmyyyyToIso(qrRaw) : qrRaw;
+      if (!qrValue) continue; // ngày QR không hợp lệ → bỏ qua
+      const currentVal = (form[item.key] ?? '').toString().trim();
+      if (!currentVal) {
+        autofill[item.key] = qrValue;                 // điền field còn trống
+      } else if (currentVal !== String(qrValue)) {
+        newConflicts.push({
+          key: item.key,
+          label: item.label,
+          currentDisplay: item.isDate ? isoToDisplay(currentVal) : currentVal,
+          qrDisplay: item.isDate ? qrRaw : qrValue,
+          qrValue,
+        });
+      }
+    }
+    if (Object.keys(autofill).length) setForm((f) => ({ ...f, ...autofill }));
+    setConflicts(newConflicts);
+    setScanStatus('ok');
+  }
+
+  function resolveConflict(c, overwrite) {
+    if (overwrite) setForm((f) => ({ ...f, [c.key]: c.qrValue }));
+    setConflicts((cs) => cs.filter((x) => x.key !== c.key));
+  }
+
+  function resolveAll(overwrite) {
+    if (overwrite) {
+      setForm((f) => {
+        const next = { ...f };
+        conflicts.forEach((c) => { next[c.key] = c.qrValue; });
+        return next;
+      });
+    }
+    setConflicts([]);
+  }
+
   function handleChange(e) {
     const { name, value, type, checked } = e.target;
     setForm((f) => {
@@ -231,6 +327,14 @@ function EditModal({ cn, onClose, noiOHienTai, isAdmin }) {
     setErr('');
     setSaving(true);
     try {
+      // Lưu ảnh CCCD mặt trước (nếu vừa đính kèm/quét) trước khi cập nhật thông tin
+      if (cccdFile) {
+        const fd = new FormData();
+        fd.append('cccd_mat_truoc', cccdFile);
+        await api.post(`/cong-nhan/${cn.id}/upload-anh`, fd, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+      }
       const payload = {};
       for (const [k, v] of Object.entries(form)) {
         if (['ktx_id', 'phong_id', 'giuong_id', 'phong_tro_id'].includes(k)) continue;
@@ -289,7 +393,58 @@ function EditModal({ cn, onClose, noiOHienTai, isAdmin }) {
       <div style={M.modal}>
         <div style={M.title}>Chỉnh sửa — {cn.ho_ten}</div>
 
-        <div style={m.section}>Thông tin cá nhân</div>
+        <div style={m.section}>Quét QR CCCD tự điền</div>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap', marginBottom: 6 }}>
+          <label style={qr.uploadCard}>
+            {cccdPreview ? (
+              <img src={cccdPreview} alt="CCCD mặt trước" style={qr.preview} />
+            ) : (
+              <div style={qr.placeholder}>
+                <div style={{ fontSize: 22 }}>🪪</div>
+                <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 4 }}>Thêm ảnh CCCD</div>
+              </div>
+            )}
+            <input type="file" accept="image/*" style={{ display: 'none' }}
+              onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; handleCccdScan(f); }} />
+          </label>
+          <div style={{ flex: 1, minWidth: 180, fontSize: 12, color: 'var(--text2)', lineHeight: 1.5 }}>
+            Thêm ảnh mặt trước CCCD gắn chip — hệ thống tự đọc mã QR, điền các trường còn trống và lưu ảnh vào hồ sơ.
+            {scanStatus === 'scanning' && <div style={{ marginTop: 6, color: 'var(--accent)' }}>⏳ Đang đọc mã QR...</div>}
+            {scanStatus === 'ok' && (
+              <div style={{ marginTop: 6, color: 'var(--green)' }}>
+                ✓ Đã đọc QR{conflicts.length ? ' — có thông tin khác biệt, chọn xử lý bên dưới' : ' — đã điền các trường còn trống'}
+              </div>
+            )}
+            {scanStatus === 'error' && <div style={{ marginTop: 6, color: 'var(--red)' }}>{scanErr}</div>}
+          </div>
+        </div>
+
+        {conflicts.length > 0 && (
+          <div style={qr.conflictBox}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--amber)' }}>Thông tin từ CCCD khác với dữ liệu hiện tại</div>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button type="button" className="btn-ghost" style={{ fontSize: 11, padding: '3px 8px' }} onClick={() => resolveAll(true)}>Ghi đè tất cả</button>
+                <button type="button" className="btn-ghost" style={{ fontSize: 11, padding: '3px 8px' }} onClick={() => resolveAll(false)}>Giữ tất cả</button>
+              </div>
+            </div>
+            {conflicts.map((c) => (
+              <div key={c.key} style={qr.conflictRow}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{c.label}</div>
+                  <div style={{ fontSize: 12, color: 'var(--text2)' }}>Hiện tại: <b style={{ color: 'var(--text1)' }}>{c.currentDisplay || '—'}</b></div>
+                  <div style={{ fontSize: 12, color: 'var(--text2)' }}>CCCD: <b style={{ color: 'var(--accent)' }}>{c.qrDisplay}</b></div>
+                </div>
+                <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                  <button type="button" className="btn-primary" style={{ fontSize: 11, padding: '4px 10px' }} onClick={() => resolveConflict(c, true)}>Ghi đè</button>
+                  <button type="button" className="btn-ghost" style={{ fontSize: 11, padding: '4px 10px' }} onClick={() => resolveConflict(c, false)}>Giữ nguyên</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div style={{ ...m.section, marginTop: 14 }}>Thông tin cá nhân</div>
         <div className="cn-edit-grid" style={m.grid}>
           {[['ho_ten','Họ và tên *','text'],['cccd','CCCD','text'],['ngay_sinh','Ngày sinh','date'],['so_dien_thoai','Số điện thoại','text']].map(([name, label, type]) => (
             <div key={name} style={m.fieldWrap}>
@@ -1212,4 +1367,12 @@ const m = {
   section: { fontSize: 10, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 },
   grid:    { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 14px' },
   fieldWrap: { display: 'flex', flexDirection: 'column', gap: 4 },
+};
+
+const qr = {
+  uploadCard:  { width: 120, flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: 'pointer', borderRadius: 10, border: '1.5px dashed var(--border2)', padding: 8, gap: 4, overflow: 'hidden' },
+  preview:     { width: '100%', height: 80, objectFit: 'cover', borderRadius: 8 },
+  placeholder: { width: '100%', height: 80, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--bg3)', borderRadius: 8 },
+  conflictBox: { background: 'rgba(255,179,68,0.08)', border: '1px solid rgba(255,179,68,0.3)', borderRadius: 10, padding: '10px 12px', marginBottom: 4 },
+  conflictRow: { display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderTop: '1px solid var(--border)' },
 };
