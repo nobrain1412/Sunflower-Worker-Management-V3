@@ -149,7 +149,8 @@ export default function AddCongNhanModal({ onClose }) {
 
     try {
       const created = await mutation.mutateAsync(payload);
-      const congNhanId = created?.data?.data?.id;
+      // api interceptor trả thẳng body { success, data, message } → CN nằm ở created.data
+      const congNhanId = created?.data?.id;
       const ngayVao = payload.ngay_vao_lam || new Date().toISOString().split('T')[0];
       if (congNhanId && form.trang_thai_noi_o === 'ktx' && form.giuong_id) {
         await api.post(`/ktx/giuong/${parseInt(form.giuong_id, 10)}/xep`, {
