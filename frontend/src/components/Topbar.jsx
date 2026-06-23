@@ -26,6 +26,7 @@ export default function Topbar({ onMenuClick }) {
   const title = PAGE_TITLE[pathname] ?? 'WorkerOS';
   const today = new Date().toLocaleDateString('vi-VN', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' });
   const [searchText, setSearchText] = useState('');
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false); // ô tìm kiếm mobile
 
   // Tìm kiếm theo trang hiện tại: Enter → set ?q=... trên chính trang đang mở
   // (trang nào hỗ trợ sẽ đọc q từ URL để lọc; không nhảy sang trang khác).
@@ -33,6 +34,7 @@ export default function Topbar({ onMenuClick }) {
     e.preventDefault();
     const q = searchText.trim();
     navigate(q ? `${pathname}?q=${encodeURIComponent(q)}` : pathname);
+    setMobileSearchOpen(false);
   }
 
   async function handleLogout() {
@@ -71,6 +73,20 @@ export default function Topbar({ onMenuClick }) {
           />
         </form>
 
+        {/* Nút tìm kiếm — chỉ hiện trên mobile */}
+        <button
+          className="topbar-search-btn"
+          style={s.iconBtn}
+          onClick={() => setMobileSearchOpen(true)}
+          title="Tìm kiếm"
+          aria-label="Tìm kiếm"
+        >
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none">
+            <circle cx="11" cy="11" r="8" stroke="currentColor" strokeWidth="2"/>
+            <line x1="21" y1="21" x2="16.65" y2="16.65" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+          </svg>
+        </button>
+
         {/* Notification bell */}
         <button style={s.iconBtn}>
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none">
@@ -83,6 +99,42 @@ export default function Topbar({ onMenuClick }) {
           Đăng xuất
         </button>
       </div>
+
+      {/* Thanh tìm kiếm mobile — bung full chiều ngang khi bấm nút search */}
+      {mobileSearchOpen && (
+        <form className="topbar-search-mobile" style={s.mobileSearchBar} onSubmit={handleSearchSubmit}>
+          <button
+            type="button"
+            style={s.mobileSearchBack}
+            onClick={() => setMobileSearchOpen(false)}
+            aria-label="Đóng tìm kiếm"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+              <polyline points="15 18 9 12 15 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </button>
+          <input
+            autoFocus
+            style={s.mobileSearchInput}
+            placeholder={SEARCH_PLACEHOLDER[pathname] ?? 'Tìm kiếm trong trang này...'}
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+          />
+          {searchText && (
+            <button
+              type="button"
+              style={s.mobileSearchClear}
+              onClick={() => { setSearchText(''); navigate(pathname); }}
+              aria-label="Xóa"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                <line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                <line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+              </svg>
+            </button>
+          )}
+        </form>
+      )}
     </header>
   );
 }
@@ -128,5 +180,27 @@ const s = {
     fontWeight: 600,
     cursor: 'pointer',
     fontFamily: "'Be Vietnam Pro', sans-serif",
+  },
+  // Thanh tìm kiếm mobile phủ kín topbar
+  mobileSearchBar: {
+    position: 'absolute', inset: 0,
+    background: 'var(--bg1)',
+    display: 'flex', alignItems: 'center', gap: 8,
+    padding: '0 12px', zIndex: 10,
+  },
+  mobileSearchBack: {
+    background: 'none', border: 'none', cursor: 'pointer',
+    color: 'var(--text2)', display: 'flex', padding: 4, flexShrink: 0,
+  },
+  mobileSearchInput: {
+    flex: 1, minWidth: 0,
+    background: 'var(--bg3)', border: '1px solid var(--border2)',
+    borderRadius: 8, padding: '8px 12px',
+    fontSize: 14, color: 'var(--text1)', outline: 'none',
+    fontFamily: "'Be Vietnam Pro', sans-serif",
+  },
+  mobileSearchClear: {
+    background: 'none', border: 'none', cursor: 'pointer',
+    color: 'var(--text3)', display: 'flex', padding: 4, flexShrink: 0,
   },
 };

@@ -104,6 +104,11 @@ body {
   align-items: center;
 }
 
+/* Nút tìm kiếm — ẩn trên desktop, hiện trên mobile */
+.topbar-search-btn {
+  display: none;
+}
+
 /* FAB — hidden desktop, shown mobile */
 .fab-mobile {
   display: none !important;
@@ -230,8 +235,9 @@ body {
   }
 
   /* ---- Topbar ---- */
-  .hamburger-btn  { display: flex !important; }
-  .topbar-search  { display: none !important; }
+  .hamburger-btn     { display: flex !important; }
+  .topbar-search     { display: none !important; }
+  .topbar-search-btn { display: flex !important; }
 
   /* ---- FAB ---- */
   .fab-mobile { display: flex !important; }
