@@ -31,14 +31,16 @@ function requireRole(...roles) {
 
 // Gắn req.scope để model biết cần filter dữ liệu theo role nào
 // - admin   → { type: 'all' }
-// - quan_ly → { type: 'cong_ty', ids: [...] }  (lấy từ JWT)
+// - quan_ly → { type: 'cong_ty', ids: [...], userId }  (lấy từ JWT)
+//             quản lý thấy CN thuộc công ty mình quản lý HOẶC do chính mình tuyển
 // - vender  → { type: 'vender', userId: id }
 function scopeByRole(req, res, next) {
   const { vai_tro, id, cong_ty_ids } = req.user;
   if (vai_tro === 'admin' || vai_tro === 'ke_toan') {
     req.scope = { type: 'all' };
   } else if (vai_tro === 'quan_ly') {
-    req.scope = { type: 'cong_ty', ids: cong_ty_ids ?? [] };
+    // userId để quản lý cũng thấy được CN do chính mình tuyển (dù ở công ty khác)
+    req.scope = { type: 'cong_ty', ids: cong_ty_ids ?? [], userId: id };
   } else {
     // vender, cong_tac_vien — chỉ thấy CN do mình tuyển
     req.scope = { type: 'vender', userId: id };

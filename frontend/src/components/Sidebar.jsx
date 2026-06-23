@@ -20,7 +20,7 @@ const NAV = [
   },
   {
     to: '/cong-nhan', label: 'Công nhân',
-    roles: ['admin','quan_ly','vender','ke_toan'],
+    roles: ['admin','quan_ly','vender','ke_toan','cong_tac_vien'],
     icon: (
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
         <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>

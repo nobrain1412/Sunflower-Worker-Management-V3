@@ -2,6 +2,18 @@ const congNhanModel = require('../models/congNhanModel');
 const hoatDongLog = require('../models/hoatDongLogModel');
 const { sanitizeForRole, sanitizeListForRole } = require('../utils/sanitizeCongNhan');
 
+// Trạng thái "đã đi làm" bắt buộc phải gán công ty (đợi việc / chờ duyệt thì không).
+const TRANG_THAI_CAN_CONG_TY = ['dang_lam', 'moi_vao'];
+
+function assertCongTyKhiCanLamViec(trangThai, congTyId) {
+  if (TRANG_THAI_CAN_CONG_TY.includes(trangThai) && !congTyId) {
+    const err = new Error('Công nhân "đang làm" / "mới vào" bắt buộc phải gán công ty');
+    err.statusCode = 400;
+    err.code = 'CONG_TY_REQUIRED';
+    throw err;
+  }
+}
+
 async function danhSach(query, scope, vaiTro, viewerId) {
   const page  = Math.max(1, parseInt(query.page  || '1',  10));
   const limit = Math.min(100, Math.max(1, parseInt(query.limit || '20', 10)));
@@ -49,8 +61,10 @@ async function chiTiet(id, scope, vaiTro, viewerId) {
     throw err;
   }
   if (scope?.type === 'cong_ty') {
-    const allowed = (scope.ids ?? []).includes(congNhan.cong_ty_id);
-    if (!allowed) {
+    // Quản lý xem được CN thuộc công ty mình quản lý HOẶC do chính mình tuyển
+    const theoCongTy = (scope.ids ?? []).includes(congNhan.cong_ty_id);
+    const theoNguoiTuyen = scope.userId && congNhan.nguoi_tuyen_id === scope.userId;
+    if (!theoCongTy && !theoNguoiTuyen) {
       const err = new Error('Bạn không có quyền xem công nhân này');
       err.statusCode = 403; err.code = 'FORBIDDEN';
       throw err;
@@ -60,6 +74,9 @@ async function chiTiet(id, scope, vaiTro, viewerId) {
 }
 
 async function taoMoi(data) {
+  // Validate: trạng thái đang làm / mới vào bắt buộc có công ty
+  assertCongTyKhiCanLamViec(data.trang_thai ?? 'moi_vao', data.cong_ty_id);
+
   if (data.cccd) {
     const existing = await congNhanModel.findByCccd(data.cccd);
     if (existing) {
@@ -139,9 +156,27 @@ async function capNhat(id, data, actorUserId = null, scope = null) {
       const err = new Error('Bạn chỉ được sửa CN do mình tuyển');
       err.statusCode = 403; err.code = 'FORBIDDEN'; throw err;
     }
-    if (scope.type === 'cong_ty' && !(scope.ids ?? []).includes(before.cong_ty_id)) {
-      const err = new Error('Bạn chỉ được sửa CN thuộc công ty mình quản lý');
-      err.statusCode = 403; err.code = 'FORBIDDEN'; throw err;
+    if (scope.type === 'cong_ty') {
+      // Quản lý sửa được CN thuộc công ty mình quản lý HOẶC do chính mình tuyển
+      const theoCongTy = (scope.ids ?? []).includes(before.cong_ty_id);
+      const theoNguoiTuyen = scope.userId && before.nguoi_tuyen_id === scope.userId;
+      if (!theoCongTy && !theoNguoiTuyen) {
+        const err = new Error('Bạn chỉ được sửa CN thuộc công ty mình quản lý');
+        err.statusCode = 403; err.code = 'FORBIDDEN'; throw err;
+      }
+    }
+  }
+
+  // Validate: nếu đổi trạng thái/công ty mà kết quả là "đang làm" / "mới vào"
+  // thì bắt buộc phải có công ty. Chỉ chặn khi update NÀY mới gây ra vi phạm
+  // (không chặn các bản ghi cũ vốn đã thiếu công ty khi sửa field khác).
+  if (before && ('trang_thai' in data || 'cong_ty_id' in data)) {
+    const trangThaiSau = 'trang_thai' in data ? data.trang_thai : before.trang_thai;
+    const congTySau    = 'cong_ty_id'  in data ? data.cong_ty_id  : before.cong_ty_id;
+    const viPhamSau    = TRANG_THAI_CAN_CONG_TY.includes(trangThaiSau) && !congTySau;
+    const viPhamTruoc  = TRANG_THAI_CAN_CONG_TY.includes(before.trang_thai) && !before.cong_ty_id;
+    if (viPhamSau && !viPhamTruoc) {
+      assertCongTyKhiCanLamViec(trangThaiSau, congTySau);
     }
   }
 
@@ -235,6 +270,11 @@ async function duyet(id, user) {
     const err = new Error('Công nhân không ở trạng thái chờ duyệt');
     err.statusCode = 400; err.code = 'INVALID_STATE'; throw err;
   }
+  // Duyệt = chuyển sang "mới vào" → bắt buộc đã gán công ty
+  if (!before.cong_ty_id) {
+    const err = new Error('Cần gán công ty cho công nhân trước khi duyệt vào làm');
+    err.statusCode = 400; err.code = 'CONG_TY_REQUIRED'; throw err;
+  }
   if (user?.vai_tro === 'quan_ly') {
     const congTyIds = user.cong_ty_ids ?? [];
     if (!congTyIds.includes(before.cong_ty_id)) {
@@ -318,4 +358,55 @@ async function xoa(id, user) {
   }
 }
 
-module.exports = { danhSach, chiTiet, taoMoi, capNhat, duyet, xoa };
+// Gán công ty hàng loạt cho nhiều CN cùng lúc (thường là CN "đợi việc" chưa có công ty).
+// Tái dùng capNhat cho từng CN để hưởng đủ: kiểm tra scope, đồng bộ phan_cong, audit log.
+// - trangThai: trạng thái sau khi gán. Mặc định 'moi_vao' (vào làm luôn); có thể 'doi_viec'.
+// - quan_ly chỉ được gán vào công ty mình quản lý.
+// Trả { assigned, skipped: [{ id, reason }] }.
+async function ganCongTyHangLoat({ ids, congTyId, trangThai, user, scope }) {
+  const db = require('../utils/db');
+
+  // Công ty đích phải tồn tại
+  const ct = await db.query('SELECT id FROM cong_ty WHERE id = $1', [congTyId]);
+  if (!ct.rows.length) {
+    const err = new Error('Không tìm thấy công ty');
+    err.statusCode = 404; err.code = 'NOT_FOUND'; throw err;
+  }
+  // Quản lý chỉ được gán vào công ty mình quản lý
+  if (user?.vai_tro === 'quan_ly') {
+    const managed = user.cong_ty_ids ?? [];
+    if (!managed.includes(congTyId)) {
+      const err = new Error('Bạn chỉ được gán vào công ty mình quản lý');
+      err.statusCode = 403; err.code = 'FORBIDDEN'; throw err;
+    }
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+  let assigned = 0;
+  const skipped = [];
+
+  for (const id of ids) {
+    try {
+      const before = await congNhanModel.findById(id);
+      if (!before) { skipped.push({ id, reason: 'Không tồn tại' }); continue; }
+
+      // Trạng thái sau: ưu tiên giá trị người dùng chọn; nếu không, đưa CN
+      // "đợi việc"/"chờ duyệt" vào làm ('moi_vao'), còn lại giữ nguyên.
+      const trangThaiSau = trangThai
+        || (['doi_viec', 'cho_duyet'].includes(before.trang_thai) ? 'moi_vao' : before.trang_thai);
+
+      const payload = { cong_ty_id: congTyId, trang_thai: trangThaiSau };
+      // Vào làm mà chưa có ngày vào → set hôm nay (đợi việc thì không cần)
+      if (trangThaiSau !== 'doi_viec' && !before.ngay_vao_lam) payload.ngay_vao_lam = today;
+
+      await capNhat(id, payload, user?.id ?? null, scope);
+      assigned++;
+    } catch (e) {
+      skipped.push({ id, reason: e.message });
+    }
+  }
+
+  return { assigned, skipped };
+}
+
+module.exports = { danhSach, chiTiet, taoMoi, capNhat, duyet, xoa, ganCongTyHangLoat };

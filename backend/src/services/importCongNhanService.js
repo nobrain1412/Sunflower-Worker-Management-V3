@@ -541,6 +541,12 @@ async function resolveAndValidate(rows) {
       }
     }
 
+    // Công ty BẮT BUỘC khi thêm mới (dòng không trùng CCCD → insert trạng thái "mới vào").
+    // Dòng trùng CCCD xử lý theo hành động riêng (update / đổi công ty / thêm mới chờ duyệt).
+    if (!r._duplicate && d.ho_ten && !d.cong_ty_id) {
+      r.errors.push('Thiếu công ty — cột "Công ty" bắt buộc khi thêm mới công nhân');
+    }
+
     // Dòng trùng CCCD: áp hành động người dùng chọn (mặc định = bỏ qua)
     if (r._duplicate) applyDuplicateAction(r);
   }
@@ -813,7 +819,7 @@ async function buildTemplate() {
     ['SĐT',        'Không',  'Số điện thoại di động (10 số). Nếu Excel cắt mất số 0 đầu, hệ thống tự thêm lại.', '0914443321'],
     ['Mã vân tay', 'Không',  'Mã máy chấm công, nếu có.', '3002645'],
     ['Vender',     'Không',  'Người tuyển — nhập HỌ TÊN hoặc MÃ VENDER (khớp với danh sách users, không phân biệt hoa/thường).', 'Thuý VT'],
-    ['Công ty',    'Không',  'Tên công ty — phải KHỚP với tên đã có trong hệ thống (không phân biệt hoa/thường).', 'Tên công ty (phải khớp DB)'],
+    ['Công ty',    'Có',     'BẮT BUỘC khi thêm mới. Tên công ty — phải KHỚP với tên đã có trong hệ thống (không phân biệt hoa/thường).', 'Tên công ty (phải khớp DB)'],
     ['Ghi chú',    'Không',  'Bộ phận / ghi chú tự do.', 'Tổ 2'],
   ];
   for (const r of rows) guide.addRow({ cot: r[0], bb: r[1], mota: r[2], vd: r[3] });

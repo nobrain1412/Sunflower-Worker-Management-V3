@@ -39,6 +39,7 @@ const EMPTY_FORM = {
   dia_chi: '', ngay_cap: '',
   ngay_vao_lam: isoToDdmmyyyy(todayIso()),
   cong_ty_id: '', nguoi_tuyen_id: '', ma_van_tay: '',
+  trang_thai: '', // '' → suy ra mặc định theo vai trò (defaultTrangThai)
 };
 
 export default function ScanCCCD() {
@@ -66,6 +67,9 @@ export default function ScanCCCD() {
   const congTyArr = useCongTyList().data?.data ?? [];
   const venderArr = useVenders().data?.data ?? [];
   const canPickVender = isAdmin || isQuanLy;
+  // Người thêm không phải quản lý (vender) → mặc định "đợi việc" (chưa cần công ty);
+  // admin / quản lý → "mới vào" (gán công ty mình quản lý).
+  const defaultTrangThai = canPickVender ? 'moi_vao' : 'doi_viec';
 
   const congTyOptions = useMemo(() => {
     if (isQuanLy) {
@@ -187,6 +191,15 @@ export default function ScanCCCD() {
   async function handleApprove() {
     const errs = validateLocal();
     if (Object.keys(errs).length) { setErrors(errs); return; }
+
+    // "Đang làm" / "Mới vào" bắt buộc gán công ty (đợi việc thì không cần)
+    const trangThai = form.trang_thai || defaultTrangThai;
+    const congTyId = form.cong_ty_id || defaultCongTyId();
+    if (['dang_lam', 'moi_vao'].includes(trangThai) && !congTyId) {
+      setSubmitErr('Trạng thái "Đang làm" / "Mới vào" bắt buộc phải chọn công ty');
+      return;
+    }
+
     setSubmitErr(null);
     setErrors({});
     setStage('creating');
@@ -208,8 +221,9 @@ export default function ScanCCCD() {
         ngay_vao_lam:     ddmmyyyyToIso(form.ngay_vao_lam),
         ma_van_tay:       form.ma_van_tay || null,
         anh_cccd_truoc:   finalAnhUrl || null,
+        trang_thai:       trangThai,
       };
-      if (form.cong_ty_id) payload.cong_ty_id = parseInt(form.cong_ty_id, 10);
+      if (congTyId) payload.cong_ty_id = parseInt(congTyId, 10);
       if (canPickVender && form.nguoi_tuyen_id) {
         payload.nguoi_tuyen_id = parseInt(form.nguoi_tuyen_id, 10);
       }
@@ -357,6 +371,13 @@ export default function ScanCCCD() {
                   {congTyOptions.map((ct) => (
                     <option key={ct.id} value={ct.id}>{ct.ten_cong_ty}</option>
                   ))}
+                </select>
+              </Field>
+              <Field label="Trạng thái">
+                <select className="form-input" value={form.trang_thai || defaultTrangThai} onChange={(e) => setField('trang_thai', e.target.value)}>
+                  <option value="doi_viec">Đợi việc (chờ phỏng vấn)</option>
+                  <option value="moi_vao">Mới vào</option>
+                  <option value="dang_lam">Đang làm</option>
                 </select>
               </Field>
               {canPickVender ? (

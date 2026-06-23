@@ -90,3 +90,12 @@ export function useXoaCongNhan() {
     onSuccess:  () => qc.invalidateQueries({ queryKey: ['cong-nhan'] }),
   });
 }
+
+// Gán công ty hàng loạt cho nhiều CN chưa có công ty
+export function useGanCongTyHangLoat() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload) => api.post('/cong-nhan/gan-cong-ty', payload),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: ['cong-nhan'] }),
+  });
+}

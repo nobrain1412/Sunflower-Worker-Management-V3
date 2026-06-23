@@ -48,11 +48,13 @@ function formatDateInput(v) {
 }
 
 export default function AddCongNhanModal({ onClose }) {
-  const [form, setForm]     = useState(INIT);
+  const { user, isAdmin, isQuanLy } = useAuth();
+  const canPickVender = isAdmin || isQuanLy;
+  // Người thêm không phải quản lý (vender/CTV) → mặc định "đợi việc" (chưa cần công ty)
+  const [form, setForm]     = useState(() => ({ ...INIT, trang_thai: canPickVender ? 'moi_vao' : 'doi_viec' }));
   const [errors, setErrors] = useState({});
   const [done, setDone]     = useState(false);
   const mutation = useTaoMoiCongNhan();
-  const { user, isAdmin, isQuanLy } = useAuth();
   const congTyArr = useCongTyList().data?.data ?? [];
   const venderArr = useVenders().data?.data ?? [];
   const noiOTruyCap = useNoiOTruyCap().data?.data ?? { ktx: [], phong_tro: [] };
@@ -60,7 +62,6 @@ export default function AddCongNhanModal({ onClose }) {
   const phongList = phongRes?.data ?? [];
   const { data: giuongRes } = useGiuongList(form.phong_id ? parseInt(form.phong_id, 10) : null);
   const giuongList = (giuongRes?.data ?? []).filter((g) => !g.cong_nhan_id);
-  const canPickVender = isAdmin || isQuanLy;
 
   // Quản lý chỉ thấy công ty mình quản lý
   const congTyOptions = useMemo(() => {
@@ -132,9 +133,9 @@ export default function AddCongNhanModal({ onClose }) {
       payload.nguoi_tuyen_id = parseInt(form.nguoi_tuyen_id, 10);
     }
 
-    // Đợi việc bắt buộc có công ty để chuẩn bị phỏng vấn
-    if (form.trang_thai === 'doi_viec' && !form.cong_ty_id) {
-      setErrors({ submit: 'Trạng thái "Đợi việc" cần chọn công ty để phỏng vấn' });
+    // "Đang làm" / "Mới vào" bắt buộc gán công ty (đợi việc thì không cần)
+    if (['dang_lam', 'moi_vao'].includes(form.trang_thai) && !form.cong_ty_id) {
+      setErrors({ submit: 'Trạng thái "Đang làm" / "Mới vào" bắt buộc phải chọn công ty' });
       return;
     }
     if (form.trang_thai_noi_o === 'ktx' && !form.giuong_id) {
@@ -176,7 +177,7 @@ export default function AddCongNhanModal({ onClose }) {
           <div style={sc.title}>Thêm thành công!</div>
           <div style={sc.sub}>Công nhân <b>{form.ho_ten}</b> đã được thêm vào hệ thống</div>
           <div style={sc.actions}>
-            <button className="btn-ghost" onClick={() => { setForm(INIT); setDone(false); }}>Thêm tiếp</button>
+            <button className="btn-ghost" onClick={() => { setForm({ ...INIT, trang_thai: canPickVender ? 'moi_vao' : 'doi_viec' }); setDone(false); }}>Thêm tiếp</button>
             <button className="btn-primary" onClick={onClose}>Hoàn tất</button>
           </div>
         </div>

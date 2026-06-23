@@ -4,6 +4,7 @@ import { useCongNhanList, useVenders, useCongTyList, useXoaCongNhan } from '../.
 import { useTinhList } from '../../hooks/useProvinces';
 import { useAuth } from '../../context/AuthContext';
 import AddCongNhanModal from './AddModal';
+import GanCongTyModal from './GanCongTyModal';
 import BottomSheet from '../../components/BottomSheet';
 import useIsMobile from '../../hooks/useIsMobile';
 
@@ -138,6 +139,7 @@ export default function CongNhan() {
   const [showAdd, setShowAdd]         = useState(false);
   const [showAddSheet, setShowAddSheet] = useState(false);
   const [showFilterSheet, setShowFilterSheet] = useState(false);
+  const [showGanCongTy, setShowGanCongTy] = useState(false);
 
   function toggleSort(field) {
     if (sortBy === field) {
@@ -197,6 +199,12 @@ export default function CongNhan() {
             <span>⚙</span>
             Bộ lọc
           </button>
+          {canFilterAll && (
+            <button className="btn-ghost" style={s.filterBtn} onClick={() => setShowGanCongTy(true)}>
+              <span>🏢</span>
+              Gán công ty
+            </button>
+          )}
           {(trangThai || trangThaiNoiO || venderId || congTyId || tinh || ngay) && (
             <button
               className="btn-ghost"
@@ -461,6 +469,7 @@ export default function CongNhan() {
       </BottomSheet>
 
       {showAdd && <AddCongNhanModal onClose={() => setShowAdd(false)} />}
+      {showGanCongTy && <GanCongTyModal onClose={() => setShowGanCongTy(false)} />}
     </div>
   );
 }

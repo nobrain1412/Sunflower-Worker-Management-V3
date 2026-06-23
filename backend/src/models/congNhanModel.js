@@ -33,14 +33,19 @@ async function findAll({ page = 1, limit = 20, sort = 'ho_ten', order = 'asc', t
     params.push(scope.userId);
     conditions.push(`cn.nguoi_tuyen_id = $${params.length}`);
   } else if (scope?.type === 'cong_ty') {
-    // Quản lý: chỉ thấy CN thuộc các công ty mình quản lý.
-    // Nếu chưa được gán công ty nào → không thấy CN nào.
+    // Quản lý: thấy CN thuộc các công ty mình quản lý HOẶC do chính mình tuyển.
+    // (CN mình tuyển có thể đang chờ việc / ở công ty khác → vẫn phải thấy được.)
+    const ors = [];
     if (scope.ids?.length > 0) {
       params.push(scope.ids);
-      conditions.push(`cn.cong_ty_id = ANY($${params.length}::int[])`);
-    } else {
-      conditions.push(`1 = 0`);
+      ors.push(`cn.cong_ty_id = ANY($${params.length}::int[])`);
     }
+    if (scope.userId) {
+      params.push(scope.userId);
+      ors.push(`cn.nguoi_tuyen_id = $${params.length}`);
+    }
+    // Không có công ty nào VÀ không có userId → không thấy CN nào.
+    conditions.push(ors.length > 0 ? `(${ors.join(' OR ')})` : `1 = 0`);
   }
 
   // Sentinel để lọc các bản ghi có giá trị trống (NULL/rỗng) từ FE

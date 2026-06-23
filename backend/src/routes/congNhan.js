@@ -89,6 +89,14 @@ const taoMoiSchema = z.object({
 // PUT cho phép partial update (mọi trường optional, chấp nhận null để xoá)
 const capNhatSchema = taoMoiSchema.partial();
 
+// Gán công ty hàng loạt
+const ganCongTySchema = z.object({
+  ids:        z.array(z.number().int().positive()).min(1, 'Chọn ít nhất 1 công nhân').max(500),
+  cong_ty_id: z.number().int().positive(),
+  // Trạng thái sau khi gán (mặc định xử lý ở service: đợi việc/chờ duyệt → mới vào)
+  trang_thai: z.enum(['moi_vao', 'doi_viec', 'dang_lam']).optional(),
+});
+
 // --- Routes ---
 
 // Tất cả route yêu cầu đăng nhập + gắn scope
@@ -110,6 +118,14 @@ router.post('/',
   requireRole('admin', 'quan_ly', 'vender'),
   validate(taoMoiSchema),
   ctrl.postTaoMoi,
+);
+
+// Gán công ty hàng loạt cho CN chưa có công ty (admin / quản lý).
+// Đặt trước '/:id' để không bị nuốt bởi route param.
+router.post('/gan-cong-ty',
+  requireRole('admin', 'quan_ly'),
+  validate(ganCongTySchema),
+  ctrl.postGanCongTy,
 );
 
 // Cập nhật: mọi role (scope check ở service layer).

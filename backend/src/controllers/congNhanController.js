@@ -66,4 +66,17 @@ const deleteXoa = asyncWrapper(async (req, res) => {
   sendSuccess(res, null, 'Đã xoá công nhân');
 });
 
-module.exports = { getDanhSach, getChiTiet, postTaoMoi, putCapNhat, postDuyet, deleteXoa };
+// Gán công ty hàng loạt cho nhiều CN chưa có công ty
+const postGanCongTy = asyncWrapper(async (req, res) => {
+  const { ids, cong_ty_id, trang_thai } = req.validatedBody;
+  const result = await congNhanService.ganCongTyHangLoat({
+    ids,
+    congTyId: cong_ty_id,
+    trangThai: trang_thai,
+    user: req.user,
+    scope: req.scope,
+  });
+  sendSuccess(res, result, `Đã gán công ty cho ${result.assigned} công nhân`);
+});
+
+module.exports = { getDanhSach, getChiTiet, postTaoMoi, putCapNhat, postDuyet, deleteXoa, postGanCongTy };

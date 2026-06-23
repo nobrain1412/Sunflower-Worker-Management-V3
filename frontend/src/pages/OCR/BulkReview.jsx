@@ -89,6 +89,8 @@ export default function BulkReview() {
           ngay_sinh: ddmmyyyyToIso(r.ngay_sinh),
           gioi_tinh: ['Nam','Nữ','Khác'].includes(r.gioi_tinh) ? r.gioi_tinh : null,
           dia_chi_hien_tai: r.dia_chi_hien_tai || null,
+          // Quét danh sách viết tay chưa gán công ty → vào "đợi việc" (không bắt buộc công ty)
+          trang_thai: 'doi_viec',
         });
         ok += 1;
       } catch (err) {

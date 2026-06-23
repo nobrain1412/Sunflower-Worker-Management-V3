@@ -61,6 +61,7 @@ const getAdminDashboard = asyncWrapper(async (req, res) => {
     // 10 CN mới nhất (kèm tên công ty)
     db.query(`
       SELECT cn.id, cn.ho_ten, cn.trang_thai, cn.created_at, cn.cong_ty_id,
+             cn.nguoi_tuyen_id,
              ct.ten_cong_ty,
              u.ho_ten AS ten_nguoi_tuyen
       FROM cong_nhan cn
@@ -178,6 +179,7 @@ const getQuanLyDashboard = asyncWrapper(async (req, res) => {
     ),
     db.query(
       `SELECT cn.id, cn.ho_ten, cn.trang_thai, cn.created_at, cn.cong_ty_id,
+              cn.nguoi_tuyen_id,
               ct.ten_cong_ty,
               u.ho_ten AS ten_nguoi_tuyen
        FROM cong_nhan cn
