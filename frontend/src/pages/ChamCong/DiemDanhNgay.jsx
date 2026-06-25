@@ -11,7 +11,7 @@ import {
   presentCell, emptyCell, isEmptyCell, isNghi, detailText, cellColor, totalGio,
 } from './chamCongShared';
 
-export default function DiemDanhNgay({ rows, day, getCell, setCell, isDirtyCell }) {
+export default function DiemDanhNgay({ rows, day, getCell, setCell, isDirtyCell, readOnly = false }) {
   const [chuanGio, setChuanGio] = useState(8);
   const [chuanCa, setChuanCa]   = useState('ngay'); // 'ngay' | 'dem'
   const [expandedId, setExpandedId] = useState(null);
@@ -40,7 +40,8 @@ export default function DiemDanhNgay({ rows, day, getCell, setCell, isDirtyCell 
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      {/* Thanh cấu hình ca chuẩn + thao tác nhanh */}
+      {/* Thanh cấu hình ca chuẩn + thao tác nhanh (ẩn khi chỉ xem) */}
+      {!readOnly && (
       <div style={s.configBar}>
         <div style={s.configItem}>
           <span style={s.configLabel}>Giờ chuẩn</span>
@@ -58,6 +59,7 @@ export default function DiemDanhNgay({ rows, day, getCell, setCell, isDirtyCell 
         <button className="btn-primary" style={s.bulkBtn} onClick={fillAll}>✓ Tất cả có mặt</button>
         <button className="btn-ghost" style={s.bulkBtn} onClick={clearAll}>Xoá hết</button>
       </div>
+      )}
 
       <div style={s.stat}>
         Có mặt <b style={{ color: 'var(--green)' }}>{present.length}</b>
@@ -80,22 +82,26 @@ export default function DiemDanhNgay({ rows, day, getCell, setCell, isDirtyCell 
               <div style={s.cardTop}>
                 <div style={{ minWidth: 0, flex: 1 }}>
                   <div style={s.name}>{r.cong_nhan_ten}</div>
-                  <div style={s.sub}>🏭 {r.ten_cong_ty || '—'}</div>
+                  <div style={s.sub}>🏭 {r.ten_cong_ty || '—'}{r.bo_phan ? ` · 🔧 ${r.bo_phan}` : ''}</div>
                 </div>
                 <div style={{ ...s.statusChip, color: col.color, background: col.bg }}>
                   {detailText(cell)}
                 </div>
               </div>
               <div style={s.btnRow}>
-                <button onClick={() => markPresent(pcId)}
-                  style={{ ...s.qBtn, ...(!empty && !isNghi(cell) ? s.qBtnGreen : {}) }}>
-                  Có mặt {chuanGio || 0}h{chuanCa === 'dem' ? ' đêm' : ''}
-                </button>
-                <button onClick={() => markNghi(pcId)}
-                  style={{ ...s.qBtn, ...(isNghi(cell) ? s.qBtnAmber : {}) }}>Nghỉ</button>
+                {!readOnly && (
+                  <>
+                    <button onClick={() => markPresent(pcId)}
+                      style={{ ...s.qBtn, ...(!empty && !isNghi(cell) ? s.qBtnGreen : {}) }}>
+                      Có mặt {chuanGio || 0}h{chuanCa === 'dem' ? ' đêm' : ''}
+                    </button>
+                    <button onClick={() => markNghi(pcId)}
+                      style={{ ...s.qBtn, ...(isNghi(cell) ? s.qBtnAmber : {}) }}>Nghỉ</button>
+                  </>
+                )}
                 <button onClick={() => setExpandedId(expanded ? null : pcId)}
                   style={{ ...s.qBtn, ...(expanded ? s.qBtnActive : {}) }}>
-                  {expanded ? 'Đóng' : '⋯ Chi tiết'}
+                  {expanded ? 'Đóng' : (readOnly ? '⋯ Xem chi tiết' : '⋯ Chi tiết')}
                 </button>
                 {totalGio(cell) > 0 && (
                   <span style={s.totalTag}>{totalGio(cell)}h</span>
@@ -103,7 +109,7 @@ export default function DiemDanhNgay({ rows, day, getCell, setCell, isDirtyCell 
               </div>
               {expanded && (
                 <div style={s.editorWrap}>
-                  <BucketEditor compact value={cell} onChange={(c) => setCell(pcId, day, c)} />
+                  <BucketEditor compact readOnly={readOnly} value={cell} onChange={(c) => setCell(pcId, day, c)} />
                 </div>
               )}
             </div>

@@ -32,22 +32,35 @@ export function todayYMD() {
   return ymd(d.getMonth() + 1, d.getFullYear(), d.getDate());
 }
 
+// Các mốc giờ chấm chi tiết (giờ đến / nghỉ trưa / về) — string 'HH:MM' hoặc ''.
+export const TIME_FIELDS = [
+  { key: 'gio_den',       label: 'Giờ đến',   color: 'var(--green)' },
+  { key: 'gio_nghi_trua', label: 'Nghỉ trưa', color: 'var(--amber)' },
+  { key: 'gio_ve',        label: 'Giờ về',    color: 'var(--red)' },
+];
+
 export function emptyCell() {
-  return { gio_hc_ngay: 0, gio_tc_ngay: 0, gio_hc_dem: 0, gio_tc_dem: 0, ca_lam: null };
+  return {
+    gio_hc_ngay: 0, gio_tc_ngay: 0, gio_hc_dem: 0, gio_tc_dem: 0,
+    gio_den: '', gio_nghi_trua: '', gio_ve: '', ca_lam: null,
+  };
 }
 
 // Cell từ bản ghi server (hỗ trợ dữ liệu cũ chỉ có so_gio/so_gio_ot → coi như ca ngày)
 export function cellFromServer(cc) {
   if (!cc) return null;
   const n = (v) => Number(v || 0);
+  const t = (v) => (v == null ? '' : String(v).slice(0, 5)); // 'HH:MM:SS' → 'HH:MM'
+  const times = { gio_den: t(cc.gio_den), gio_nghi_trua: t(cc.gio_nghi_trua), gio_ve: t(cc.gio_ve) };
   const hasBuckets = ['gio_hc_ngay', 'gio_tc_ngay', 'gio_hc_dem', 'gio_tc_dem']
     .some((k) => cc[k] != null);
   if (!hasBuckets) {
-    return { gio_hc_ngay: n(cc.so_gio), gio_tc_ngay: n(cc.so_gio_ot), gio_hc_dem: 0, gio_tc_dem: 0, ca_lam: cc.ca_lam || null };
+    return { gio_hc_ngay: n(cc.so_gio), gio_tc_ngay: n(cc.so_gio_ot), gio_hc_dem: 0, gio_tc_dem: 0, ...times, ca_lam: cc.ca_lam || null };
   }
   return {
     gio_hc_ngay: n(cc.gio_hc_ngay), gio_tc_ngay: n(cc.gio_tc_ngay),
     gio_hc_dem:  n(cc.gio_hc_dem),  gio_tc_dem:  n(cc.gio_tc_dem),
+    ...times,
     ca_lam: cc.ca_lam || null,
   };
 }
@@ -73,7 +86,10 @@ export function equalCell(a, b) {
     && Number(A.gio_hc_ngay || 0) === Number(B.gio_hc_ngay || 0)
     && Number(A.gio_tc_ngay || 0) === Number(B.gio_tc_ngay || 0)
     && Number(A.gio_hc_dem  || 0) === Number(B.gio_hc_dem  || 0)
-    && Number(A.gio_tc_dem  || 0) === Number(B.gio_tc_dem  || 0);
+    && Number(A.gio_tc_dem  || 0) === Number(B.gio_tc_dem  || 0)
+    && (A.gio_den       || '') === (B.gio_den       || '')
+    && (A.gio_nghi_trua || '') === (B.gio_nghi_trua || '')
+    && (A.gio_ve        || '') === (B.gio_ve        || '');
 }
 
 // Cell → payload entry gửi BE (ngay được thêm ở nơi gọi)
@@ -84,6 +100,9 @@ export function toEntry(cell) {
     gio_tc_ngay: Number(c.gio_tc_ngay || 0),
     gio_hc_dem:  Number(c.gio_hc_dem  || 0),
     gio_tc_dem:  Number(c.gio_tc_dem  || 0),
+    gio_den:       c.gio_den       || null,
+    gio_nghi_trua: c.gio_nghi_trua || null,
+    gio_ve:        c.gio_ve        || null,
     ca_lam: c.ca_lam || null,
   };
 }

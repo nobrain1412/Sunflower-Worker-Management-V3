@@ -31,7 +31,7 @@ function toPositiveInt(value, fieldName) {
 router.use(authenticate, scopeByRole);
 
 // GET /api/cham-cong?thang=&nam=&cong_ty_id=&nguoi_tuyen_id=
-router.get('/', requireRole('admin', 'quan_ly', 'ke_toan'),
+router.get('/', requireRole('admin', 'quan_ly', 'ke_toan', 'vender', 'cong_tac_vien'),
   asyncWrapper(async (req, res) => {
     const thang = toPositiveInt(req.query.thang, 'Tháng');
     const nam   = toPositiveInt(req.query.nam,   'Năm');
@@ -105,6 +105,10 @@ const entrySchema = z.object({
   // Giữ tương thích ngược với client cũ (so_gio = HC ngày, so_gio_ot = TC ngày)
   so_gio:      z.number().min(0).max(24).optional(),
   so_gio_ot:   z.number().min(0).max(24).optional(),
+  // Mốc giờ chấm (giờ đến / nghỉ trưa / về) — string 'HH:MM', để trống = null
+  gio_den:       z.string().max(8).nullable().optional(),
+  gio_nghi_trua: z.string().max(8).nullable().optional(),
+  gio_ve:        z.string().max(8).nullable().optional(),
   ca_lam:      z.string().max(20).nullable().optional(),
   ghi_chu:     z.string().max(500).nullable().optional(),
 });

@@ -211,6 +211,7 @@ function EditModal({ cn, onClose, noiOHienTai, isAdmin }) {
     xe_da_tra:        cn.xe_da_tra ?? false,
     ngay_muon_xe:     toInputDate(cn.ngay_muon_xe),
     ma_van_tay:       cn.ma_van_tay ?? '',
+    bo_phan:          cn.bo_phan ?? '',
     ktx_id:           noiOHienTai?.ktx?.ktx_id ? String(noiOHienTai.ktx.ktx_id) : '',
     phong_id:         noiOHienTai?.ktx?.phong_id ? String(noiOHienTai.ktx.phong_id) : '',
     giuong_id:        noiOHienTai?.ktx?.giuong_id ? String(noiOHienTai.ktx.giuong_id) : '',
@@ -491,9 +492,13 @@ function EditModal({ cn, onClose, noiOHienTai, isAdmin }) {
               <input className="form-input" name={name} type={type} value={form[name]} onChange={handleChange} />
             </div>
           ))}
-          <div style={{ ...m.fieldWrap, gridColumn: 'span 2' }}>
+          <div style={m.fieldWrap}>
             <label className="form-label">Mã vân tay (máy chấm công)</label>
             <input className="form-input" name="ma_van_tay" value={form.ma_van_tay} onChange={handleChange} placeholder="VD: 1024" maxLength={50} />
+          </div>
+          <div style={m.fieldWrap}>
+            <label className="form-label">Bộ phận</label>
+            <input className="form-input" name="bo_phan" value={form.bo_phan} onChange={handleChange} placeholder="VD: Tổ 1 / Đóng gói" maxLength={100} />
           </div>
           <div style={{ gridColumn: 'span 2', display: 'flex', flexDirection: 'column', gap: 4 }}>
             <label className="form-label">Ghi chú</label>
@@ -868,6 +873,7 @@ export default function CongNhanDetail() {
             <Field label="Ngày nghỉ việc" value={cn.ngay_nghi_viec ? new Date(cn.ngay_nghi_viec).toLocaleDateString('vi-VN') : null} />
             <Field label="Người tuyển" value={cn.nguoi_tuyen_ho_ten} />
             <Field label="Mã vân tay" value={cn.ma_van_tay} />
+            <Field label="Bộ phận" value={cn.bo_phan} />
             <Field label="Ghi chú" value={cn.ghi_chu} />
           </div>
         </div>

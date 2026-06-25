@@ -19,8 +19,36 @@ export default function ImportChamCongExcel() {
   const [committing, setCommitting] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
+  const [downloading, setDownloading] = useState(false);
 
   const congTyArr = useCongTyList().data?.data ?? [];
+
+  async function downloadTemplate() {
+    if (!congTyId) { setError('Chọn công ty trước'); return; }
+    setDownloading(true);
+    setError('');
+    try {
+      const blob = await api.get('/cham-cong/import-excel/template', {
+        params: { cong_ty_id: congTyId },
+        responseType: 'blob',
+      });
+      const ct = congTyArr.find((c) => String(c.id) === String(congTyId));
+      const name = (ct?.ten_cong_ty || 'cong-ty')
+        .normalize('NFD').replace(/\p{Diacritic}/gu, '').replace(/[^a-zA-Z0-9]+/g, '-').toLowerCase();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `mau-cham-cong_${name}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err?.message || 'Tải file mẫu thất bại');
+    } finally {
+      setDownloading(false);
+    }
+  }
 
   function pickFile() {
     fileInputRef.current?.click();
@@ -107,20 +135,28 @@ export default function ImportChamCongExcel() {
           <div style={s.sectionTitle}>Chọn công ty của file vân tay</div>
         </div>
         <div style={s.tip}>
-          Mỗi file vân tay thuộc 1 công ty. CN nào không có phân công công ty này
-          tại ngày tương ứng sẽ bị skip (báo trong preview).
+          Mỗi file vân tay thuộc 1 công ty và có <strong>định dạng riêng theo công ty</strong>.
+          Tải file mẫu đúng định dạng công ty đó rồi điền dữ liệu vào. CN nào không có phân công
+          công ty này tại ngày tương ứng sẽ bị skip (báo trong preview).
         </div>
-        <select
-          className="form-input"
-          value={congTyId}
-          onChange={(e) => { setCongTyId(e.target.value); setPreview(null); }}
-          style={{ maxWidth: 400 }}
-        >
-          <option value="">-- Chọn công ty --</option>
-          {congTyArr.map((ct) => (
-            <option key={ct.id} value={ct.id}>{ct.ten_cong_ty}</option>
-          ))}
-        </select>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <select
+            className="form-input"
+            value={congTyId}
+            onChange={(e) => { setCongTyId(e.target.value); setPreview(null); }}
+            style={{ maxWidth: 400 }}
+          >
+            <option value="">-- Chọn công ty --</option>
+            {congTyArr.map((ct) => (
+              <option key={ct.id} value={ct.id}>{ct.ten_cong_ty}</option>
+            ))}
+          </select>
+          {congTyId && (
+            <button onClick={downloadTemplate} disabled={downloading} style={s.btnGhost}>
+              {downloading ? 'Đang tải...' : '⬇ Tải file mẫu'}
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Step 2: upload */}
@@ -131,9 +167,9 @@ export default function ImportChamCongExcel() {
         </div>
         <div style={s.tip}>
           <strong>Cột bắt buộc:</strong> Mã thẻ, Ngày. <br />
-          <strong>Cột giờ:</strong> CA NGÀY, CA ĐÊM, CHỦ NHẬT, NGÀY LỄ,
-          TĂNG CA TRC 9:45, SAU 9:45, TĂNG CA ĐÊM, TĂNG CA CHỦ NHẬT, TĂNG CA NGÀY LỄ. <br />
-          Các cột Lịch sử chấm vân tay, Đang hoạt động, Đề xuất tăng ca... sẽ được bỏ qua.
+          <strong>Định dạng theo công ty</strong> — dùng đúng cột trong file mẫu vừa tải.
+          Có thể kèm cột <strong>Giờ đến, Nghỉ trưa, Giờ về</strong> để hiện khi bấm vào 1 ngày. <br />
+          Các cột không nhận diện (Lịch sử chấm vân tay, Đang hoạt động, Đề xuất tăng ca...) sẽ được bỏ qua.
         </div>
 
         <input
@@ -244,7 +280,11 @@ function PreviewTable({ rows }) {
             <th style={s.th}>Trạng thái</th>
             <th style={s.th}>Mã thẻ</th>
             <th style={s.th}>Họ tên (DB)</th>
+            <th style={s.th}>Bộ phận</th>
             <th style={s.th}>Ngày</th>
+            <th style={s.th}>Đến</th>
+            <th style={s.th}>Trưa</th>
+            <th style={s.th}>Về</th>
             <th style={s.th}>Giờ</th>
             <th style={s.th}>OT</th>
             <th style={s.th}>Ca làm</th>
@@ -271,7 +311,11 @@ function PreviewTable({ rows }) {
                 </td>
                 <td style={s.tdMono}>{r.ma_van_tay ?? '—'}</td>
                 <td style={s.td}>{r.cong_nhan_ho_ten ?? <span style={{ color: 'var(--text3)' }}>{r.display_name ?? '—'}</span>}</td>
+                <td style={s.td}>{r.bo_phan ?? '—'}</td>
                 <td style={s.tdMono}>{r.ngay ?? '—'}</td>
+                <td style={s.tdMono}>{r.gio_den ?? '—'}</td>
+                <td style={s.tdMono}>{r.gio_nghi_trua ?? '—'}</td>
+                <td style={s.tdMono}>{r.gio_ve ?? '—'}</td>
                 <td style={s.tdMono}>{r.so_gio}</td>
                 <td style={s.tdMono}>{r.so_gio_ot}</td>
                 <td style={s.td}>

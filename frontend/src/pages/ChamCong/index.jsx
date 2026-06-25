@@ -21,7 +21,8 @@ import {
 export default function ChamCong() {
   const { isAdmin, isQuanLy } = useAuth();
   const navigate = useNavigate();
-  const canImport = isAdmin || isQuanLy;
+  const canEdit = isAdmin || isQuanLy;  // admin/quản lý sửa được; người tuyển chỉ xem
+  const canImport = canEdit;
 
   const [mode, setMode]   = useState('ngay');         // 'ngay' | 'thang'
   const [ngay, setNgay]   = useState(todayYMD());     // cho chế độ ngày
@@ -204,14 +205,14 @@ export default function ChamCong() {
       {isLoading ? (
         <div style={s.card}><div style={s.empty}>Đang tải...</div></div>
       ) : mode === 'ngay' ? (
-        <DiemDanhNgay rows={filtered} day={day} getCell={getCell} setCell={setCell} isDirtyCell={isDirtyCell} />
+        <DiemDanhNgay rows={filtered} day={day} getCell={getCell} setCell={setCell} isDirtyCell={isDirtyCell} readOnly={!canEdit} />
       ) : (
         <BangThang rows={filtered} dayList={dayList} thang={qThang} nam={qNam}
-          getCell={getCell} setCell={setCell} isDirtyCell={isDirtyCell} />
+          getCell={getCell} setCell={setCell} isDirtyCell={isDirtyCell} readOnly={!canEdit} />
       )}
 
-      {/* Thanh lưu cố định dưới khi có thay đổi */}
-      {dirtyCount > 0 && (
+      {/* Thanh lưu cố định dưới khi có thay đổi (chỉ khi được sửa) */}
+      {canEdit && dirtyCount > 0 && (
         <div style={s.saveBar}>
           <span style={{ fontSize: 13, color: 'var(--text1)', fontWeight: 600 }}>
             {dirtyCount} thay đổi chưa lưu

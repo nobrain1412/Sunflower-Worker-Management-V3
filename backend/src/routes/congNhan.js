@@ -80,6 +80,8 @@ const taoMoiSchema = z.object({
   ngay_muon_xe:     nullableDate('Ngày mượn xe không hợp lệ (YYYY-MM-DD)'),
   // Mã vân tay máy chấm công
   ma_van_tay:       nullableStr(50),
+  // Bộ phận / phòng ban (thường lấy từ import vân tay)
+  bo_phan:          nullableStr(100),
   // URL ảnh từ OCR flow — đã upload lên Cloudinary trước khi tạo CN
   anh_cccd_truoc:   nullableStr(500),
   anh_cccd_sau:     nullableStr(500),

@@ -41,6 +41,7 @@ async function findByPhanCongThang(phanCongId, thang, nam) {
   const r = await db.query(
     `SELECT id, phan_cong_id, ngay, so_gio, so_gio_ot,
             gio_hc_ngay, gio_tc_ngay, gio_hc_dem, gio_tc_dem,
+            gio_den, gio_nghi_trua, gio_ve,
             ca_lam, ghi_chu, created_at, updated_at
      FROM cham_cong
      WHERE phan_cong_id = $1
@@ -72,14 +73,26 @@ function normalizeEntry(e) {
     gioTcNgay = num(e.so_gio_ot);
   }
 
+  // Giờ chấm chi tiết — string 'HH:MM', để trống → null
+  const clock = (v) => {
+    if (v == null) return null;
+    const s = String(v).trim();
+    return s === '' ? null : s.slice(0, 8);
+  };
+  const gioDen      = clock(e.gio_den);
+  const gioNghiTrua = clock(e.gio_nghi_trua);
+  const gioVe       = clock(e.gio_ve);
+
   const caLam = e.ca_lam || null;
-  // Nghỉ phép / nghỉ việc → mọi giờ = 0
+  // Nghỉ phép / nghỉ việc → mọi giờ = 0 (vẫn giữ mốc giờ chấm nếu có)
   if (caLam === 'nghi_phep' || caLam === 'nghi_viec') {
-    return { gioHcNgay: 0, gioTcNgay: 0, gioHcDem: 0, gioTcDem: 0, soGio: 0, soGioOt: 0, caLam };
+    return { gioHcNgay: 0, gioTcNgay: 0, gioHcDem: 0, gioTcDem: 0, soGio: 0, soGioOt: 0,
+             gioDen, gioNghiTrua, gioVe, caLam };
   }
   const soGio   = gioHcNgay + gioHcDem;
   const soGioOt = gioTcNgay + gioTcDem;
-  return { gioHcNgay, gioTcNgay, gioHcDem, gioTcDem, soGio, soGioOt, caLam };
+  return { gioHcNgay, gioTcNgay, gioHcDem, gioTcDem, soGio, soGioOt,
+           gioDen, gioNghiTrua, gioVe, caLam };
 }
 
 // Upsert 1 batch entries cho 1 phan_cong
@@ -136,8 +149,9 @@ async function upsertBatch(phanCongId, entries) {
       const n = normalizeEntry(e);
       const ghiChu = e.ghi_chu || null;
 
-      // Xoá entry nếu cả giờ và ca đều rỗng (cell trống = bỏ chấm)
-      if (n.soGio === 0 && n.soGioOt === 0 && !n.caLam) {
+      // Xoá entry nếu giờ + ca + mốc giờ chấm đều rỗng (cell trống = bỏ chấm)
+      if (n.soGio === 0 && n.soGioOt === 0 && !n.caLam
+          && !n.gioDen && !n.gioNghiTrua && !n.gioVe) {
         const del = await db.query(
           `DELETE FROM cham_cong WHERE phan_cong_id = $1 AND ngay = $2 RETURNING id`,
           [phanCongId, e.ngay],
@@ -149,8 +163,9 @@ async function upsertBatch(phanCongId, entries) {
       const res = await db.query(
         `INSERT INTO cham_cong
            (phan_cong_id, ngay, so_gio, so_gio_ot,
-            gio_hc_ngay, gio_tc_ngay, gio_hc_dem, gio_tc_dem, ca_lam, ghi_chu)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+            gio_hc_ngay, gio_tc_ngay, gio_hc_dem, gio_tc_dem,
+            gio_den, gio_nghi_trua, gio_ve, ca_lam, ghi_chu)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
          ON CONFLICT (phan_cong_id, ngay) DO UPDATE
            SET so_gio = EXCLUDED.so_gio,
                so_gio_ot = EXCLUDED.so_gio_ot,
@@ -158,12 +173,16 @@ async function upsertBatch(phanCongId, entries) {
                gio_tc_ngay = EXCLUDED.gio_tc_ngay,
                gio_hc_dem = EXCLUDED.gio_hc_dem,
                gio_tc_dem = EXCLUDED.gio_tc_dem,
+               gio_den = EXCLUDED.gio_den,
+               gio_nghi_trua = EXCLUDED.gio_nghi_trua,
+               gio_ve = EXCLUDED.gio_ve,
                ca_lam = EXCLUDED.ca_lam,
                ghi_chu = EXCLUDED.ghi_chu,
                updated_at = NOW()
          RETURNING (xmax = 0) AS inserted`,
         [phanCongId, e.ngay, n.soGio, n.soGioOt,
-         n.gioHcNgay, n.gioTcNgay, n.gioHcDem, n.gioTcDem, n.caLam, ghiChu],
+         n.gioHcNgay, n.gioTcNgay, n.gioHcDem, n.gioTcDem,
+         n.gioDen, n.gioNghiTrua, n.gioVe, n.caLam, ghiChu],
       );
       if (res.rows[0]?.inserted) inserted += 1; else updated += 1;
 
@@ -180,8 +199,11 @@ async function upsertBatch(phanCongId, entries) {
   return { inserted, updated, deleted, baoNghi };
 }
 
-// Tổng hợp chấm công theo tháng cho nhiều CN (admin/quản lý view)
-// scope: { type: 'all' | 'cong_ty', ids: [] | 'nguoi_tuyen', userId }
+// Tổng hợp chấm công theo tháng cho nhiều CN.
+// scope:
+//   { type: 'all' }                          → admin/kế toán: xem tất cả
+//   { type: 'cong_ty', ids: [...], userId }  → quản lý: CN thuộc công ty mình
+//   { type: 'vender'|'nguoi_tuyen', userId } → người tuyển: CHỈ CN do mình tuyển (read-only)
 // Trả về list CN + tổng giờ + chi tiết theo ngày
 async function findThangByScope({ thang, nam, scope, cong_ty_id, nguoi_tuyen_id }) {
   const params = [thang, nam];
@@ -193,7 +215,8 @@ async function findThangByScope({ thang, nam, scope, cong_ty_id, nguoi_tuyen_id 
   if (scope?.type === 'cong_ty' && scope.ids?.length > 0) {
     params.push(scope.ids);
     conditions.push(`pc.cong_ty_id = ANY($${params.length}::int[])`);
-  } else if (scope?.type === 'nguoi_tuyen') {
+  } else if (scope?.type === 'vender' || scope?.type === 'nguoi_tuyen') {
+    // Người tuyển chỉ thấy CN do chính mình tuyển.
     params.push(scope.userId);
     conditions.push(`cn.nguoi_tuyen_id = $${params.length}`);
   }
@@ -215,6 +238,7 @@ async function findThangByScope({ thang, nam, scope, cong_ty_id, nguoi_tuyen_id 
             pc.ngay_bat_dau,
             pc.ngay_ket_thuc,
             cn.ho_ten       AS cong_nhan_ten,
+            cn.bo_phan      AS bo_phan,
             cn.trang_thai   AS cong_nhan_trang_thai,
             cn.ngay_nghi_viec,
             cn.nguoi_tuyen_id,
@@ -227,6 +251,9 @@ async function findThangByScope({ thang, nam, scope, cong_ty_id, nguoi_tuyen_id 
               'gio_tc_ngay', cc.gio_tc_ngay,
               'gio_hc_dem',  cc.gio_hc_dem,
               'gio_tc_dem',  cc.gio_tc_dem,
+              'gio_den',       cc.gio_den,
+              'gio_nghi_trua', cc.gio_nghi_trua,
+              'gio_ve',        cc.gio_ve,
               'ca_lam',      cc.ca_lam,
               'ghi_chu',     cc.ghi_chu
             ) ORDER BY cc.ngay) FILTER (WHERE cc.id IS NOT NULL), '[]'::json) AS cham_cong,

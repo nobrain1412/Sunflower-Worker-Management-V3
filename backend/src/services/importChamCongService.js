@@ -13,35 +13,7 @@
  */
 const ExcelJS = require('exceljs');
 const db = require('../utils/db');
-
-const HEADER_MAP = {
-  // Identity
-  'ma the':              'ma_van_tay',
-  'ma the cham cong':    'ma_van_tay',
-  'ma van tay':          'ma_van_tay',
-  'ho ten':              '__display_name',
-  'ho va ten':           '__display_name',
-
-  // Date + status
-  'ngay':                'ngay',
-  'trang thai':          '__trang_thai',
-
-  // Regular hours
-  'ca ngay':             '__h_day',
-  'ca dem':              '__h_night',
-  'chu nhat':            '__h_sunday',
-  'ngay le':             '__h_holiday',
-
-  // OT hours (actual, not "đề xuất")
-  'tang ca trc 9 45':    '__ot_before_945',
-  'trc 9 45':            '__ot_before_945',
-  'tang ca trc 945':     '__ot_before_945',
-  'sau 9 45':            '__ot_after_945',
-  'tang ca sau 9 45':    '__ot_after_945',
-  'tang ca dem':         '__ot_night',
-  'tang ca chu nhat':    '__ot_sunday',
-  'tang ca ngay le':     '__ot_holiday',
-};
+const { resolveTemplate } = require('./chamCongTemplates');
 
 function normalizeHeader(raw) {
   raw = extractText(raw); // header cũng có thể là rich text / object ExcelJS
@@ -125,10 +97,33 @@ function toHours(raw) {
   return Number.isFinite(n) ? n : 0;
 }
 
+// Chuẩn hoá 1 mốc giờ chấm về 'HH:MM' (máy vân tay xuất nhiều kiểu).
+// Trả null nếu không nhận diện được → không lưu.
+function toClock(raw) {
+  if (raw == null || raw === '') return null;
+  if (raw instanceof Date) {
+    if (isNaN(raw.getTime())) return null;
+    return `${String(raw.getHours()).padStart(2, '0')}:${String(raw.getMinutes()).padStart(2, '0')}`;
+  }
+  if (typeof raw === 'number') {
+    // ExcelJS có thể trả giờ dạng fraction của ngày (0..1) hoặc số phút.
+    const frac = raw > 0 && raw < 1 ? raw : null;
+    if (frac != null) {
+      const mins = Math.round(frac * 24 * 60);
+      return `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`;
+    }
+    return null;
+  }
+  const m = String(raw).trim().match(/(\d{1,2}):(\d{2})(?::\d{2})?/);
+  if (!m) return null;
+  return `${m[1].padStart(2, '0')}:${m[2]}`;
+}
+
 /**
- * Parse buffer .xlsx → rows
+ * Parse buffer .xlsx → rows, dùng headerMap của template công ty.
  */
-async function parseExcel(buffer) {
+async function parseExcel(buffer, template = resolveTemplate(null)) {
+  const headerMap = template.headerMap;
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(buffer);
   const ws = wb.worksheets[0];
@@ -141,7 +136,7 @@ async function parseExcel(buffer) {
   const colMap = {};
   ws.getRow(1).eachCell({ includeEmpty: false }, (cell, colNumber) => {
     const key = normalizeHeader(cell.value);
-    const field = HEADER_MAP[key];
+    const field = headerMap[key];
     if (field) colMap[colNumber] = field;
   });
 
@@ -167,6 +162,8 @@ async function parseExcel(buffer) {
       ma_van_tay: null,
       ngay: null,
       trang_thai: null,
+      bo_phan: null,
+      gio_den: null, gio_nghi_trua: null, gio_ve: null,
       h_day: 0, h_night: 0, h_sunday: 0, h_holiday: 0,
       ot_before_945: 0, ot_after_945: 0, ot_night: 0, ot_sunday: 0, ot_holiday: 0,
       errors: [], warnings: [], skip: false,
@@ -180,6 +177,10 @@ async function parseExcel(buffer) {
         case '__display_name':   row.display_name = raw; break;
         case 'ngay':             row.ngay = parseDate(raw); break;
         case '__trang_thai':     row.trang_thai = raw; break;
+        case '__bo_phan':        row.bo_phan = String(raw).trim() || null; break;
+        case '__gio_den':        row.gio_den = toClock(raw); break;
+        case '__gio_nghi_trua':  row.gio_nghi_trua = toClock(raw); break;
+        case '__gio_ve':         row.gio_ve = toClock(raw); break;
         case '__h_day':          row.h_day = toHours(raw); break;
         case '__h_night':        row.h_night = toHours(raw); break;
         case '__h_sunday':       row.h_sunday = toHours(raw); break;
@@ -318,22 +319,27 @@ async function commitImport(rows, createdBy) {
         const { rows: res } = await db.query(
           `INSERT INTO cham_cong
              (phan_cong_id, ngay, so_gio, so_gio_ot,
-              gio_hc_ngay, gio_tc_ngay, gio_hc_dem, gio_tc_dem, ca_lam, ghi_chu)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+              gio_hc_ngay, gio_tc_ngay, gio_hc_dem, gio_tc_dem,
+              gio_den, gio_nghi_trua, gio_ve, ca_lam, ghi_chu)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
            ON CONFLICT (phan_cong_id, ngay) DO UPDATE
-             SET so_gio      = EXCLUDED.so_gio,
-                 so_gio_ot   = EXCLUDED.so_gio_ot,
-                 gio_hc_ngay = EXCLUDED.gio_hc_ngay,
-                 gio_tc_ngay = EXCLUDED.gio_tc_ngay,
-                 gio_hc_dem  = EXCLUDED.gio_hc_dem,
-                 gio_tc_dem  = EXCLUDED.gio_tc_dem,
-                 ca_lam      = EXCLUDED.ca_lam,
-                 ghi_chu     = EXCLUDED.ghi_chu,
+             SET so_gio        = EXCLUDED.so_gio,
+                 so_gio_ot     = EXCLUDED.so_gio_ot,
+                 gio_hc_ngay   = EXCLUDED.gio_hc_ngay,
+                 gio_tc_ngay   = EXCLUDED.gio_tc_ngay,
+                 gio_hc_dem    = EXCLUDED.gio_hc_dem,
+                 gio_tc_dem    = EXCLUDED.gio_tc_dem,
+                 gio_den       = EXCLUDED.gio_den,
+                 gio_nghi_trua = EXCLUDED.gio_nghi_trua,
+                 gio_ve        = EXCLUDED.gio_ve,
+                 ca_lam        = EXCLUDED.ca_lam,
+                 ghi_chu       = EXCLUDED.ghi_chu,
                  updated_at = NOW()
            RETURNING (xmax = 0) AS is_insert`,
           [
             r.phan_cong_id, r.ngay, r.so_gio, r.so_gio_ot,
-            r.gio_hc_ngay, r.gio_tc_ngay, r.gio_hc_dem, r.gio_tc_dem, r.ca_lam,
+            r.gio_hc_ngay, r.gio_tc_ngay, r.gio_hc_dem, r.gio_tc_dem,
+            r.gio_den, r.gio_nghi_trua, r.gio_ve, r.ca_lam,
             'Import từ máy vân tay',
           ],
         );
@@ -342,6 +348,22 @@ async function commitImport(rows, createdBy) {
         failed.push({ rowNumber: r.rowNumber, message: err.message });
       }
     }
+
+    // Cập nhật bộ phận vào hồ sơ công nhân (lấy giá trị mới nhất có trong file).
+    // Chỉ ghi đè khi file có bộ phận; không xoá bộ phận đang có.
+    const boPhanByCn = new Map();
+    for (const r of rows) {
+      if (r.cong_nhan_id && r.bo_phan) boPhanByCn.set(r.cong_nhan_id, r.bo_phan);
+    }
+    for (const [congNhanId, boPhan] of boPhanByCn) {
+      await db.query(
+        `UPDATE cong_nhan SET bo_phan = $1, updated_at = NOW()
+         WHERE id = $2 AND deleted_at IS NULL
+           AND (bo_phan IS DISTINCT FROM $1)`,
+        [boPhan, congNhanId],
+      );
+    }
+
     await db.query('COMMIT');
   } catch (err) {
     await db.query('ROLLBACK');
