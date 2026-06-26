@@ -97,6 +97,23 @@ function toHours(raw) {
   return Number.isFinite(n) ? n : 0;
 }
 
+// Parse chuỗi "Lịch sử chấm vân tay" dạng "07:30| 08:35| 19:33|"
+// Trả { raw: string, gio_den, gio_ve } — gio_nghi_trua không tách vì không đáng tin cậy.
+function parseLichSuVanTay(raw) {
+  if (!raw) return { raw: null, gio_den: null, gio_ve: null };
+  const str = String(raw).trim();
+  const matches = [];
+  for (const m of str.matchAll(/(\d{1,2}):(\d{2})(?::\d{2})?/g)) {
+    matches.push(`${m[1].padStart(2, '0')}:${m[2]}`);
+  }
+  if (matches.length === 0) return { raw: str, gio_den: null, gio_ve: null };
+  return {
+    raw: str,
+    gio_den: matches[0],
+    gio_ve: matches[matches.length - 1],
+  };
+}
+
 // Chuẩn hoá 1 mốc giờ chấm về 'HH:MM' (máy vân tay xuất nhiều kiểu).
 // Trả null nếu không nhận diện được → không lưu.
 function toClock(raw) {
@@ -163,7 +180,7 @@ async function parseExcel(buffer, template = resolveTemplate(null)) {
       ngay: null,
       trang_thai: null,
       bo_phan: null,
-      gio_den: null, gio_nghi_trua: null, gio_ve: null,
+      gio_den: null, gio_nghi_trua: null, gio_ve: null, lich_su_van_tay: null,
       h_day: 0, h_night: 0, h_sunday: 0, h_holiday: 0,
       ot_before_945: 0, ot_after_945: 0, ot_night: 0, ot_sunday: 0, ot_holiday: 0,
       errors: [], warnings: [], skip: false,
@@ -181,6 +198,14 @@ async function parseExcel(buffer, template = resolveTemplate(null)) {
         case '__gio_den':        row.gio_den = toClock(raw); break;
         case '__gio_nghi_trua':  row.gio_nghi_trua = toClock(raw); break;
         case '__gio_ve':         row.gio_ve = toClock(raw); break;
+        case '__lich_su_van_tay': {
+          const parsed = parseLichSuVanTay(raw);
+          row.lich_su_van_tay = parsed.raw;
+          // Chỉ set gio_den/gio_ve nếu chưa có cột riêng
+          if (!row.gio_den) row.gio_den = parsed.gio_den;
+          if (!row.gio_ve)  row.gio_ve  = parsed.gio_ve;
+          break;
+        }
         case '__h_day':          row.h_day = toHours(raw); break;
         case '__h_night':        row.h_night = toHours(raw); break;
         case '__h_sunday':       row.h_sunday = toHours(raw); break;
@@ -320,26 +345,27 @@ async function commitImport(rows, createdBy) {
           `INSERT INTO cham_cong
              (phan_cong_id, ngay, so_gio, so_gio_ot,
               gio_hc_ngay, gio_tc_ngay, gio_hc_dem, gio_tc_dem,
-              gio_den, gio_nghi_trua, gio_ve, ca_lam, ghi_chu)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+              gio_den, gio_nghi_trua, gio_ve, lich_su_van_tay, ca_lam, ghi_chu)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
            ON CONFLICT (phan_cong_id, ngay) DO UPDATE
-             SET so_gio        = EXCLUDED.so_gio,
-                 so_gio_ot     = EXCLUDED.so_gio_ot,
-                 gio_hc_ngay   = EXCLUDED.gio_hc_ngay,
-                 gio_tc_ngay   = EXCLUDED.gio_tc_ngay,
-                 gio_hc_dem    = EXCLUDED.gio_hc_dem,
-                 gio_tc_dem    = EXCLUDED.gio_tc_dem,
-                 gio_den       = EXCLUDED.gio_den,
-                 gio_nghi_trua = EXCLUDED.gio_nghi_trua,
-                 gio_ve        = EXCLUDED.gio_ve,
-                 ca_lam        = EXCLUDED.ca_lam,
-                 ghi_chu       = EXCLUDED.ghi_chu,
+             SET so_gio          = EXCLUDED.so_gio,
+                 so_gio_ot       = EXCLUDED.so_gio_ot,
+                 gio_hc_ngay     = EXCLUDED.gio_hc_ngay,
+                 gio_tc_ngay     = EXCLUDED.gio_tc_ngay,
+                 gio_hc_dem      = EXCLUDED.gio_hc_dem,
+                 gio_tc_dem      = EXCLUDED.gio_tc_dem,
+                 gio_den         = EXCLUDED.gio_den,
+                 gio_nghi_trua   = EXCLUDED.gio_nghi_trua,
+                 gio_ve          = EXCLUDED.gio_ve,
+                 lich_su_van_tay = EXCLUDED.lich_su_van_tay,
+                 ca_lam          = EXCLUDED.ca_lam,
+                 ghi_chu         = EXCLUDED.ghi_chu,
                  updated_at = NOW()
            RETURNING (xmax = 0) AS is_insert`,
           [
             r.phan_cong_id, r.ngay, r.so_gio, r.so_gio_ot,
             r.gio_hc_ngay, r.gio_tc_ngay, r.gio_hc_dem, r.gio_tc_dem,
-            r.gio_den, r.gio_nghi_trua, r.gio_ve, r.ca_lam,
+            r.gio_den, r.gio_nghi_trua, r.gio_ve, r.lich_su_van_tay, r.ca_lam,
             'Import từ máy vân tay',
           ],
         );

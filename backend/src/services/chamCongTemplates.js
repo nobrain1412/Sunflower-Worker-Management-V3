@@ -69,6 +69,10 @@ const KANGYIN = {
   headerMap: {
     ...COMMON_IDENTITY_HEADERS,
     ...COMMON_TIME_HEADERS,
+    // Cột lịch sử vân tay Kangyin (tất cả mốc giờ trong 1 ô)
+    'lich su cham van tay': '__lich_su_van_tay',
+    'lich su van tay':      '__lich_su_van_tay',
+    'thoi gian cham':       '__lich_su_van_tay',
     // Regular hours
     'ca ngay':          '__h_day',
     'ca dem':           '__h_night',
@@ -86,7 +90,7 @@ const KANGYIN = {
   },
   // Cột tiêu đề cho file mẫu tải về (giữ dấu tiếng Việt cho người dùng dễ đọc).
   templateHeaders: [
-    'Mã thẻ', 'Họ tên', 'Bộ phận', 'Ngày', 'Giờ đến', 'Nghỉ trưa', 'Giờ về',
+    'Mã thẻ', 'Họ tên', 'Bộ phận', 'Ngày', 'Lịch sử chấm vân tay',
     'CA NGÀY', 'CA ĐÊM', 'CHỦ NHẬT', 'NGÀY LỄ',
     'TĂNG CA TRC 9:45', 'SAU 9:45', 'TĂNG CA ĐÊM', 'TĂNG CA CHỦ NHẬT', 'TĂNG CA NGÀY LỄ',
   ],

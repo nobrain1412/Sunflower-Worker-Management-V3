@@ -169,7 +169,7 @@ export default function ImportChamCongExcel() {
           <strong>Cột bắt buộc:</strong> Mã thẻ, Ngày. <br />
           <strong>Định dạng theo công ty</strong> — dùng đúng cột trong file mẫu vừa tải.
           Có thể kèm cột <strong>Giờ đến, Nghỉ trưa, Giờ về</strong> để hiện khi bấm vào 1 ngày. <br />
-          Các cột không nhận diện (Lịch sử chấm vân tay, Đang hoạt động, Đề xuất tăng ca...) sẽ được bỏ qua.
+          Cột "Lịch sử chấm vân tay" (Kangyin) được ghi lại nguyên vẹn; mốc đầu/cuối tự động thành giờ đến/về. Các cột không nhận diện khác sẽ được bỏ qua.
         </div>
 
         <input
@@ -282,9 +282,7 @@ function PreviewTable({ rows }) {
             <th style={s.th}>Họ tên (DB)</th>
             <th style={s.th}>Bộ phận</th>
             <th style={s.th}>Ngày</th>
-            <th style={s.th}>Đến</th>
-            <th style={s.th}>Trưa</th>
-            <th style={s.th}>Về</th>
+            <th style={s.th}>Lịch sử vân tay</th>
             <th style={s.th}>Giờ</th>
             <th style={s.th}>OT</th>
             <th style={s.th}>Ca làm</th>
@@ -313,9 +311,11 @@ function PreviewTable({ rows }) {
                 <td style={s.td}>{r.cong_nhan_ho_ten ?? <span style={{ color: 'var(--text3)' }}>{r.display_name ?? '—'}</span>}</td>
                 <td style={s.td}>{r.bo_phan ?? '—'}</td>
                 <td style={s.tdMono}>{r.ngay ?? '—'}</td>
-                <td style={s.tdMono}>{r.gio_den ?? '—'}</td>
-                <td style={s.tdMono}>{r.gio_nghi_trua ?? '—'}</td>
-                <td style={s.tdMono}>{r.gio_ve ?? '—'}</td>
+                <td style={{ ...s.tdMono, maxWidth: 180, whiteSpace: 'normal', wordBreak: 'break-word' }}>
+                  {r.lich_su_van_tay ?? (r.gio_den || r.gio_ve
+                    ? [r.gio_den, r.gio_ve].filter(Boolean).join(' → ')
+                    : '—')}
+                </td>
                 <td style={s.tdMono}>{r.so_gio}</td>
                 <td style={s.tdMono}>{r.so_gio_ot}</td>
                 <td style={s.td}>
