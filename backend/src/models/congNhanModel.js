@@ -241,6 +241,61 @@ async function updateAnh(id, fields) {
   return result.rows[0] || null;
 }
 
+// Lấy toàn bộ CN (KHÔNG phân trang) phục vụ xuất Excel "Danh sách công nhân".
+// - scope: giới hạn theo quyền.
+//     'all'     (admin/kế toán) → không giới hạn công ty
+//     'cong_ty' (quản lý)       → CHỈ CN thuộc công ty mình quản lý (bám công ty,
+//                                  không mở rộng theo người tuyển như màn danh sách)
+// - congTyId: lọc đúng 1 công ty (null = tất cả công ty trong phạm vi quyền)
+// - chuaNghi: true → chỉ CN chưa báo nghỉ việc (trạng thái ≠ nghỉ việc VÀ chưa có ngày nghỉ)
+// - loaiCongNhan: 'chinh_thuc' | 'thoi_vu' | undefined (cả 2 loại)
+async function findForExport({ scope, congTyId, chuaNghi, loaiCongNhan }) {
+  const conditions = ['cn.deleted_at IS NULL'];
+  const params = [];
+
+  if (scope?.type === 'cong_ty') {
+    if (scope.ids?.length > 0) {
+      params.push(scope.ids);
+      conditions.push(`cn.cong_ty_id = ANY($${params.length}::int[])`);
+    } else {
+      conditions.push('1 = 0'); // quản lý chưa quản lý công ty nào → không có CN
+    }
+  } else if (scope && scope.type !== 'all') {
+    // vender/CTV không được xuất báo cáo — chặn phòng hờ nếu lọt qua route
+    conditions.push('1 = 0');
+  }
+
+  if (congTyId) {
+    params.push(congTyId);
+    conditions.push(`cn.cong_ty_id = $${params.length}`);
+  }
+  if (chuaNghi) {
+    conditions.push(`cn.trang_thai <> 'nghi_viec' AND cn.ngay_nghi_viec IS NULL`);
+  }
+  if (loaiCongNhan === 'chinh_thuc' || loaiCongNhan === 'thoi_vu') {
+    params.push(loaiCongNhan);
+    conditions.push(`cn.loai_cong_nhan = $${params.length}`);
+  }
+
+  const where = conditions.join(' AND ');
+  const result = await db.query(
+    `SELECT cn.id, cn.ho_ten, cn.cccd, cn.ngay_sinh, cn.gioi_tinh,
+            cn.so_dien_thoai, cn.dia_chi_hien_tai,
+            cn.trang_thai, cn.loai_cong_nhan,
+            cn.ngay_vao_lam, cn.ngay_nghi_viec, cn.ma_van_tay, cn.bo_phan,
+            cn.ngan_hang, cn.so_tai_khoan, cn.ten_chu_tk,
+            u.ho_ten   AS nguoi_tuyen_ho_ten,
+            ct.ten_cong_ty
+     FROM cong_nhan cn
+     LEFT JOIN users   u  ON u.id  = cn.nguoi_tuyen_id
+     LEFT JOIN cong_ty ct ON ct.id = cn.cong_ty_id
+     WHERE ${where}
+     ORDER BY ct.ten_cong_ty ASC NULLS LAST, cn.ho_ten ASC`,
+    params,
+  );
+  return result.rows;
+}
+
 // Lấy danh sách CN theo cong_ty_id (dùng cho scope quan_ly)
 async function findByCongTy(congTyIds) {
   if (!congTyIds?.length) return [];
@@ -277,4 +332,4 @@ async function softDelete(id) {
   return result.rows[0] || null;
 }
 
-module.exports = { findAll, findById, findByCccd, create, update, updateAnh, findByCongTy, softDelete, autoUpdateTrangThai };
+module.exports = { findAll, findForExport, findById, findByCccd, create, update, updateAnh, findByCongTy, softDelete, autoUpdateTrangThai };

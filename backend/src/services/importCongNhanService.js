@@ -572,7 +572,11 @@ function applyDuplicateAction(r) {
     if (!r.data.cong_ty_id) {
       r.errors.push('Đổi công ty: cần nhập "Công ty" mới hợp lệ ở cột Công ty');
     } else if (r.existing && r.existing.cong_ty_id === r.data.cong_ty_id) {
-      r.errors.push(`Công ty mới trùng công ty hiện tại (${ctyCu}) — không cần đổi`);
+      // Vào lại ĐÚNG công ty cũ: không phải lỗi. Kết thúc giai đoạn phan_cong
+      // trước, mở giai đoạn mới → cập nhật ngày nghỉ (giai đoạn cũ) + ngày vào lại.
+      // Mã vân tay khi vào lại có thể trùng hoặc khác → cập nhật theo file nếu có.
+      r.isReentry = true;
+      r.warnings.push(`CCCD trùng "${ten}" → VÀO LẠI công ty "${ctyCu}": kết thúc giai đoạn cũ + mở giai đoạn mới (cập nhật ngày nghỉ / ngày vào lại)`);
     } else {
       r.warnings.push(`CCCD trùng "${ten}" → báo nghỉ công ty cũ (${ctyCu}) và gán "${r._congTyName}"`);
     }
@@ -701,14 +705,18 @@ async function commitImport(rows, createdBy) {
              VALUES ($1, $2, $3)`,
             [r.existing.id, d.cong_ty_id, start],
           );
-          // Cập nhật công ty hiện tại (denormalized); nếu đang nghỉ việc → cho đi làm lại
+          // Cập nhật công ty hiện tại (denormalized); nếu đang nghỉ việc → cho đi làm lại.
+          // Vào lại đúng công ty cũ: cập nhật luôn ngày vào (ngày vào lại) và mã vân tay
+          // mới (nếu file có) — vân tay khi vào lại có thể trùng hoặc khác.
           await db.query(
             `UPDATE cong_nhan
                 SET cong_ty_id = $1,
                     ngay_nghi_viec = NULL,
+                    ngay_vao_lam = CASE WHEN $3::boolean THEN $4::date ELSE ngay_vao_lam END,
+                    ma_van_tay   = CASE WHEN $3::boolean AND $5::text IS NOT NULL THEN $5::text ELSE ma_van_tay END,
                     trang_thai = CASE WHEN trang_thai = 'nghi_viec' THEN 'dang_lam' ELSE trang_thai END
               WHERE id = $2`,
-            [d.cong_ty_id, r.existing.id],
+            [d.cong_ty_id, r.existing.id, !!r.isReentry, start, d.ma_van_tay ?? null],
           );
           doiCongTy++;
         } else {

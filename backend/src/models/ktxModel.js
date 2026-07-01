@@ -480,10 +480,120 @@ async function createHoaDon(data) {
   return result.rows[0];
 }
 
+// ─── BÁO CÁO HÓA ĐƠN KTX THEO THÁNG ────────────────────────
+// Tính tiền KTX cho 1 tháng: kỳ tính CỐ ĐỊNH từ ngày đầu tháng → ngày cuối tháng.
+// Mỗi phòng có hoá đơn tháng đó (điện/nước/tiền phòng) → tổng tiền phòng được
+// PHÂN BỔ cho từng công nhân đang ở theo SỐ NGÀY ở trong kỳ (ai ở nhiều trả nhiều).
+// Người còn đang ở (chưa trả phòng) → chốt tới ngày cuối tháng.
+// Trả mảng phẳng (1 dòng / công nhân) để xuất Excel.
+async function findHoaDonKtxReport(thang, nam) {
+  const monthStart = new Date(Date.UTC(nam, thang - 1, 1));
+  const monthEnd   = new Date(Date.UTC(nam, thang, 0)); // ngày cuối tháng
+  const startISO = monthStart.toISOString().slice(0, 10);
+  const endISO   = monthEnd.toISOString().slice(0, 10);
+
+  // Công nhân có thời gian ở KTX GIAO với [đầu tháng, cuối tháng]
+  const occ = await db.query(
+    `SELECT k.ten AS ktx_ten, p.id AS phong_id, p.ten_phong, p.tang,
+            p.tien_phong AS phong_tien_phong,
+            cn.ho_ten AS cong_nhan_ten, cn.cccd,
+            tp.ngay_vao, tp.ngay_ra
+       FROM thue_phong tp
+       JOIN giuong g     ON g.id = tp.giuong_id
+       JOIN phong p      ON p.id = g.phong_id
+       JOIN ky_tuc_xa k  ON k.id = p.ktx_id
+       JOIN cong_nhan cn ON cn.id = tp.cong_nhan_id AND cn.deleted_at IS NULL
+      WHERE tp.ngay_vao <= $2
+        AND (tp.ngay_ra IS NULL OR tp.ngay_ra >= $1)
+      ORDER BY k.ten, p.tang, p.ten_phong, cn.ho_ten`,
+    [startISO, endISO],
+  );
+
+  // Hoá đơn (điện/nước/tiền phòng) của từng phòng trong tháng
+  const hd = await db.query(
+    `SELECT phong_id, dien_cu, dien_moi, don_gia_dien,
+            nuoc_cu, nuoc_moi, don_gia_nuoc, tien_phong
+       FROM hoa_don_ktx WHERE thang = $1 AND nam = $2`,
+    [thang, nam],
+  );
+  const hoaDonByPhong = new Map(hd.rows.map((h) => [h.phong_id, h]));
+
+  // Ngày (Date/ISO) → mốc UTC nửa đêm để đếm ngày không lệch múi giờ
+  const toUtc = (d) => {
+    if (!d) return null;
+    const s = d instanceof Date ? d.toISOString().slice(0, 10) : String(d).slice(0, 10);
+    const [y, m, dd] = s.split('-').map(Number);
+    return Date.UTC(y, m - 1, dd);
+  };
+  const startMs = toUtc(startISO), endMs = toUtc(endISO);
+  // Số ngày ở trong kỳ (bao gồm cả 2 đầu mút); còn ở → chốt tới cuối tháng
+  const soNgayTrongKy = (ngayVao, ngayRa) => {
+    const a = Math.max(toUtc(ngayVao), startMs);
+    const b = Math.min(ngayRa ? toUtc(ngayRa) : endMs, endMs);
+    return Math.max(0, Math.floor((b - a) / 86_400_000) + 1);
+  };
+
+  // Gom công nhân theo phòng để phân bổ
+  const byPhong = new Map();
+  for (const r of occ.rows) {
+    if (!byPhong.has(r.phong_id)) byPhong.set(r.phong_id, []);
+    byPhong.get(r.phong_id).push(r);
+  }
+
+  const rows = [];
+  for (const [phongId, occupants] of byPhong) {
+    const h = hoaDonByPhong.get(phongId);
+    const tienDien  = h ? Math.max(0, (Number(h.dien_moi) - Number(h.dien_cu)) * Number(h.don_gia_dien)) : 0;
+    const tienNuoc  = h ? Math.max(0, (Number(h.nuoc_moi) - Number(h.nuoc_cu)) * Number(h.don_gia_nuoc)) : 0;
+    const tienPhong = h ? Number(h.tien_phong) : Number(occupants[0].phong_tien_phong || 0);
+
+    const daysArr = occupants.map((o) => soNgayTrongKy(o.ngay_vao, o.ngay_ra));
+    const sumDays = daysArr.reduce((s, d) => s + d, 0);
+
+    // Phân bổ 1 khoản theo tỉ lệ ngày; người cuối "gánh" phần lẻ để tổng khớp
+    const allocate = (total) => {
+      const T = Math.round(Number(total) || 0);
+      if (sumDays <= 0) return occupants.map(() => 0);
+      let acc = 0;
+      return occupants.map((_, i) => {
+        if (i === occupants.length - 1) return T - acc;
+        const v = Math.round(T * daysArr[i] / sumDays);
+        acc += v;
+        return v;
+      });
+    };
+    const aDien = allocate(tienDien);
+    const aNuoc = allocate(tienNuoc);
+    const aPhong = allocate(tienPhong);
+
+    occupants.forEach((o, i) => {
+      const a = Math.max(toUtc(o.ngay_vao), startMs);
+      const b = Math.min(o.ngay_ra ? toUtc(o.ngay_ra) : endMs, endMs);
+      rows.push({
+        ktx_ten:       o.ktx_ten,
+        ten_phong:     o.ten_phong,
+        tang:          o.tang,
+        cong_nhan_ten: o.cong_nhan_ten,
+        cccd:          o.cccd,
+        tu_ngay:       new Date(a).toISOString().slice(0, 10),
+        den_ngay:      new Date(b).toISOString().slice(0, 10),
+        so_ngay:       daysArr[i],
+        tien_dien:     aDien[i],
+        tien_nuoc:     aNuoc[i],
+        tien_phong:    aPhong[i],
+        tong:          aDien[i] + aNuoc[i] + aPhong[i],
+        co_hoa_don:    !!h,
+      });
+    });
+  }
+  return { rows, startISO, endISO };
+}
+
 module.exports = {
   findAllKtx, findKtxById, createKtx, updateKtx,
   findPhongByKtx, findPhongById, createPhong, updatePhong, deletePhong,
   findGiuongByPhong, findGiuongById, updateGiuong,
   xepGiuong, traPhong, chuyenPhong, findThuephongByCongNhan, findUngVienXepPhong,
   findHoaDonByPhong, findHoaDonThang, findSoThangTruoc, createHoaDon,
+  findHoaDonKtxReport,
 };

@@ -245,7 +245,8 @@ export default function ImportExcel() {
             rồi bấm <strong>Kiểm tra lại</strong> để xác thực trước khi import.
             <br />
             ⚠️ Dòng <strong>trùng CCCD</strong> có ô chọn <strong>Hành động</strong>: bỏ qua, cập nhật người cũ,
-            đổi công ty (báo nghỉ cty cũ → gán cty mới), hoặc thêm mới chờ duyệt. Sau khi chọn nhớ bấm
+            đổi / vào lại công ty (báo nghỉ giai đoạn cũ → mở giai đoạn mới; chọn đúng công ty cũ = vào lại,
+            cập nhật ngày nghỉ / ngày vào lại), hoặc thêm mới chờ duyệt. Sau khi chọn nhớ bấm
             <strong> Kiểm tra lại</strong>. Bấm <strong>✕</strong> ở cột # để xoá hẳn 1 dòng khỏi danh sách.
           </div>
 
@@ -340,7 +341,7 @@ function EditCell({ value, onChange, mono, placeholder, wide }) {
 const DUP_ACTION_OPTIONS = [
   { value: 'skip',        label: 'Bỏ qua (không thêm)' },
   { value: 'update',      label: 'Cập nhật người cũ (bổ sung ô trống)' },
-  { value: 'doi_cong_ty', label: 'Đổi công ty (nghỉ cty cũ → gán mới)' },
+  { value: 'doi_cong_ty', label: 'Đổi / vào lại công ty (nghỉ cũ → mở mới)' },
   { value: 'them_moi',    label: 'Thêm mới — chờ duyệt' },
 ];
 

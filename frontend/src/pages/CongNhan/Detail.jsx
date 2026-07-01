@@ -4,6 +4,7 @@ import { useCongNhanDetail, useCapNhatCongNhan, useNoiOCongNhan, useTongUngCongN
 import { useGiaoDichCongNhan, useCapNhatHoanTien, useTaoGiaoDich } from '../../hooks/useTaiChinh';
 import { useLichSuPhong, usePhongList, useGiuongList } from '../../hooks/useKtx';
 import { useChamCongCongNhan } from '../../hooks/useChamCong';
+import { cellFromServer, summarize, detailText, cellColor, totalGio } from '../ChamCong/chamCongShared';
 import { useHoatDongCongNhan } from '../../hooks/useHoatDong';
 import { useAuth } from '../../context/AuthContext';
 import ChuyenKhoanModal from '../../components/ChuyenKhoanModal';
@@ -1110,9 +1111,19 @@ export default function CongNhanDetail() {
           ) : (
             ccPhanCongs.map((pc) => {
               const days = new Date(ccNam, ccThang, 0).getDate();
-              const dayMap = Object.fromEntries((pc.cham_cong || []).map((c) => [Number(c.ngay.slice(-2)), c]));
-              const tongGio = (pc.cham_cong || []).reduce((s, c) => s + Number(c.so_gio || 0) + Number(c.so_gio_ot || 0), 0);
-              const tongNgay = (pc.cham_cong || []).filter((c) => c.ca_lam === 'lam' || Number(c.so_gio) > 0).length;
+              // Dựng cell chuẩn (4 loại giờ) từ bản ghi server để hiển thị giống bảng công chuẩn
+              const cellMap = {};
+              let tongGio = 0, tongNgay = 0, tongPhep = 0;
+              for (const c of (pc.cham_cong || [])) {
+                const d = Number(String(c.ngay).slice(8, 10));
+                const cell = cellFromServer(c);
+                if (!cell) continue;
+                cellMap[d] = cell;
+                const g = totalGio(cell);
+                tongGio += g;
+                if (cell.ca_lam === 'nghi_phep') tongPhep++;
+                else if (g > 0) tongNgay++;
+              }
               return (
                 <div key={pc.id} style={{ marginBottom: 14, border: '1px solid var(--border)', borderRadius: 10, padding: 10, background: 'var(--bg2)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
@@ -1124,27 +1135,19 @@ export default function CongNhanDetail() {
                       </div>
                     </div>
                     <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12, color: 'var(--text2)' }}>
-                      {tongNgay} ngày · {tongGio.toFixed(1)}h
+                      {tongNgay} ngày{tongPhep ? ` · ${tongPhep}P` : ''} · {tongGio.toFixed(1)}h
                     </div>
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(34px, 1fr))', gap: 3 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(42px, 1fr))', gap: 3 }}>
                     {Array.from({ length: days }, (_, i) => i + 1).map((d) => {
-                      const cc = dayMap[d];
+                      const cell = cellMap[d];
                       const dow = new Date(ccNam, ccThang - 1, d).getDay();
-                      const sty = !cc
-                        ? { color: 'var(--text3)', bg: 'var(--bg3)' }
-                        : cc.ca_lam === 'nghi_phep' ? { color: 'var(--amber)', bg: 'rgba(255,179,68,0.15)' }
-                        : cc.ca_lam === 'nghi_viec' ? { color: 'var(--red)',   bg: 'rgba(255,95,114,0.15)' }
-                        : Number(cc.so_gio_ot || 0) > 0 ? { color: 'var(--accent2)', bg: 'rgba(123,95,255,0.15)' }
-                        : { color: 'var(--accent)', bg: 'rgba(79,124,255,0.12)' };
-                      const label = !cc ? '—'
-                        : cc.ca_lam === 'nghi_phep' ? 'P'
-                        : cc.ca_lam === 'nghi_viec' ? 'V'
-                        : Number(cc.so_gio_ot || 0) > 0 ? `${cc.so_gio}/${cc.so_gio_ot}` : `${cc.so_gio}`;
+                      const col = cellColor(cell);
+                      const label = summarize(cell) || '—';
                       return (
-                        <div key={d} title={`${d}/${ccThang} (${WEEKDAYS_LBL[dow]})`}
+                        <div key={d} title={`${d}/${ccThang} (${WEEKDAYS_LBL[dow]}) · ${detailText(cell)}`}
                           style={{
-                            background: sty.bg, color: sty.color,
+                            background: cell ? col.bg : 'var(--bg3)', color: cell ? col.color : 'var(--text3)',
                             borderRadius: 4, padding: '4px 0', textAlign: 'center',
                             fontSize: 10, fontFamily: "'JetBrains Mono', monospace",
                             border: dow === 0 ? '1px dashed rgba(255,95,114,0.3)' : '1px solid transparent',

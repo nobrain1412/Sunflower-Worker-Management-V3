@@ -27,6 +27,7 @@ const importCongNhanRoutes = require('./routes/importCongNhan');
 const importChamCongRoutes = require('./routes/importChamCong');
 const congTyDeXuatRoutes   = require('./routes/congTyDeXuat');
 const todoRoutes           = require('./routes/todo');
+const baoCaoRoutes         = require('./routes/baoCao');
 
 const app = express();
 
@@ -97,6 +98,7 @@ app.use('/api/cham-cong/import-excel', importChamCongRoutes);
 app.use('/api/cham-cong', chamCongRoutes);
 app.use('/api/hoat-dong', hoatDongRoutes);
 app.use('/api/todo',      todoRoutes);
+app.use('/api/bao-cao',   baoCaoRoutes);
 
 // Health check
 app.get('/health', (_req, res) => res.json({ status: 'ok', ts: new Date().toISOString() }));
