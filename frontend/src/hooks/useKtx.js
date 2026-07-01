@@ -114,6 +114,17 @@ export function useTraPhong(phongId) {
   });
 }
 
+export function useChuyenPhongKtx(phongId) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ congNhanId, ...data }) => api.post(`/ktx/cong-nhan/${congNhanId}/chuyen-phong`, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['ktx', 'phong', phongId, 'giuong'] });
+      qc.invalidateQueries({ queryKey: ['ktx'] });
+    },
+  });
+}
+
 export function useLichSuPhong(congNhanId) {
   return useQuery({
     queryKey: ['ktx', 'lich-su', congNhanId],

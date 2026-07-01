@@ -218,7 +218,8 @@ async function tongTheoThang(soThang = 5, userId) {
        EXTRACT(MONTH FROM ts.m)::int AS thang,
        EXTRACT(YEAR  FROM ts.m)::int AS nam,
        COALESCE(SUM(CASE WHEN g.loai = ANY($2::text[]) THEN g.so_tien - g.so_tien_da_hoan ELSE 0 END), 0) AS thu,
-       COALESCE(SUM(CASE WHEN g.loai = ANY($3::text[]) THEN g.so_tien - g.so_tien_da_hoan ELSE 0 END), 0) AS chi
+       COALESCE(SUM(CASE WHEN g.loai = ANY($3::text[]) THEN g.so_tien - g.so_tien_da_hoan ELSE 0 END), 0) AS chi,
+       COALESCE(SUM(CASE WHEN g.loai = 'tieu'          THEN g.so_tien                      ELSE 0 END), 0) AS tieu
      FROM thang_series ts
      LEFT JOIN giao_dich_tai_chinh g
        ON date_trunc('month', g.ngay) = ts.m

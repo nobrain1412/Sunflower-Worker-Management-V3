@@ -13,7 +13,7 @@ const INIT = {
   ho_ten: '', cccd: '', ngay_sinh: '', gioi_tinh: '',
   dia_chi_hien_tai: '', so_dien_thoai: '',
   ngay_cap_cccd: '',
-  trang_thai: 'moi_vao', ngay_vao_lam: todayDMY(), ghi_chu: '',
+  trang_thai: 'doi_viec', ngay_vao_lam: todayDMY(), ghi_chu: '',
   cong_ty_id: '',
   nguoi_tuyen_id: '',
   // Thông tin tài khoản ngân hàng
@@ -28,6 +28,11 @@ const INIT = {
   muon_xe: false, loai_xe: '',
   ma_van_tay: '',
   bo_phan: '',
+  // Loại công nhân & lợi nhuận
+  loai_cong_nhan: 'thoi_vu',
+  loi_nhuan_thang: '',
+  so_thang_huong_loi_nhuan: '',
+  ngay_chinh_thuc: '',
 };
 
 // Convert dd/mm/yyyy → yyyy-mm-dd cho payload backend
@@ -51,8 +56,7 @@ function formatDateInput(v) {
 export default function AddCongNhanModal({ onClose }) {
   const { user, isAdmin, isQuanLy } = useAuth();
   const canPickVender = isAdmin || isQuanLy;
-  // Người thêm không phải quản lý (vender/CTV) → mặc định "đợi việc" (chưa cần công ty)
-  const [form, setForm]     = useState(() => ({ ...INIT, trang_thai: canPickVender ? 'moi_vao' : 'doi_viec' }));
+  const [form, setForm]     = useState(() => ({ ...INIT }));
   const [errors, setErrors] = useState({});
   const [done, setDone]     = useState(false);
   const mutation = useTaoMoiCongNhan();
@@ -107,7 +111,9 @@ export default function AddCongNhanModal({ onClose }) {
     if (form.cccd && !/^\d{12}$/.test(form.cccd)) errs.cccd = 'CCCD phải đúng 12 chữ số';
     if (form.so_dien_thoai && !/^(0[3578]\d{8}|0[6789]\d{8})$/.test(form.so_dien_thoai))
       errs.so_dien_thoai = 'Số điện thoại không hợp lệ';
-    for (const f of ['ngay_sinh', 'ngay_cap_cccd', 'ngay_vao_lam']) {
+    const dateFields = ['ngay_sinh', 'ngay_cap_cccd', 'ngay_vao_lam'];
+    if (form.loai_cong_nhan === 'chinh_thuc') dateFields.push('ngay_chinh_thuc');
+    for (const f of dateFields) {
       if (form[f] && !/^\d{2}\/\d{2}\/\d{4}$/.test(form[f])) errs[f] = 'Định dạng dd/mm/yyyy';
     }
     return errs;
@@ -122,13 +128,24 @@ export default function AddCongNhanModal({ onClose }) {
      'ngan_hang','so_tai_khoan','ten_chu_tk','ma_van_tay','bo_phan']
       .forEach((k) => { if (form[k]) payload[k] = form[k]; });
     payload.cccd_da_tra = !!form.cccd_da_tra;
-    payload.trang_thai_noi_o = form.trang_thai_noi_o;
+    // KTX/phòng trọ sẽ được gán qua API riêng bên dưới (xepGiuong/ganCongNhan),
+    // API đó yêu cầu CN phải ở trạng thái 'chua_co_phong' trước khi gán.
+    payload.trang_thai_noi_o = ['ktx', 'phong_tro'].includes(form.trang_thai_noi_o)
+      ? 'chua_co_phong'
+      : form.trang_thai_noi_o;
     payload.muon_xe     = !!form.muon_xe;
     if (form.muon_xe && form.loai_xe) payload.loai_xe = form.loai_xe;
     ['ngay_sinh','ngay_cap_cccd','ngay_vao_lam'].forEach((k) => {
       const iso = toIso(form[k]);
       if (iso) payload[k] = iso;
     });
+    payload.loai_cong_nhan = form.loai_cong_nhan || 'thoi_vu';
+    if (form.loai_cong_nhan === 'chinh_thuc') {
+      if (form.loi_nhuan_thang) payload.loi_nhuan_thang = parseFloat(form.loi_nhuan_thang);
+      if (form.so_thang_huong_loi_nhuan) payload.so_thang_huong_loi_nhuan = parseInt(form.so_thang_huong_loi_nhuan, 10);
+      const isoChinhThuc = toIso(form.ngay_chinh_thuc);
+      if (isoChinhThuc) payload.ngay_chinh_thuc = isoChinhThuc;
+    }
     if (form.cong_ty_id) payload.cong_ty_id = parseInt(form.cong_ty_id, 10);
     if (canPickVender && form.nguoi_tuyen_id) {
       payload.nguoi_tuyen_id = parseInt(form.nguoi_tuyen_id, 10);
@@ -179,7 +196,7 @@ export default function AddCongNhanModal({ onClose }) {
           <div style={sc.title}>Thêm thành công!</div>
           <div style={sc.sub}>Công nhân <b>{form.ho_ten}</b> đã được thêm vào hệ thống</div>
           <div style={sc.actions}>
-            <button className="btn-ghost" onClick={() => { setForm({ ...INIT, trang_thai: canPickVender ? 'moi_vao' : 'doi_viec' }); setDone(false); }}>Thêm tiếp</button>
+            <button className="btn-ghost" onClick={() => { setForm({ ...INIT }); setDone(false); }}>Thêm tiếp</button>
             <button className="btn-primary" onClick={onClose}>Hoàn tất</button>
           </div>
         </div>
@@ -234,7 +251,7 @@ export default function AddCongNhanModal({ onClose }) {
 
             <div style={{ gridColumn: 'span 2', height: 1, background: 'var(--border)', margin: '4px 0' }} />
 
-            <FormField label="Công ty">
+            <FormField label={form.trang_thai === 'doi_viec' ? 'Công ty phỏng vấn (dự định)' : 'Công ty'}>
               <select className="form-input" name="cong_ty_id" value={form.cong_ty_id} onChange={handleChange}>
                 <option value="">{isAdmin ? '-- Chọn công ty --' : 'Công ty bạn quản lý'}</option>
                 {congTyOptions.map((ct) => (
@@ -311,6 +328,45 @@ export default function AddCongNhanModal({ onClose }) {
             <FormField label="Ghi chú" style={{ gridColumn: 'span 2' }}>
               <textarea className="form-input" name="ghi_chu" value={form.ghi_chu} onChange={handleChange} rows={2} placeholder="Ghi chú thêm..." style={{ resize: 'vertical' }} />
             </FormField>
+
+            <div style={{ gridColumn: 'span 2', height: 1, background: 'var(--border)', margin: '4px 0' }} />
+            <div style={{ gridColumn: 'span 2', fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              Loại hợp đồng
+            </div>
+            <FormField label="Loại công nhân">
+              <select className="form-input" name="loai_cong_nhan" value={form.loai_cong_nhan} onChange={handleChange}>
+                <option value="thoi_vu">Thời vụ</option>
+                <option value="chinh_thuc">Chính thức</option>
+              </select>
+            </FormField>
+            {form.loai_cong_nhan === 'chinh_thuc' && (
+              <>
+                <FormField label="Lợi nhuận/tháng (VNĐ)">
+                  <input
+                    className="form-input" type="number" name="loi_nhuan_thang"
+                    value={form.loi_nhuan_thang} onChange={handleChange}
+                    placeholder="VD: 500000" min={0}
+                    style={{ fontFamily: "'JetBrains Mono', monospace" }}
+                  />
+                </FormField>
+                <FormField label="Số tháng được hưởng">
+                  <input
+                    className="form-input" type="number" name="so_thang_huong_loi_nhuan"
+                    value={form.so_thang_huong_loi_nhuan} onChange={handleChange}
+                    placeholder="VD: 12" min={1}
+                    style={{ fontFamily: "'JetBrains Mono', monospace" }}
+                  />
+                </FormField>
+                <FormField label="Ngày bắt đầu chính thức" error={errors.ngay_chinh_thuc}>
+                  <input
+                    className="form-input" name="ngay_chinh_thuc"
+                    value={form.ngay_chinh_thuc}
+                    onChange={handleDateChange('ngay_chinh_thuc')}
+                    placeholder="dd/mm/yyyy" maxLength={10}
+                  />
+                </FormField>
+              </>
+            )}
 
             <div style={{ gridColumn: 'span 2', height: 1, background: 'var(--border)', margin: '4px 0' }} />
             <div style={{ gridColumn: 'span 2', fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>

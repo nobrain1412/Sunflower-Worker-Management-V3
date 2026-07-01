@@ -86,6 +86,17 @@ const taoMoiSchema = z.object({
   anh_cccd_truoc:   nullableStr(500),
   anh_cccd_sau:     nullableStr(500),
   anh_chan_dung:    nullableStr(500),
+  // Loại công nhân và thông tin lợi nhuận (chính thức)
+  loai_cong_nhan:           z.enum(['thoi_vu', 'chinh_thuc']).default('thoi_vu').optional(),
+  loi_nhuan_thang:          z.preprocess(
+    (v) => (v === '' || v === null ? null : Number(v)),
+    z.number().positive().nullable().optional(),
+  ),
+  so_thang_huong_loi_nhuan: z.preprocess(
+    (v) => (v === '' || v === null ? null : Number(v)),
+    z.number().int().positive().nullable().optional(),
+  ),
+  ngay_chinh_thuc: nullableDate('Ngày chính thức không hợp lệ (YYYY-MM-DD)'),
 });
 
 // PUT cho phép partial update (mọi trường optional, chấp nhận null để xoá)

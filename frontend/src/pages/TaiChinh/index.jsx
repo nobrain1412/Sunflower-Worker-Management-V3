@@ -298,8 +298,9 @@ export default function TaiChinh() {
   // Chia cho 1 triệu để hiển thị đơn vị "tr"
   const MONTHLY = (monthlyRes?.data ?? []).map((m) => ({
     thang: `T${m.thang}`,
-    thu:   Math.round(Number(m.thu || 0) / 1_000_000),
-    chi:   Math.round(Number(m.chi || 0) / 1_000_000),
+    thu:   Math.round(Number(m.thu  || 0) / 1_000_000),
+    chi:   Math.round(Number(m.chi  || 0) / 1_000_000),
+    tieu:  Math.round(Number(m.tieu || 0) / 1_000_000),
   }));
 
   const gdList   = gdRes?.data ?? [];
@@ -360,19 +361,21 @@ export default function TaiChinh() {
       <div className="tai-chinh-main">
         {/* Chart */}
         <div style={{ ...s.card, width: 280, flexShrink: 0 }} className="tai-chinh-chart">
-          <div style={s.cardTitle}>Thu/Chi 5 tháng</div>
+          <div style={s.cardTitle}>Thu / Chi / Tiêu 5 tháng</div>
           <ResponsiveContainer width="100%" height={180}>
             <BarChart data={MONTHLY} margin={{ left: -24, right: 4 }}>
               <XAxis dataKey="thang" tick={{ fill: 'var(--text3)', fontSize: 11 }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fill: 'var(--text3)', fontSize: 10 }} axisLine={false} tickLine={false} unit="tr" />
               <Tooltip formatter={(v) => [v + ' triệu', '']} contentStyle={{ background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 8, fontSize: 12 }} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
-              <Bar dataKey="thu" fill="#22c986" radius={[4,4,0,0]} maxBarSize={20} />
-              <Bar dataKey="chi" fill="#ff5f72" radius={[4,4,0,0]} maxBarSize={20} />
+              <Bar dataKey="thu"  fill="#22c986" radius={[4,4,0,0]} maxBarSize={16} />
+              <Bar dataKey="chi"  fill="#ff5f72" radius={[4,4,0,0]} maxBarSize={16} />
+              <Bar dataKey="tieu" fill="#4f7cff" radius={[4,4,0,0]} maxBarSize={16} />
             </BarChart>
           </ResponsiveContainer>
           <div style={{ display: 'flex', gap: 12, marginTop: 8, fontSize: 11 }}>
             <span><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: '#22c986', marginRight: 4 }} />Thu</span>
             <span><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: '#ff5f72', marginRight: 4 }} />Chi</span>
+            <span><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: '#4f7cff', marginRight: 4 }} />Tiêu</span>
           </div>
         </div>
 

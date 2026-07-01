@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useCongNhanList, useVenders, useCongTyList, useXoaCongNhan } from '../../hooks/useCongNhan';
+import { useCongNhanList, useVenders, useCongTyList, useXoaCongNhan, useDuyetCongNhan } from '../../hooks/useCongNhan';
 import { useTinhList } from '../../hooks/useProvinces';
 import { useAuth } from '../../context/AuthContext';
 import AddCongNhanModal from './AddModal';
@@ -57,7 +57,14 @@ function mediaUrl(path) {
   return path;
 }
 
-function MobileCongNhanCard({ cn, isAdmin, onOpen, onDelete }) {
+function LoaiCNBadge({ loai }) {
+  if (loai === 'chinh_thuc') {
+    return <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 6px', borderRadius: 5, background: 'rgba(45,212,191,0.15)', color: '#2dd4bf', whiteSpace: 'nowrap' }}>Chính thức</span>;
+  }
+  return null;
+}
+
+function MobileCongNhanCard({ cn, canDelete, onOpen, onDelete }) {
   const pill = TRANG_THAI_PILL[cn.trang_thai] ?? TRANG_THAI_PILL.moi_vao;
 
   return (
@@ -83,16 +90,106 @@ function MobileCongNhanCard({ cn, isAdmin, onOpen, onDelete }) {
         <div style={m.item}><span style={m.label}>Nơi ở</span><span style={m.value}>{NOI_O_LABEL[cn.trang_thai_noi_o] ?? '—'}</span></div>
       </div>
 
-      {isAdmin && (
+      {canDelete && (
         <div style={m.actions}>
-          <button
-            onClick={onDelete}
-            style={m.deleteBtn}
-          >
-            🗑 Xoá
-          </button>
+          <button onClick={onDelete} style={m.deleteBtn}>🗑 Xoá</button>
         </div>
       )}
+    </div>
+  );
+}
+
+function DoiPhongVanSection() {
+  const navigate = useNavigate();
+  const { isAdmin, isQuanLy } = useAuth();
+  const { data, isLoading } = useCongNhanList({
+    trang_thai: 'doi_viec', limit: 100, sort: 'created_at', order: 'desc',
+  });
+  const xoaCN = useXoaCongNhan();
+  const duyetCN = useDuyetCongNhan();
+  const rows = (data?.data ?? []).filter((cn) => cn.cong_ty_id);
+
+  if (!isAdmin && !isQuanLy) return null;
+
+  async function handleXoa(cn, e) {
+    e.stopPropagation();
+    if (!window.confirm(`Xoá công nhân "${cn.ho_ten}"? Thao tác không thể hoàn tác.`)) return;
+    try { await xoaCN.mutateAsync(cn.id); }
+    catch (err) { alert(err?.response?.data?.error?.message ?? 'Lỗi xoá'); }
+  }
+
+  async function handleDuyet(cn, e) {
+    e.stopPropagation();
+    if (!window.confirm(`Duyệt "${cn.ho_ten}" vào làm việc tại ${cn.ten_cong_ty}?`)) return;
+    try { await duyetCN.mutateAsync(cn.id); }
+    catch (err) { alert(err?.response?.data?.error?.message ?? 'Lỗi duyệt'); }
+  }
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+        <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text1)' }}>Đang đợi phỏng vấn</span>
+        {rows.length > 0 && (
+          <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 10, background: 'rgba(123,95,255,0.15)', color: 'var(--accent2)' }}>
+            {rows.length}
+          </span>
+        )}
+      </div>
+
+      <div style={s.card}>
+        {isLoading ? (
+          <div style={s.center}>Đang tải...</div>
+        ) : rows.length === 0 ? (
+          <div style={{ ...s.center, fontSize: 12 }}>Không có công nhân nào đang đợi phỏng vấn</div>
+        ) : (
+          <div className="table-scroll">
+          <table style={s.table}>
+            <thead>
+              <tr>
+                {['Công nhân', 'Công ty phỏng vấn', 'Loại', 'Vender', 'SĐT', ''].map((label, i) => (
+                  <th key={i} style={s.th}>{label}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((cn) => (
+                <tr key={cn.id} style={s.tr} onClick={() => navigate(`/cong-nhan/${cn.id}`)}>
+                  <td style={s.td}>
+                    <div style={s.avatar}>{cn.anh_chan_dung
+                      ? <img src={cn.anh_chan_dung} alt="" style={s.avatarImg} />
+                      : (cn.ho_ten?.[0] ?? '?')}
+                    </div>
+                    <span style={s.name}>{cn.ho_ten}</span>
+                  </td>
+                  <td style={s.td}><span style={s.sub}>{cn.ten_cong_ty ?? '—'}</span></td>
+                  <td style={s.td}><LoaiCNBadge loai={cn.loai_cong_nhan} /></td>
+                  <td style={s.td}><span style={s.sub}>{cn.nguoi_tuyen_ho_ten ?? '—'}</span></td>
+                  <td style={s.td}><span style={s.mono}>{cn.so_dien_thoai ?? '—'}</span></td>
+                  <td style={s.tdAction} onClick={(e) => e.stopPropagation()}>
+                    {isAdmin && (
+                      <button
+                        title="Duyệt vào làm"
+                        onClick={(e) => handleDuyet(cn, e)}
+                        style={{ background: 'rgba(34,201,134,0.08)', border: '1px solid rgba(34,201,134,0.3)',
+                          borderRadius: 6, padding: '4px 8px', fontSize: 11, color: 'var(--green)',
+                          cursor: 'pointer', marginRight: 6 }}
+                      >✓ Duyệt</button>
+                    )}
+                    <button
+                      title="Xoá công nhân"
+                      onClick={(e) => handleXoa(cn, e)}
+                      style={{ background: 'transparent', border: '1px solid rgba(255,95,114,0.4)',
+                        borderRadius: 6, padding: '4px 8px', fontSize: 11, color: 'var(--red)',
+                        cursor: 'pointer' }}
+                    >🗑</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -261,7 +358,7 @@ export default function CongNhan() {
               <MobileCongNhanCard
                 key={cn.id}
                 cn={cn}
-                isAdmin={isAdmin}
+                canDelete={isAdmin || (isQuanLy && cn.trang_thai === 'doi_viec')}
                 onOpen={() => navigate(`/cong-nhan/${cn.id}`)}
                 onDelete={(e) => handleXoa(cn, e)}
               />
@@ -308,9 +405,12 @@ export default function CongNhan() {
                     <td style={s.td}><span style={s.mono}>{cn.so_dien_thoai ?? '—'}</span></td>
                     <td style={s.td}><span style={s.mono}>{fmtDate(cn.ngay_vao_lam)}</span></td>
                     <td style={s.td}><span style={s.sub}>{NOI_O_LABEL[cn.trang_thai_noi_o] ?? '—'}</span></td>
-                    <td style={s.td}><span className={`pill ${pill.cls}`}>{pill.label}</span></td>
+                    <td style={s.td}>
+                      <span className={`pill ${pill.cls}`}>{pill.label}</span>
+                      {cn.loai_cong_nhan === 'chinh_thuc' && <LoaiCNBadge loai={cn.loai_cong_nhan} />}
+                    </td>
                     <td style={s.tdAction}>
-                      {isAdmin && (
+                      {(isAdmin || (isQuanLy && cn.trang_thai === 'doi_viec')) && (
                         <button
                           title="Xoá công nhân"
                           onClick={(e) => handleXoa(cn, e)}
@@ -349,6 +449,8 @@ export default function CongNhan() {
           >Sau →</button>
         </div>
       )}
+
+      {(isAdmin || isQuanLy) && <DoiPhongVanSection />}
 
       <BottomSheet open={showAddSheet} onClose={() => setShowAddSheet(false)} title="Thêm công nhân">
         <div style={bs.list}>

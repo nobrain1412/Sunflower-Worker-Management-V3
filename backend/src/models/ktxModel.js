@@ -368,6 +368,58 @@ async function findUngVienXepPhong({ search, limit = 100 }) {
   return result.rows;
 }
 
+// ─── CHUYEN_PHONG ──────────────────────────────────────────
+async function chuyenPhong(congNhanId, giuongMoiId, ngayChuyen) {
+  const cur = await db.query(
+    `SELECT tp.id, tp.ngay_vao, tp.giuong_id,
+            p.tien_phong, p.ten_phong,
+            k.ten AS ten_ktx
+       FROM thue_phong tp
+       JOIN giuong g  ON g.id = tp.giuong_id
+       JOIN phong  p  ON p.id = g.phong_id
+       JOIN ky_tuc_xa k ON k.id = p.ktx_id
+      WHERE tp.cong_nhan_id = $1 AND tp.ngay_ra IS NULL`,
+    [congNhanId],
+  );
+  if (!cur.rows[0]) {
+    const e = new Error('Công nhân hiện không ở phòng KTX nào');
+    e.statusCode = 400;
+    throw e;
+  }
+  const cu = cur.rows[0];
+
+  if (cu.giuong_id === giuongMoiId) {
+    const e = new Error('Giường mới phải khác giường hiện tại');
+    e.statusCode = 400;
+    throw e;
+  }
+
+  const busy = await db.query(
+    `SELECT 1 FROM thue_phong WHERE giuong_id = $1 AND ngay_ra IS NULL`,
+    [giuongMoiId],
+  );
+  if (busy.rows.length) {
+    const e = new Error('Giường mới đã có người ở');
+    e.statusCode = 400;
+    e.code = 'GIUONG_OCCUPIED';
+    throw e;
+  }
+
+  await db.query(`UPDATE thue_phong SET ngay_ra = $1 WHERE id = $2`, [ngayChuyen, cu.id]);
+
+  const newRec = await db.query(
+    `INSERT INTO thue_phong (cong_nhan_id, giuong_id, ngay_vao) VALUES ($1,$2,$3) RETURNING *`,
+    [congNhanId, giuongMoiId, ngayChuyen],
+  );
+
+  const soNgay = Math.max(0, Math.round((new Date(ngayChuyen) - new Date(cu.ngay_vao)) / 86_400_000));
+  return {
+    phong_cu:       { ten_phong: cu.ten_phong, ten_ktx: cu.ten_ktx, tien_phong: cu.tien_phong },
+    thue_phong_cu:  { id: cu.id, ngay_vao: cu.ngay_vao, ngay_ra: ngayChuyen, so_ngay: soNgay },
+    thue_phong_moi: newRec.rows[0],
+  };
+}
+
 // ─── HOA_DON_KTX ───────────────────────────────────────────
 async function findHoaDonByPhong(phongId) {
   const result = await db.query(
@@ -432,6 +484,6 @@ module.exports = {
   findAllKtx, findKtxById, createKtx, updateKtx,
   findPhongByKtx, findPhongById, createPhong, updatePhong, deletePhong,
   findGiuongByPhong, findGiuongById, updateGiuong,
-  xepGiuong, traPhong, findThuephongByCongNhan, findUngVienXepPhong,
+  xepGiuong, traPhong, chuyenPhong, findThuephongByCongNhan, findUngVienXepPhong,
   findHoaDonByPhong, findHoaDonThang, findSoThangTruoc, createHoaDon,
 };

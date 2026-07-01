@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useKtxList, useTaoKtx, useCapNhatKtx, useXoaKtx, usePhongList, useTaoPhong, useCapNhatPhong, useXoaPhong, useGiuongList, useCapNhatGiuong, useXepGiuong, useTraPhong, useHoaDonList, useTaoHoaDon, useHoaDonThangTruoc, useUngVienXepPhong } from '../../hooks/useKtx';
-import { usePhongTroList, useTaoPhongTro, useCapNhatPhongTro, useXoaPhongTro, usePhongTroThue, useTraPhongTro } from '../../hooks/usePhongTro';
+import { useKtxList, useTaoKtx, useCapNhatKtx, useXoaKtx, usePhongList, useTaoPhong, useCapNhatPhong, useXoaPhong, useGiuongList, useCapNhatGiuong, useXepGiuong, useTraPhong, useChuyenPhongKtx, useHoaDonList, useTaoHoaDon, useHoaDonThangTruoc, useUngVienXepPhong } from '../../hooks/useKtx';
+import { usePhongTroList, useTaoPhongTro, useCapNhatPhongTro, useXoaPhongTro, usePhongTroThue, useTraPhongTro, useChuyenPhongTro, useHoaDonPhongTro, useHoaDonThangTruocPhongTro, useTaoHoaDonPhongTro } from '../../hooks/usePhongTro';
 import { useAuth } from '../../context/AuthContext';
 import { isEmbeddableMapUrl, normalizeMapUrl } from '../../constants/mapUrl';
 import MediaUploader from '../../components/MediaUploader';
@@ -473,16 +473,310 @@ function HoaDonModal({ phong, onClose }) {
   );
 }
 
+// ─── Modal chuyển phòng KTX ───────────────────────────────
+function ChuyenPhongKtxModal({ giuong, phong, onClose }) {
+  const { data: ktxRes } = useKtxList();
+  const ktxList = ktxRes?.data ?? [];
+  const [selKtxId, setSelKtxId] = useState('');
+  const [selPhongId, setSelPhongId] = useState('');
+  const { data: phongRes } = usePhongList(selKtxId || null);
+  const phongList = phongRes?.data ?? [];
+  const { data: giuongRes } = useGiuongList(selPhongId || null);
+  const giuongListMoi = (giuongRes?.data ?? []).filter((g) => !g.cong_nhan_id);
+  const [selGiuongId, setSelGiuongId] = useState('');
+  const [ngayChuyen, setNgayChuyen] = useState(new Date().toISOString().split('T')[0]);
+  const [err, setErr] = useState('');
+  const chuyen = useChuyenPhongKtx(phong.id);
+
+  const ngayChuyenDate = new Date(ngayChuyen);
+  const soNgay = giuong.ngay_vao
+    ? Math.max(0, Math.round((ngayChuyenDate - new Date(giuong.ngay_vao)) / 86_400_000))
+    : 0;
+  const soNgayThang = new Date(ngayChuyenDate.getFullYear(), ngayChuyenDate.getMonth() + 1, 0).getDate();
+  const tienTamTinh = soNgay > 0 ? Math.round(Number(phong.tien_phong || 0) / soNgayThang * soNgay) : 0;
+
+  async function handle() {
+    setErr('');
+    if (!selGiuongId) { setErr('Vui lòng chọn giường mới'); return; }
+    try {
+      await chuyen.mutateAsync({ congNhanId: giuong.cong_nhan_id, giuong_id: parseInt(selGiuongId, 10), ngay_chuyen: ngayChuyen });
+      onClose();
+    } catch (e) { setErr(e?.response?.data?.error?.message ?? 'Lỗi'); }
+  }
+
+  return (
+    <div style={M.overlay} onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div style={{ ...M.modal, maxWidth: 520 }}>
+        <div style={M.title}>Chuyển phòng KTX — {giuong.cong_nhan_ten}</div>
+        <div style={{ background: 'var(--bg2)', borderRadius: 10, padding: '10px 14px', marginBottom: 14, fontSize: 12, color: 'var(--text2)' }}>
+          <span style={{ color: 'var(--text3)' }}>Đang ở:</span> Phòng <b>{phong.ten_phong}</b> · Giường {giuong.so_thu_tu} · Vào {giuong.ngay_vao ? new Date(giuong.ngay_vao).toLocaleDateString('vi-VN') : '—'}
+        </div>
+        <div style={{ marginBottom: 14 }}>
+          <label className="form-label">Ngày chuyển phòng</label>
+          <input className="form-input" type="date" value={ngayChuyen} onChange={(e) => setNgayChuyen(e.target.value)} />
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+          <div>
+            <label className="form-label">Khu KTX mới</label>
+            <select className="form-input" value={selKtxId} onChange={(e) => { setSelKtxId(e.target.value); setSelPhongId(''); setSelGiuongId(''); }}>
+              <option value="">— Chọn khu —</option>
+              {ktxList.map((k) => <option key={k.id} value={k.id}>{k.ten}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="form-label">Phòng mới</label>
+            <select className="form-input" value={selPhongId} onChange={(e) => { setSelPhongId(e.target.value); setSelGiuongId(''); }} disabled={!selKtxId}>
+              <option value="">— Chọn phòng —</option>
+              {phongList.map((p) => <option key={p.id} value={p.id}>{p.ten_phong} ({p.so_dang_o ?? 0}/{p.suc_chua})</option>)}
+            </select>
+          </div>
+        </div>
+        <div style={{ marginBottom: 14 }}>
+          <label className="form-label">Giường mới *</label>
+          <select className="form-input" value={selGiuongId} onChange={(e) => setSelGiuongId(e.target.value)} disabled={!selPhongId}>
+            <option value="">— Chọn giường trống —</option>
+            {giuongListMoi.map((g) => <option key={g.id} value={g.id}>Giường {g.so_thu_tu}{g.ghi_chu ? ` (${g.ghi_chu})` : ''}</option>)}
+          </select>
+          {selPhongId && giuongListMoi.length === 0 && (
+            <div style={{ fontSize: 11, color: 'var(--amber)', marginTop: 4 }}>Phòng này không còn giường trống</div>
+          )}
+        </div>
+        {soNgay > 0 && (
+          <div style={M.preview}>
+            <div style={M.previewRow}><span>Số ngày ở phòng cũ</span><span style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 700 }}>{soNgay} ngày</span></div>
+            <div style={M.previewRow}><span>Tiền phòng tạm tính</span><span style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 700 }}>{fmt(tienTamTinh)}</span></div>
+            <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 4 }}>{fmt(phong.tien_phong)}/tháng ÷ {soNgayThang} ngày × {soNgay} ngày. Điện/nước tính riêng qua hóa đơn.</div>
+          </div>
+        )}
+        {err && <div style={M.err}>{err}</div>}
+        <div style={M.actions}>
+          <button className="btn-ghost" onClick={onClose}>Hủy</button>
+          <button className="btn-primary" onClick={handle} disabled={chuyen.isPending}>{chuyen.isPending ? 'Đang chuyển...' : 'Chuyển phòng'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Modal chuyển phòng trọ ───────────────────────────────
+function ChuyenPhongTroModal({ thue, phongTroHienTai, onClose }) {
+  const { data: ptRes } = usePhongTroList();
+  const allPt = (ptRes?.data ?? []).filter((p) => p.id !== thue.phong_tro_id);
+  const [selPtId, setSelPtId] = useState('');
+  const [ngayChuyen, setNgayChuyen] = useState(new Date().toISOString().split('T')[0]);
+  const [ghiChu, setGhiChu] = useState('');
+  const [err, setErr] = useState('');
+  const chuyen = useChuyenPhongTro();
+
+  const ngayChuyenDate = new Date(ngayChuyen);
+  const soNgay = thue.ngay_vao
+    ? Math.max(0, Math.round((ngayChuyenDate - new Date(thue.ngay_vao)) / 86_400_000))
+    : 0;
+  const soNgayThang = new Date(ngayChuyenDate.getFullYear(), ngayChuyenDate.getMonth() + 1, 0).getDate();
+  const tienTamTinh = soNgay > 0 && phongTroHienTai?.tien_phong > 0
+    ? Math.round(Number(phongTroHienTai.tien_phong) / soNgayThang * soNgay)
+    : 0;
+
+  async function handle() {
+    setErr('');
+    if (!selPtId) { setErr('Vui lòng chọn phòng trọ mới'); return; }
+    try {
+      await chuyen.mutateAsync({ thueId: thue.id, phong_tro_id: parseInt(selPtId, 10), ngay_chuyen: ngayChuyen, ghi_chu: ghiChu || undefined });
+      onClose();
+    } catch (e) { setErr(e?.response?.data?.error?.message ?? 'Lỗi'); }
+  }
+
+  return (
+    <div style={M.overlay} onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div style={{ ...M.modal, maxWidth: 460 }}>
+        <div style={M.title}>Chuyển phòng trọ — {thue.cong_nhan_ten}</div>
+        <div style={{ background: 'var(--bg2)', borderRadius: 10, padding: '10px 14px', marginBottom: 14, fontSize: 12, color: 'var(--text2)' }}>
+          <span style={{ color: 'var(--text3)' }}>Đang ở:</span> <b>{phongTroHienTai?.ten}</b> · Vào {thue.ngay_vao ? new Date(thue.ngay_vao).toLocaleDateString('vi-VN') : '—'}
+        </div>
+        <div style={{ marginBottom: 10 }}>
+          <label className="form-label">Ngày chuyển</label>
+          <input className="form-input" type="date" value={ngayChuyen} onChange={(e) => setNgayChuyen(e.target.value)} />
+        </div>
+        <div style={{ marginBottom: 10 }}>
+          <label className="form-label">Phòng trọ mới *</label>
+          <select className="form-input" value={selPtId} onChange={(e) => setSelPtId(e.target.value)}>
+            <option value="">— Chọn phòng trọ —</option>
+            {allPt.map((p) => <option key={p.id} value={p.id}>{p.ten}{p.dia_chi ? ` · ${p.dia_chi}` : ''}</option>)}
+          </select>
+          {allPt.length === 0 && <div style={{ fontSize: 11, color: 'var(--amber)', marginTop: 4 }}>Không có phòng trọ nào khác</div>}
+        </div>
+        <div style={{ marginBottom: 14 }}>
+          <label className="form-label">Ghi chú</label>
+          <input className="form-input" value={ghiChu} onChange={(e) => setGhiChu(e.target.value)} placeholder="Lý do chuyển phòng..." />
+        </div>
+        {soNgay > 0 && (
+          <div style={M.preview}>
+            <div style={M.previewRow}><span>Số ngày ở phòng cũ</span><span style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 700 }}>{soNgay} ngày</span></div>
+            {tienTamTinh > 0 && <div style={M.previewRow}><span>Tiền phòng tạm tính</span><span style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 700 }}>{fmt(tienTamTinh)}</span></div>}
+            <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 4 }}>Điện/nước tính riêng qua hóa đơn.</div>
+          </div>
+        )}
+        {err && <div style={M.err}>{err}</div>}
+        <div style={M.actions}>
+          <button className="btn-ghost" onClick={onClose}>Hủy</button>
+          <button className="btn-primary" onClick={handle} disabled={chuyen.isPending}>{chuyen.isPending ? 'Đang chuyển...' : 'Chuyển phòng'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Modal hóa đơn điện/nước phòng trọ ───────────────────
+function HoaDonPhongTroModal({ phongTro, onClose }) {
+  const now = new Date();
+  const tao = useTaoHoaDonPhongTro(phongTro.id);
+  const { data: hdRes } = useHoaDonPhongTro(phongTro.id);
+  const hoaDonList = hdRes?.data ?? [];
+  const [form, setForm] = useState({
+    thang: now.getMonth() + 1, nam: now.getFullYear(),
+    dien_cu: 0, dien_moi: 0, don_gia_dien: 3000,
+    nuoc_cu: 0, nuoc_moi: 0, don_gia_nuoc: 15000,
+    tien_phong: phongTro.tien_phong ?? 0, ghi_chu: '',
+  });
+  const [tab, setTab] = useState('nhap');
+  const [err, setErr] = useState('');
+
+  const { data: prevRes } = useHoaDonThangTruocPhongTro(
+    phongTro.id, parseInt(form.thang, 10), parseInt(form.nam, 10),
+  );
+  useEffect(() => {
+    const prev = prevRes?.data;
+    if (prev) setForm((f) => ({ ...f, dien_cu: Number(prev.dien_moi ?? 0), nuoc_cu: Number(prev.nuoc_moi ?? 0) }));
+  }, [prevRes]);
+
+  function handleChange(e) { const { name, value } = e.target; setForm((f) => ({ ...f, [name]: value })); }
+
+  async function handle() {
+    setErr('');
+    try {
+      await tao.mutateAsync({
+        thang: parseInt(form.thang, 10), nam: parseInt(form.nam, 10),
+        dien_cu: parseFloat(form.dien_cu), dien_moi: parseFloat(form.dien_moi), don_gia_dien: parseFloat(form.don_gia_dien),
+        nuoc_cu: parseFloat(form.nuoc_cu), nuoc_moi: parseFloat(form.nuoc_moi), don_gia_nuoc: parseFloat(form.don_gia_nuoc),
+        tien_phong: parseFloat(form.tien_phong), ghi_chu: form.ghi_chu || undefined,
+      });
+      setTab('lich-su');
+    } catch (e) { setErr(e?.response?.data?.error?.message ?? 'Lỗi'); }
+  }
+
+  const tienDien = (form.dien_moi - form.dien_cu) * form.don_gia_dien;
+  const tienNuoc = (form.nuoc_moi - form.nuoc_cu) * form.don_gia_nuoc;
+  const tongCong  = tienDien + tienNuoc + Number(form.tien_phong);
+
+  return (
+    <div style={M.overlay} onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div style={{ ...M.modal, maxWidth: 620 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+          <div style={M.title}>Hóa đơn — {phongTro.ten}</div>
+          <div style={{ display: 'flex', gap: 4 }}>
+            {[['nhap','Nhập số'],['lich-su','Lịch sử']].map(([v, lb]) => (
+              <button key={v} style={{ ...s.tab, ...(tab === v ? s.tabActive : {}) }} onClick={() => setTab(v)}>{lb}</button>
+            ))}
+          </div>
+        </div>
+        {tab === 'nhap' && (
+          <>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
+              {[['thang','Tháng','number'],['nam','Năm','number']].map(([k, lb, type]) => (
+                <div key={k} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <label className="form-label">{lb}</label>
+                  <input className="form-input" type={type} name={k} value={form[k]} onChange={handleChange} />
+                </div>
+              ))}
+            </div>
+            <div style={M.section}>⚡ Điện</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 14 }}>
+              {[['dien_cu','Số cũ (tự động)',true],['dien_moi','Số mới',false],['don_gia_dien','Đơn giá (đ/số)',false]].map(([k, lb, ro]) => (
+                <div key={k} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <label className="form-label">{lb}</label>
+                  <input className="form-input" type="number" name={k} value={form[k]} onChange={handleChange}
+                    readOnly={ro} style={ro ? { background: 'var(--bg2)', color: 'var(--text3)' } : undefined} />
+                </div>
+              ))}
+            </div>
+            <div style={{ ...M.section, marginTop: 0 }}>💧 Nước</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 14 }}>
+              {[['nuoc_cu','Số cũ (tự động)',true],['nuoc_moi','Số mới',false],['don_gia_nuoc','Đơn giá (đ/m³)',false]].map(([k, lb, ro]) => (
+                <div key={k} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <label className="form-label">{lb}</label>
+                  <input className="form-input" type="number" name={k} value={form[k]} onChange={handleChange}
+                    readOnly={ro} style={ro ? { background: 'var(--bg2)', color: 'var(--text3)' } : undefined} />
+                </div>
+              ))}
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <label className="form-label">Tiền phòng (đ/tháng)</label>
+                <input className="form-input" type="number" name="tien_phong" value={form.tien_phong} onChange={handleChange} />
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <label className="form-label">Ghi chú</label>
+                <input className="form-input" name="ghi_chu" value={form.ghi_chu} onChange={handleChange} />
+              </div>
+            </div>
+            <div style={M.preview}>
+              <div style={M.previewRow}><span>Tiền điện ({form.dien_moi - form.dien_cu} số × {Number(form.don_gia_dien).toLocaleString('vi-VN')}đ)</span><span>{fmt(tienDien)}</span></div>
+              <div style={M.previewRow}><span>Tiền nước ({form.nuoc_moi - form.nuoc_cu} m³ × {Number(form.don_gia_nuoc).toLocaleString('vi-VN')}đ)</span><span>{fmt(tienNuoc)}</span></div>
+              <div style={M.previewRow}><span>Tiền phòng</span><span>{fmt(form.tien_phong)}</span></div>
+              <div style={{ ...M.previewRow, fontWeight: 700, color: 'var(--accent)', borderTop: '1px solid var(--border)', paddingTop: 8, marginTop: 4 }}><span>Tổng cộng</span><span>{fmt(tongCong)}</span></div>
+            </div>
+            {err && <div style={M.err}>{err}</div>}
+            <div style={M.actions}>
+              <button className="btn-ghost" onClick={onClose}>Hủy</button>
+              <button className="btn-primary" onClick={handle} disabled={tao.isPending}>{tao.isPending ? 'Đang lưu...' : 'Lưu hóa đơn'}</button>
+            </div>
+          </>
+        )}
+        {tab === 'lich-su' && (
+          <>
+            {hoaDonList.length === 0 ? (
+              <div style={{ padding: '24px 0', textAlign: 'center', color: 'var(--text3)' }}>Chưa có hóa đơn nào</div>
+            ) : (
+              <div className="table-scroll">
+                <table style={s.table}>
+                  <thead><tr>{['Tháng','Điện','Nước','Tiền phòng','Tổng'].map((h) => <th key={h} style={s.th}>{h}</th>)}</tr></thead>
+                  <tbody>
+                    {hoaDonList.map((hd) => (
+                      <tr key={hd.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                        <td style={s.td}>{hd.thang}/{hd.nam}</td>
+                        <td style={s.td}>{fmt(hd.tien_dien)} <span style={{ color: 'var(--text3)', fontSize: 10 }}>({hd.dien_moi - hd.dien_cu} số)</span></td>
+                        <td style={s.td}>{fmt(hd.tien_nuoc)} <span style={{ color: 'var(--text3)', fontSize: 10 }}>({hd.nuoc_moi - hd.nuoc_cu} m³)</span></td>
+                        <td style={s.td}>{fmt(hd.tien_phong)}</td>
+                        <td style={{ ...s.td, fontWeight: 700, color: 'var(--accent)', fontFamily: "'JetBrains Mono', monospace" }}>
+                          {fmt(Number(hd.tien_dien) + Number(hd.tien_nuoc) + Number(hd.tien_phong))}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
+              <button className="btn-ghost" onClick={onClose}>Đóng</button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Chi tiết phòng ───────────────────────────────────────
 function PhongDetail({ phong, ktxId, isAdmin }) {
   const navigate = useNavigate();
   const { data: giuongRes } = useGiuongList(phong.id);
   const giuongList = giuongRes?.data ?? [];
   const traPhong = useTraPhong(phong.id);
-  const [xepModal, setXepModal] = useState(null);   // giuong object
-  const [editGiuong, setEditGiuong] = useState(null); // giuong object
+  const [xepModal, setXepModal] = useState(null);
+  const [editGiuong, setEditGiuong] = useState(null);
   const [editPhong, setEditPhong] = useState(false);
   const [hoaDonModal, setHoaDonModal] = useState(false);
+  const [chuyenModal, setChuyenModal] = useState(null); // giuong object
 
   async function handleTra(tp) {
     if (!confirm(`Xác nhận trả phòng cho ${tp.cong_nhan_ten}?`)) return;
@@ -527,7 +821,10 @@ function PhongDetail({ phong, ktxId, isAdmin }) {
                   {g.cong_nhan_ten}
                 </button>
                 <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 2 }}>Vào: {g.ngay_vao ? new Date(g.ngay_vao).toLocaleDateString('vi-VN') : '—'}</div>
-                <button style={{ ...s.assignBtn, color: 'var(--red)', borderColor: 'rgba(255,95,114,0.3)' }} onClick={() => handleTra(g)}>↩ Trả</button>
+                <div style={{ position: 'absolute', bottom: 10, right: 10, display: 'flex', gap: 5 }}>
+                  <button style={{ ...s.assignBtn, position: 'static', color: 'var(--accent)', borderColor: 'rgba(79,124,255,0.3)' }} onClick={() => setChuyenModal(g)}>⇄ Chuyển</button>
+                  <button style={{ ...s.assignBtn, position: 'static', color: 'var(--red)', borderColor: 'rgba(255,95,114,0.3)' }} onClick={() => handleTra(g)}>↩ Trả</button>
+                </div>
               </>
             ) : (
               <>
@@ -539,6 +836,7 @@ function PhongDetail({ phong, ktxId, isAdmin }) {
         ))}
       </div>
       {xepModal && <XepGiuongModal giuong={xepModal} phongId={phong.id} onClose={() => setXepModal(null)} />}
+      {chuyenModal && <ChuyenPhongKtxModal giuong={chuyenModal} phong={phong} onClose={() => setChuyenModal(null)} />}
       {editGiuong && <EditGiuongModal giuong={editGiuong} phongId={phong.id} onClose={() => setEditGiuong(null)} />}
       {editPhong && <EditPhongModal phong={phong} ktxId={ktxId} onClose={() => setEditPhong(false)} />}
       {hoaDonModal && <HoaDonModal phong={phong} onClose={() => setHoaDonModal(false)} />}
@@ -808,6 +1106,8 @@ function PhongTroSection({ canDelete }) {
   const [form, setForm] = useState({ ten: '', dia_chi: '', map_url: '', chu_tro: '', sdt_chu_tro: '', so_phong: 0, ghi_chu: '', media_urls: [] });
   const [editing, setEditing] = useState(null);
   const [selectedPhongTro, setSelectedPhongTro] = useState(null);
+  const [chuyenPtState, setChuyenPtState] = useState(null); // { thue, phongTro }
+  const [hoaDonPtModal, setHoaDonPtModal] = useState(null); // phongTro object
   const [err, setErr] = useState('');
   const { data: thueRes } = usePhongTroThue(selectedPhongTro?.id);
   const thueList = thueRes?.data ?? [];
@@ -1020,12 +1320,25 @@ function PhongTroSection({ canDelete }) {
         </div>
       )}
 
+      {chuyenPtState && (
+        <ChuyenPhongTroModal
+          thue={chuyenPtState.thue}
+          phongTroHienTai={chuyenPtState.phongTro}
+          onClose={() => { setChuyenPtState(null); setSelectedPhongTro(null); }}
+        />
+      )}
+      {hoaDonPtModal && (
+        <HoaDonPhongTroModal phongTro={hoaDonPtModal} onClose={() => setHoaDonPtModal(null)} />
+      )}
       {selectedPhongTro && (
         <div style={M.overlay} onClick={(e) => e.target === e.currentTarget && setSelectedPhongTro(null)}>
           <div style={{ ...M.modal, maxWidth: 700 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
               <div style={M.title}>Chi tiết phòng trọ — {selectedPhongTro.ten}</div>
-              <button className="btn-ghost" onClick={() => setSelectedPhongTro(null)}>Đóng</button>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => setHoaDonPtModal(selectedPhongTro)}>💡 Hóa đơn</button>
+                <button className="btn-ghost" onClick={() => setSelectedPhongTro(null)}>Đóng</button>
+              </div>
             </div>
             {Array.isArray(selectedPhongTro.media_urls) && selectedPhongTro.media_urls.length > 0 && (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(180px,1fr))', gap: 8, marginBottom: 12 }}>
@@ -1047,17 +1360,26 @@ function PhongTroSection({ canDelete }) {
                     </div>
                   </div>
                   {!t.ngay_ra ? (
-                    <button
-                      className="btn-ghost"
-                      style={{ fontSize: 11, color: 'var(--red)' }}
-                      onClick={async () => {
-                        await traPhongTro.mutateAsync({ thueId: t.id, ngay_ra: new Date().toISOString().split('T')[0] });
-                      }}
-                    >
-                      Trả phòng
-                    </button>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button
+                        className="btn-ghost"
+                        style={{ fontSize: 11, color: 'var(--accent)' }}
+                        onClick={() => setChuyenPtState({ thue: t, phongTro: selectedPhongTro })}
+                      >
+                        ⇄ Chuyển
+                      </button>
+                      <button
+                        className="btn-ghost"
+                        style={{ fontSize: 11, color: 'var(--red)' }}
+                        onClick={async () => {
+                          await traPhongTro.mutateAsync({ thueId: t.id, ngay_ra: new Date().toISOString().split('T')[0] });
+                        }}
+                      >
+                        ↩ Trả
+                      </button>
+                    </div>
                   ) : (
-                    <span style={{ fontSize: 11, color: 'var(--text3)' }}>Đã rời</span>
+                    <span style={{ fontSize: 11, color: 'var(--text3)' }}>Đã rời {t.ngay_ra ? new Date(t.ngay_ra).toLocaleDateString('vi-VN') : ''}</span>
                   )}
                 </div>
               ))}

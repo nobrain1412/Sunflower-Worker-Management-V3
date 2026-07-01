@@ -153,6 +153,22 @@ router.put('/thue-phong/:id/tra', requireKtxAccess,
   }),
 );
 
+// Chuyển phòng KTX (đóng thue_phong hiện tại + mở thue_phong mới, trạng thái vẫn 'ktx')
+router.post('/cong-nhan/:congNhanId/chuyen-phong', requireKtxAccess,
+  validate(z.object({
+    giuong_id:   z.number().int().positive(),
+    ngay_chuyen: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Ngày chuyển không hợp lệ (YYYY-MM-DD)'),
+  })),
+  asyncWrapper(async (req, res) => {
+    const data = await ktxModel.chuyenPhong(
+      toPositiveInt(req.params.congNhanId, 'ID công nhân'),
+      req.validatedBody.giuong_id,
+      req.validatedBody.ngay_chuyen,
+    );
+    sendSuccess(res, data, 'Chuyển phòng KTX thành công');
+  }),
+);
+
 // Lịch sử thuê phòng của 1 công nhân
 router.get('/lich-su/:congNhanId', requireKtxAccess, asyncWrapper(async (req, res) => {
   const data = await ktxModel.findThuephongByCongNhan(toPositiveInt(req.params.congNhanId, 'ID công nhân'));

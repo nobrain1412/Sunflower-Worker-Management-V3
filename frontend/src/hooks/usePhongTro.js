@@ -63,3 +63,40 @@ export function useTraPhongTro() {
     },
   });
 }
+
+export function useChuyenPhongTro() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ thueId, ...data }) => api.post(`/phong-tro/thue/${thueId}/chuyen-phong`, data),
+    onSuccess:  () => {
+      qc.invalidateQueries({ queryKey: ['phong-tro'] });
+      qc.invalidateQueries({ queryKey: ['cong-nhan'] });
+    },
+  });
+}
+
+export function useHoaDonPhongTro(id) {
+  return useQuery({
+    queryKey: ['phong-tro', id, 'hoa-don'],
+    queryFn:  () => api.get(`/phong-tro/${id}/hoa-don`),
+    enabled:  !!id,
+    staleTime: 30_000,
+  });
+}
+
+export function useHoaDonThangTruocPhongTro(id, thang, nam) {
+  return useQuery({
+    queryKey: ['phong-tro', id, 'thang-truoc', thang, nam],
+    queryFn:  () => api.get(`/phong-tro/${id}/hoa-don/thang-truoc`, { params: { thang, nam } }),
+    enabled:  !!id && !!thang && !!nam,
+    staleTime: 30_000,
+  });
+}
+
+export function useTaoHoaDonPhongTro(id) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data) => api.post(`/phong-tro/${id}/hoa-don`, data),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: ['phong-tro', id, 'hoa-don'] }),
+  });
+}

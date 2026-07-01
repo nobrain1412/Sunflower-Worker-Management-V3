@@ -137,4 +137,60 @@ router.put('/thue/:thueId/tra', requireRole('admin', 'quan_ly', 'vender'),
   }),
 );
 
+// Chuyển phòng trọ (đóng thue_phong_tro hiện tại + mở mới, trạng thái vẫn 'phong_tro')
+router.post('/thue/:thueId/chuyen-phong', requireRole('admin', 'quan_ly', 'vender'),
+  validate(z.object({
+    phong_tro_id: z.number().int().positive(),
+    ngay_chuyen:  z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Ngày chuyển không hợp lệ (YYYY-MM-DD)'),
+    ghi_chu:      z.string().max(500).optional(),
+  })),
+  asyncWrapper(async (req, res) => {
+    const data = await model.chuyenPhongTro(
+      toPositiveInt(req.params.thueId, 'ID thuê phòng trọ'),
+      req.validatedBody.phong_tro_id,
+      req.validatedBody.ngay_chuyen,
+      req.validatedBody.ghi_chu,
+    );
+    sendSuccess(res, data, 'Chuyển phòng trọ thành công');
+  }),
+);
+
+// ─── Hóa đơn điện/nước phòng trọ ─────────────────────────────
+const hoaDonPtSchema = z.object({
+  thang:        z.number().int().min(1).max(12),
+  nam:          z.number().int().min(2020),
+  dien_cu:      z.number().nonnegative(),
+  dien_moi:     z.number().nonnegative(),
+  don_gia_dien: z.number().nonnegative(),
+  nuoc_cu:      z.number().nonnegative(),
+  nuoc_moi:     z.number().nonnegative(),
+  don_gia_nuoc: z.number().nonnegative(),
+  tien_phong:   z.number().nonnegative(),
+  ghi_chu:      z.string().max(500).optional(),
+});
+
+router.get('/:id/hoa-don', requireRole('admin', 'quan_ly', 'vender'), asyncWrapper(async (req, res) => {
+  const id = toPositiveInt(req.params.id, 'ID phòng trọ');
+  await assertCanAccess(req, id);
+  const data = await model.findHoaDonByPhongTro(id);
+  sendSuccess(res, data);
+}));
+
+router.get('/:id/hoa-don/thang-truoc', requireRole('admin', 'quan_ly', 'vender'), asyncWrapper(async (req, res) => {
+  const id = toPositiveInt(req.params.id, 'ID phòng trọ');
+  await assertCanAccess(req, id);
+  const data = await model.findSoThangTruocPhongTro(id, Number(req.query.thang), Number(req.query.nam));
+  sendSuccess(res, data);
+}));
+
+router.post('/:id/hoa-don', requireRole('admin', 'quan_ly', 'vender'),
+  validate(hoaDonPtSchema),
+  asyncWrapper(async (req, res) => {
+    const id = toPositiveInt(req.params.id, 'ID phòng trọ');
+    await assertCanAccess(req, id);
+    const data = await model.createHoaDonPhongTro({ ...req.validatedBody, phong_tro_id: id });
+    sendSuccess(res, data, 'Lưu hóa đơn thành công');
+  }),
+);
+
 module.exports = router;

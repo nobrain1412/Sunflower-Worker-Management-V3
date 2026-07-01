@@ -157,7 +157,95 @@ async function traPhong(thueId, ngay_ra) {
   return updated;
 }
 
+// ─── Chuyển phòng trọ ────────────────────────────────────────
+async function chuyenPhongTro(thueId, phongTroMoiId, ngayChuyen, ghiChu) {
+  const cur = await db.query(
+    `SELECT tpt.*, pt.ten AS ten_phong_tro, pt.tien_phong
+       FROM thue_phong_tro tpt
+       JOIN phong_tro pt ON pt.id = tpt.phong_tro_id
+      WHERE tpt.id = $1 AND tpt.ngay_ra IS NULL`,
+    [thueId],
+  );
+  if (!cur.rows[0]) {
+    const e = new Error('Không tìm thấy bản ghi thuê đang active');
+    e.statusCode = 404;
+    throw e;
+  }
+  const cu = cur.rows[0];
+
+  if (cu.phong_tro_id === phongTroMoiId) {
+    const e = new Error('Phòng trọ mới phải khác phòng trọ hiện tại');
+    e.statusCode = 400;
+    throw e;
+  }
+
+  await db.query(`UPDATE thue_phong_tro SET ngay_ra = $1 WHERE id = $2`, [ngayChuyen, thueId]);
+
+  const newRec = await db.query(
+    `INSERT INTO thue_phong_tro (cong_nhan_id, phong_tro_id, ngay_vao, ghi_chu)
+     VALUES ($1,$2,$3,$4) RETURNING *`,
+    [cu.cong_nhan_id, phongTroMoiId, ngayChuyen, ghiChu ?? null],
+  );
+
+  const soNgay = Math.max(0, Math.round((new Date(ngayChuyen) - new Date(cu.ngay_vao)) / 86_400_000));
+  return {
+    phong_cu:  { ten: cu.ten_phong_tro, tien_phong: cu.tien_phong },
+    thue_cu:   { id: cu.id, ngay_vao: cu.ngay_vao, ngay_ra: ngayChuyen, so_ngay: soNgay },
+    thue_moi:  newRec.rows[0],
+  };
+}
+
+// ─── Hóa đơn điện/nước phòng trọ ─────────────────────────────
+async function findHoaDonByPhongTro(phongTroId) {
+  const result = await db.query(
+    `SELECT *,
+            (dien_moi - dien_cu) * don_gia_dien AS tien_dien,
+            (nuoc_moi - nuoc_cu) * don_gia_nuoc AS tien_nuoc
+       FROM hoa_don_phong_tro
+      WHERE phong_tro_id = $1
+      ORDER BY nam DESC, thang DESC`,
+    [phongTroId],
+  );
+  return result.rows;
+}
+
+async function findSoThangTruocPhongTro(phongTroId, thang, nam) {
+  let prev_t = thang - 1, prev_n = nam;
+  if (prev_t === 0) { prev_t = 12; prev_n -= 1; }
+  const result = await db.query(
+    `SELECT dien_moi, nuoc_moi FROM hoa_don_phong_tro
+      WHERE phong_tro_id = $1 AND thang = $2 AND nam = $3`,
+    [phongTroId, prev_t, prev_n],
+  );
+  return result.rows[0] || null;
+}
+
+async function createHoaDonPhongTro(data) {
+  const result = await db.query(
+    `INSERT INTO hoa_don_phong_tro
+       (phong_tro_id, thang, nam, dien_cu, dien_moi, don_gia_dien,
+        nuoc_cu, nuoc_moi, don_gia_nuoc, tien_phong, ghi_chu)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+     ON CONFLICT (phong_tro_id, thang, nam) DO UPDATE SET
+       dien_cu = EXCLUDED.dien_cu, dien_moi = EXCLUDED.dien_moi,
+       don_gia_dien = EXCLUDED.don_gia_dien,
+       nuoc_cu = EXCLUDED.nuoc_cu, nuoc_moi = EXCLUDED.nuoc_moi,
+       don_gia_nuoc = EXCLUDED.don_gia_nuoc,
+       tien_phong = EXCLUDED.tien_phong, ghi_chu = EXCLUDED.ghi_chu,
+       updated_at = NOW()
+     RETURNING *,
+       (dien_moi - dien_cu) * don_gia_dien AS tien_dien,
+       (nuoc_moi - nuoc_cu) * don_gia_nuoc AS tien_nuoc`,
+    [data.phong_tro_id, data.thang, data.nam,
+     data.dien_cu ?? 0, data.dien_moi ?? 0, data.don_gia_dien ?? 0,
+     data.nuoc_cu ?? 0, data.nuoc_moi ?? 0, data.don_gia_nuoc ?? 0,
+     data.tien_phong ?? 0, data.ghi_chu ?? null],
+  );
+  return result.rows[0];
+}
+
 module.exports = {
   findAll, findById, create, update, remove,
-  listThue, ganCongNhan, traPhong,
+  listThue, ganCongNhan, traPhong, chuyenPhongTro,
+  findHoaDonByPhongTro, findSoThangTruocPhongTro, createHoaDonPhongTro,
 };
