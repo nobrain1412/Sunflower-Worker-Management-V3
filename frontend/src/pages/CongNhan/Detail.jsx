@@ -1115,7 +1115,9 @@ export default function CongNhanDetail() {
               const cellMap = {};
               let tongGio = 0, tongNgay = 0, tongPhep = 0;
               for (const c of (pc.cham_cong || [])) {
-                const d = Number(String(c.ngay).slice(8, 10));
+                // Lấy ngày từ phần 'YYYY-MM-DD' (BE trả text) — không parse qua Date để
+                // tránh lệch múi giờ. c.ngay có thể là 'YYYY-MM-DD' hoặc ISO đầy đủ.
+                const d = Number(String(c.ngay).slice(0, 10).slice(8, 10));
                 const cell = cellFromServer(c);
                 if (!cell) continue;
                 cellMap[d] = cell;

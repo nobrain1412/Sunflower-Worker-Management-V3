@@ -39,7 +39,9 @@ async function findPhanCongByCongNhan(congNhanId, { thang, nam } = {}) {
 // Chấm công trong tháng cho 1 phan_cong
 async function findByPhanCongThang(phanCongId, thang, nam) {
   const r = await db.query(
-    `SELECT id, phan_cong_id, ngay, so_gio, so_gio_ot,
+    // Trả ngay dạng 'YYYY-MM-DD' (text) thay vì DATE → tránh pg driver đổi sang JS Date
+    // rồi JSON serialize lệch múi giờ (server UTC+7 → lùi 1 ngày), khiến FE map sai ngày.
+    `SELECT id, phan_cong_id, to_char(ngay, 'YYYY-MM-DD') AS ngay, so_gio, so_gio_ot,
             gio_hc_ngay, gio_tc_ngay, gio_hc_dem, gio_tc_dem,
             gio_den, gio_nghi_trua, gio_ve,
             ca_lam, ghi_chu, created_at, updated_at
