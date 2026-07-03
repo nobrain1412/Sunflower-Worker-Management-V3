@@ -49,6 +49,13 @@ const nullableRegex = (re, msg, max = 100) => z.preprocess(
   (v) => (v === '' || v === null ? null : v),
   z.string().regex(re, msg).max(max).nullable().optional(),
 );
+// '' | null | undefined → null; còn lại ép về số.
+// LƯU Ý: phải xử lý undefined, nếu không Number(undefined) = NaN sẽ khiến
+// z.number() báo lỗi 422 cho MỌI công nhân thời vụ (không gửi field lợi nhuận).
+const nullableNum = (schema) => z.preprocess(
+  (v) => (v === '' || v === null || v === undefined ? null : Number(v)),
+  schema,
+);
 
 const taoMoiSchema = z.object({
   ho_ten:           z.string().min(2, 'Họ tên tối thiểu 2 ký tự').max(100),
@@ -88,14 +95,8 @@ const taoMoiSchema = z.object({
   anh_chan_dung:    nullableStr(500),
   // Loại công nhân và thông tin lợi nhuận (chính thức)
   loai_cong_nhan:           z.enum(['thoi_vu', 'chinh_thuc']).default('thoi_vu').optional(),
-  loi_nhuan_thang:          z.preprocess(
-    (v) => (v === '' || v === null ? null : Number(v)),
-    z.number().positive().nullable().optional(),
-  ),
-  so_thang_huong_loi_nhuan: z.preprocess(
-    (v) => (v === '' || v === null ? null : Number(v)),
-    z.number().int().positive().nullable().optional(),
-  ),
+  loi_nhuan_thang:          nullableNum(z.number().positive().nullable().optional()),
+  so_thang_huong_loi_nhuan: nullableNum(z.number().int().positive().nullable().optional()),
   ngay_chinh_thuc: nullableDate('Ngày chính thức không hợp lệ (YYYY-MM-DD)'),
 });
 
