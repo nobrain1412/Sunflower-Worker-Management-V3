@@ -18,12 +18,23 @@ const AUTH_FAILURE_CODES = new Set([
 ]);
 
 function normalizeError(err) {
+  // Ưu tiên error object chuẩn từ backend: { code, message, details }
+  // Lưu ý: AxiosError luôn có .code ('ERR_BAD_REQUEST') + .message ('Request
+  // failed with status code 4xx') nên KHÔNG được dựa vào code+message để nhận
+  // diện lỗi đã chuẩn hoá — phải bóc error từ response trước.
+  const backendError = err?.response?.data?.error;
+  if (backendError && (backendError.code || backendError.message)) return backendError;
+
+  // Lỗi axios không có body lỗi chuẩn (mất mạng, timeout, 5xx trả HTML...)
+  // AxiosError luôn kèm .config/.request → phân biệt được với lỗi tự throw.
+  if (err?.isAxiosError || err?.config || err?.request) {
+    return { code: err?.code || 'NETWORK_ERROR', message: 'Lỗi kết nối, vui lòng thử lại' };
+  }
+
+  // Lỗi tự throw phía client đã ở dạng chuẩn { code, message }
   if (err?.code && err?.message) return err;
 
-  return err?.response?.data?.error || {
-    code: 'NETWORK_ERROR',
-    message: 'Lỗi kết nối mạng',
-  };
+  return { code: 'UNKNOWN_ERROR', message: 'Đã xảy ra lỗi không xác định' };
 }
 
 export function setAccessToken(token) {
