@@ -18,9 +18,18 @@ const AUTH_FAILURE_CODES = new Set([
 ]);
 
 function normalizeError(err) {
-  if (err?.code && err?.message) return err;
+  // Ưu tiên lỗi backend đã chuẩn hoá { code, message, details } — đây mới là
+  // nơi chứa message tiếng Việt mô tả đúng field sai (vd "CCCD phải gồm đúng 12 chữ số").
+  const apiError = err?.response?.data?.error;
+  if (apiError) return apiError;
 
-  return err?.response?.data?.error || {
+  // Object lỗi tự tạo (không phải AxiosError) → giữ nguyên.
+  // Lưu ý: AxiosError của axios 1.x LUÔN có err.code ('ERR_BAD_REQUEST'...) và err.message
+  // ('Request failed with status code 422'), nên phải loại trừ isAxiosError ở đây —
+  // nếu không sẽ trả về message thô của axios thay vì message backend.
+  if (err?.code && err?.message && !err.isAxiosError) return err;
+
+  return {
     code: 'NETWORK_ERROR',
     message: 'Lỗi kết nối mạng',
   };
