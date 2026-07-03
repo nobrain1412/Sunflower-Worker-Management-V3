@@ -115,14 +115,14 @@ function DoiPhongVanSection() {
     e.stopPropagation();
     if (!window.confirm(`Xoá công nhân "${cn.ho_ten}"? Thao tác không thể hoàn tác.`)) return;
     try { await xoaCN.mutateAsync(cn.id); }
-    catch (err) { alert(err?.response?.data?.error?.message ?? 'Lỗi xoá'); }
+    catch (err) { alert(err?.message ?? 'Lỗi xoá'); }
   }
 
   async function handleDuyet(cn, e) {
     e.stopPropagation();
     if (!window.confirm(`Duyệt "${cn.ho_ten}" vào làm việc tại ${cn.ten_cong_ty}?`)) return;
     try { await duyetCN.mutateAsync(cn.id); }
-    catch (err) { alert(err?.response?.data?.error?.message ?? 'Lỗi duyệt'); }
+    catch (err) { alert(err?.message ?? 'Lỗi duyệt'); }
   }
 
   return (
@@ -205,7 +205,7 @@ export default function CongNhan() {
     e.stopPropagation();
     if (!window.confirm(`Xoá công nhân "${cn.ho_ten}"? Hành động này không thể hoàn tác.`)) return;
     try { await xoaCN.mutateAsync(cn.id); }
-    catch (err) { alert(err?.response?.data?.error?.message ?? 'Lỗi xoá'); }
+    catch (err) { alert(err?.message ?? 'Lỗi xoá'); }
   }
 
   const [searchInput, setSearchInput] = useState(() => urlParams.get('q') ?? '');

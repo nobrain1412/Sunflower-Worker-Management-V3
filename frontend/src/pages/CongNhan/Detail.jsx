@@ -129,7 +129,7 @@ function UploadAnhModal({ cn, onClose }) {
       qc.invalidateQueries({ queryKey: ['cong-nhan', String(cn.id)] });
       onClose();
     } catch (e) {
-      setErr(e?.response?.data?.error?.message ?? 'Upload thất bại');
+      setErr(e?.message ?? 'Upload thất bại');
     } finally { setUploading(false); }
   }
 
@@ -386,7 +386,7 @@ function EditModal({ cn, onClose, noiOHienTai, isAdmin }) {
       }
       onClose();
     } catch (e) {
-      setErr(e?.response?.data?.error?.message ?? e?.message ?? 'Lỗi không xác định');
+      setErr(e?.message ?? 'Lỗi không xác định');
     } finally { setSaving(false); }
   }
 
@@ -651,7 +651,7 @@ export default function CongNhanDetail() {
         ngay_nghi_viec: today,
       });
     } catch (e) {
-      alert(e?.response?.data?.error?.message ?? 'Không cập nhật được');
+      alert(e?.message ?? 'Không cập nhật được');
     }
   }
 
@@ -675,7 +675,7 @@ export default function CongNhanDetail() {
       if (!v || v <= 0 || v > conLai) { alert('Số tiền hoàn không hợp lệ'); return; }
       await capNhatHoan.mutateAsync({ id: g.id, so_tien_da_hoan: daHoan + v });
     } catch (e) {
-      alert(e?.response?.data?.error?.message ?? 'Không thể cập nhật hoàn tiền');
+      alert(e?.message ?? 'Không thể cập nhật hoàn tiền');
     }
   }
 
@@ -683,7 +683,7 @@ export default function CongNhanDetail() {
     try {
       await capNhatXe.mutateAsync({ xe_da_tra: nextValue });
     } catch (e) {
-      alert(e?.response?.data?.error?.message ?? 'Không thể cập nhật trạng thái xe');
+      alert(e?.message ?? 'Không thể cập nhật trạng thái xe');
     }
   }
 
@@ -1240,7 +1240,7 @@ function DoiCongTyModal({ cn, onClose }) {
       await capNhat.mutateAsync({ cong_ty_id: Number(newCtyId) });
       onClose();
     } catch (e) {
-      setErr(e?.response?.data?.error?.message ?? 'Không cập nhật được');
+      setErr(e?.message ?? 'Không cập nhật được');
     }
   }
 
@@ -1297,7 +1297,7 @@ function ChoUngModal({ cn, onClose }) {
       });
       onClose();
     } catch (e) {
-      setErr(e?.response?.data?.error?.message ?? 'Không tạo được giao dịch');
+      setErr(e?.message ?? 'Không tạo được giao dịch');
     }
   }
 

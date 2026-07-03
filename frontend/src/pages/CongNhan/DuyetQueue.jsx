@@ -63,7 +63,7 @@ function DuyetCard({ cn }) {
     try {
       await duyet.mutateAsync(cn.id);
     } catch (err) {
-      alert(err?.response?.data?.error?.message ?? err?.message ?? 'Duyệt thất bại');
+      alert(err?.message ?? 'Duyệt thất bại');
     }
   }
 

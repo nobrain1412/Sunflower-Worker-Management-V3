@@ -60,10 +60,10 @@ export default function NhanVienDetail() {
           <Field label="Tên chủ TK" value={u.ten_chu_tk} />
         </div>
 
-        {/* Công ty đang quản lý — chỉ áp dụng cho vai trò quản lý */}
-        {u.vai_tro === 'quan_ly' && (
+        {/* Công ty phụ trách — áp dụng cho quản lý (phạm vi) và kế toán (ghi nhận) */}
+        {(u.vai_tro === 'quan_ly' || u.vai_tro === 'ke_toan') && (
           <div style={{ marginTop: 18, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
-            <div style={s.label}>Công ty quản lý</div>
+            <div style={s.label}>{u.vai_tro === 'ke_toan' ? 'Công ty phụ trách' : 'Công ty quản lý'}</div>
             {(u.cong_ty_quan_ly ?? []).length === 0 ? (
               <div style={{ ...s.value, color: 'var(--text3)' }}>Chưa phụ trách công ty nào</div>
             ) : (

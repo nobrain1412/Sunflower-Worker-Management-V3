@@ -141,7 +141,7 @@ function QuickAdd({ cats, users, currentUserId, onDone }) {
       setTitle(''); setHan(''); setGioLam('');
       titleRef.current?.focus();
     } catch (e2) {
-      setErr(e2?.response?.data?.error?.message ?? e2?.message ?? 'Lỗi');
+      setErr(e2?.message ?? 'Lỗi');
     }
   }
 
@@ -251,7 +251,7 @@ function CategoryManager({ onClose }) {
         thu_tu: Number(draft.thu_tu || 100),
       });
       setDraft({ ten: '', icon: '', mau_sac: 'accent', thu_tu: 100 });
-    } catch (e) { setErr(e?.response?.data?.error?.message ?? 'Lỗi'); }
+    } catch (e) { setErr(e?.message ?? 'Lỗi'); }
   }
 
   return (

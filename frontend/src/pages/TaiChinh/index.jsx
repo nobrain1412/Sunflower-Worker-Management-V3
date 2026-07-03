@@ -138,7 +138,7 @@ function AddGiaoDichModal({ onClose, isVender }) {
           ? parseInt(form.nguoi_nhan_id, 10) : undefined,
       });
       onClose();
-    } catch (e) { setErr(e?.response?.data?.error?.message ?? e?.message ?? 'Lỗi không xác định'); }
+    } catch (e) { setErr(e?.message ?? 'Lỗi không xác định'); }
   }
 
   // Hiển thị danh mục đúng theo loại chính đã chọn (thu/chi/tieu)
@@ -220,7 +220,7 @@ function DanhMucModal({ onClose }) {
     setErr('');
     if (!form.ten.trim()) { setErr('Vui lòng nhập tên danh mục'); return; }
     try { await tao.mutateAsync(form); setForm({ ten: '', loai: 'chi', mo_ta: '' }); }
-    catch (e) { setErr(e?.response?.data?.error?.message ?? 'Lỗi'); }
+    catch (e) { setErr(e?.message ?? 'Lỗi'); }
   }
 
   async function handleToggleActive(dm) {
@@ -592,7 +592,7 @@ function HoanTienModal({ gd, onClose }) {
       await capNhat.mutateAsync({ id: gd.id, so_tien_da_hoan: tongMoi });
       onClose();
     } catch (e) {
-      setErr(e?.response?.data?.error?.message ?? e?.message ?? 'Không thể cập nhật hoàn tiền');
+      setErr(e?.message ?? 'Không thể cập nhật hoàn tiền');
     }
   }
 

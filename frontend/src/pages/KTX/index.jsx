@@ -32,7 +32,7 @@ function AddKtxModal({ onClose }) {
     setErr('');
     if (!form.ten.trim()) { setErr('Vui lòng nhập tên khu'); return; }
     try { await tao.mutateAsync(form); onClose(); }
-    catch (e) { setErr(e?.response?.data?.error?.message ?? 'Lỗi'); }
+    catch (e) { setErr(e?.message ?? 'Lỗi'); }
   }
 
   return (
@@ -67,7 +67,7 @@ function EditKtxModal({ ktx, onClose }) {
     try {
       await capNhat.mutateAsync({ ten: form.ten.trim(), dia_chi: form.dia_chi || undefined, ghi_chu: form.ghi_chu || undefined });
       onClose();
-    } catch (e) { setErr(e?.response?.data?.error?.message ?? 'Lỗi'); }
+    } catch (e) { setErr(e?.message ?? 'Lỗi'); }
   }
 
   return (
@@ -108,7 +108,7 @@ function AddPhongModal({ ktxId, onClose }) {
         ghi_chu: form.ghi_chu || undefined,
       });
       onClose();
-    } catch (e) { setErr(e?.response?.data?.error?.message ?? 'Lỗi'); }
+    } catch (e) { setErr(e?.message ?? 'Lỗi'); }
   }
 
   return (
@@ -162,7 +162,7 @@ function EditPhongModal({ phong, ktxId, onClose }) {
         ghi_chu: form.ghi_chu || undefined,
       });
       onClose();
-    } catch (e) { setErr(e?.response?.data?.error?.message ?? 'Lỗi'); }
+    } catch (e) { setErr(e?.message ?? 'Lỗi'); }
   }
 
   return (
@@ -209,7 +209,7 @@ function EditGiuongModal({ giuong, phongId, onClose }) {
         ghi_chu: form.ghi_chu || null,
       });
       onClose();
-    } catch (e) { setErr(e?.response?.data?.error?.message ?? 'Lỗi'); }
+    } catch (e) { setErr(e?.message ?? 'Lỗi'); }
   }
 
   return (
@@ -250,7 +250,7 @@ function XepGiuongModal({ giuong, phongId, onClose }) {
     try {
       await xep.mutateAsync({ giuongId: giuong.id, cong_nhan_id: parseInt(congNhanId, 10), ngay_vao: ngayVao });
       onClose();
-    } catch (e) { setErr(e?.response?.data?.error?.message ?? 'Lỗi'); }
+    } catch (e) { setErr(e?.message ?? 'Lỗi'); }
   }
 
   return (
@@ -360,7 +360,7 @@ function HoaDonModal({ phong, onClose }) {
         ghi_chu: form.ghi_chu || undefined,
       });
       setTab('lich-su');
-    } catch (e) { setErr(e?.response?.data?.error?.message ?? 'Lỗi'); }
+    } catch (e) { setErr(e?.message ?? 'Lỗi'); }
   }
 
   const tienDien = (form.dien_moi - form.dien_cu) * form.don_gia_dien;
@@ -501,7 +501,7 @@ function ChuyenPhongKtxModal({ giuong, phong, onClose }) {
     try {
       await chuyen.mutateAsync({ congNhanId: giuong.cong_nhan_id, giuong_id: parseInt(selGiuongId, 10), ngay_chuyen: ngayChuyen });
       onClose();
-    } catch (e) { setErr(e?.response?.data?.error?.message ?? 'Lỗi'); }
+    } catch (e) { setErr(e?.message ?? 'Lỗi'); }
   }
 
   return (
@@ -583,7 +583,7 @@ function ChuyenPhongTroModal({ thue, phongTroHienTai, onClose }) {
     try {
       await chuyen.mutateAsync({ thueId: thue.id, phong_tro_id: parseInt(selPtId, 10), ngay_chuyen: ngayChuyen, ghi_chu: ghiChu || undefined });
       onClose();
-    } catch (e) { setErr(e?.response?.data?.error?.message ?? 'Lỗi'); }
+    } catch (e) { setErr(e?.message ?? 'Lỗi'); }
   }
 
   return (
@@ -661,7 +661,7 @@ function HoaDonPhongTroModal({ phongTro, onClose }) {
         tien_phong: parseFloat(form.tien_phong), ghi_chu: form.ghi_chu || undefined,
       });
       setTab('lich-su');
-    } catch (e) { setErr(e?.response?.data?.error?.message ?? 'Lỗi'); }
+    } catch (e) { setErr(e?.message ?? 'Lỗi'); }
   }
 
   const tienDien = (form.dien_moi - form.dien_cu) * form.don_gia_dien;
@@ -938,7 +938,7 @@ export default function KTX({ forcePhongTro = false }) {
                 onClick={async () => {
                   if (!window.confirm(`Vô hiệu hoá khu "${k.ten}"?`)) return;
                   try { await xoaKtx.mutateAsync(k.id); setSelectedKtxId(null); }
-                  catch (e) { alert(e?.response?.data?.error?.message ?? 'Lỗi'); }
+                  catch (e) { alert(e?.message ?? 'Lỗi'); }
                 }}
                 style={{ background: 'transparent', border: 'none', color: 'var(--red)',
                   cursor: 'pointer', fontSize: 14, padding: '4px 6px' }}
@@ -1039,7 +1039,7 @@ export default function KTX({ forcePhongTro = false }) {
                                   e.stopPropagation();
                                   if (!window.confirm(`Xoá phòng "${p.ten_phong}"?`)) return;
                                   try { await xoaPhong.mutateAsync(p.id); }
-                                  catch (er) { alert(er?.response?.data?.error?.message ?? 'Lỗi'); }
+                                  catch (er) { alert(er?.message ?? 'Lỗi'); }
                                 }}
                                 style={{ background: 'transparent', border: 'none',
                                   color: 'var(--red)', cursor: 'pointer', fontSize: 12,
@@ -1128,7 +1128,7 @@ function PhongTroSection({ canDelete }) {
       });
       setForm({ ten: '', dia_chi: '', map_url: '', chu_tro: '', sdt_chu_tro: '', so_phong: 0, ghi_chu: '', media_urls: [] });
       setShowForm(false);
-    } catch (e) { setErr(e?.response?.data?.error?.message ?? 'Lỗi'); }
+    } catch (e) { setErr(e?.message ?? 'Lỗi'); }
   }
 
   async function handleSaveEdit() {
@@ -1148,14 +1148,14 @@ function PhongTroSection({ canDelete }) {
       });
       setEditing(null);
     } catch (e) {
-      setErr(e?.response?.data?.error?.message ?? 'Không thể cập nhật phòng trọ');
+      setErr(e?.message ?? 'Không thể cập nhật phòng trọ');
     }
   }
 
   async function handleXoa(id) {
     if (!confirm('Xóa phòng trọ này?')) return;
     try { await xoa.mutateAsync(id); }
-    catch (e) { alert(e?.response?.data?.error?.message ?? 'Lỗi'); }
+    catch (e) { alert(e?.message ?? 'Lỗi'); }
   }
 
   return (

@@ -64,7 +64,7 @@ export default function GanCongTyModal({ onClose }) {
       // api interceptor trả thẳng body { success, data, message } → kết quả ở res.data
       setResult(res?.data ?? { assigned: selected.size, skipped: [] });
     } catch (e) {
-      setErr(e?.response?.data?.error?.message ?? e?.message ?? 'Có lỗi xảy ra');
+      setErr(e?.message ?? 'Có lỗi xảy ra');
     }
   }
 

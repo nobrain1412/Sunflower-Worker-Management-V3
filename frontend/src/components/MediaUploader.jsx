@@ -39,7 +39,7 @@ export default function MediaUploader({ value = [], onChange, folder = 'misc', m
       }
       onChange([...urls, ...newUrls]);
     } catch (e) {
-      setErr(e?.response?.data?.error?.message ?? e?.message ?? 'Upload thất bại');
+      setErr(e?.message ?? 'Upload thất bại');
     } finally {
       setUploading(false);
       if (inputRef.current) inputRef.current.value = '';

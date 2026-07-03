@@ -163,7 +163,8 @@ function UserModal({ user, onClose }) {
       so_tai_khoan: form.so_tai_khoan || undefined,
       ten_chu_tk: form.ten_chu_tk || undefined,
       hinh_thuc_thanh_toan: form.vai_tro === 'cong_tac_vien' ? form.hinh_thuc_thanh_toan : undefined,
-      cong_ty_ids: form.vai_tro === 'quan_ly' ? form.cong_ty_ids : [],
+      // Gán công ty áp dụng cho quản lý (giới hạn phạm vi) và kế toán (ghi nhận công ty phụ trách)
+      cong_ty_ids: ['quan_ly', 'ke_toan'].includes(form.vai_tro) ? form.cong_ty_ids : [],
     };
     // Chỉ admin được cấp quyền KTX
     if (isAdmin) payload.quyen_ktx = !!form.quyen_ktx;
@@ -258,9 +259,16 @@ function UserModal({ user, onClose }) {
               </div>
             </div>
           )}
-          {form.vai_tro === 'quan_ly' && isAdmin && (
+          {['quan_ly', 'ke_toan'].includes(form.vai_tro) && isAdmin && (
             <div style={{ ...F.col, gridColumn: 'span 2' }}>
-              <label className="form-label">Công ty quản lý</label>
+              <label className="form-label">
+                {form.vai_tro === 'ke_toan' ? 'Công ty phụ trách' : 'Công ty quản lý'}
+              </label>
+              {form.vai_tro === 'ke_toan' && (
+                <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 4 }}>
+                  Ghi nhận công ty kế toán phụ trách. Kế toán vẫn xem được toàn bộ dữ liệu.
+                </div>
+              )}
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                 {congTyArr.map((ct) => {
                   const active = form.cong_ty_ids.includes(ct.id);
@@ -344,7 +352,7 @@ export default function NhanSu() {
       const kq = res?.data ?? {};
       alert(`Đã tạo thanh toán: ${Number(kq.so_luong || 0)} công nhân, tổng ${fmtMoney(kq.tong_tien || 0)}`);
     } catch (e) {
-      alert(e?.response?.data?.error?.message ?? 'Không thể tạo kỳ thanh toán');
+      alert(e?.message ?? 'Không thể tạo kỳ thanh toán');
     }
   }
 

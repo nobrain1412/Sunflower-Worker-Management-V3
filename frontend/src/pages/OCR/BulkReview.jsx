@@ -94,7 +94,7 @@ export default function BulkReview() {
         });
         ok += 1;
       } catch (err) {
-        fails.push({ ho_ten: r.ho_ten, reason: err?.response?.data?.error?.message ?? err?.message ?? 'Không rõ' });
+        fails.push({ ho_ten: r.ho_ten, reason: err?.message ?? 'Không rõ' });
       }
     }
     setCreatedCount(ok);

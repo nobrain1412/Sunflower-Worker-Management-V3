@@ -89,7 +89,7 @@ export default function ChuyenKhoanModal({ cn, onClose }) {
       qc.invalidateQueries({ queryKey: ['tai-chinh', 'cn', cn.id] });
       onClose();
     } catch (e) {
-      setErr(e?.response?.data?.error?.message ?? 'Lỗi không xác định');
+      setErr(e?.message ?? 'Lỗi không xác định');
     }
   }
 

@@ -240,7 +240,7 @@ export default function ScanCCCD() {
         setErrors(fieldErrs);
         setSubmitErr(`Có ${det.length} lỗi: ${det.map((d) => `${map[d.field] ?? d.field} (${d.message})`).join('; ')}`);
       } else {
-        setSubmitErr(err?.message ?? err?.response?.data?.error?.message ?? 'Không tạo được công nhân');
+        setSubmitErr(err?.message ?? 'Không tạo được công nhân');
       }
       setStage('review');
     }
