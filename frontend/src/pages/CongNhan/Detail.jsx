@@ -10,8 +10,7 @@ import { useAuth } from '../../context/AuthContext';
 import ChuyenKhoanModal from '../../components/ChuyenKhoanModal';
 import api from '../../hooks/useApi';
 import { useQueryClient } from '@tanstack/react-query';
-import QrScanner from 'qr-scanner';
-import { parseCccdQr } from '../../utils/parseCccdQr';
+import { decodeCccdQrFromImage } from '../../utils/decodeCccdImage';
 
 const TRANG_THAI_PILL = {
   cho_duyet: { cls: 'pill-amber', label: 'Chờ duyệt' },
@@ -241,17 +240,17 @@ function EditModal({ cn, onClose, noiOHienTai, isAdmin }) {
     reader.readAsDataURL(file);
 
     setScanStatus('scanning');
-    let parsed = null;
-    try {
-      const result = await QrScanner.scanImage(file, { returnDetailedScanResult: true });
-      parsed = parseCccdQr(result?.data ?? result);
-    } catch {
-      parsed = null;
-    }
+    // Pipeline nhiều lượt tiền xử lý (xoay EXIF, tương phản, Otsu, phóng to...)
+    const res = await decodeCccdQrFromImage(file).catch(() => null);
+    const parsed = res?.parsed ?? null;
     if (!parsed) {
       setConflicts([]);
       setScanStatus('error');
-      setScanErr('Không đọc được mã QR CCCD trong ảnh. Ảnh vẫn được lưu khi bấm Lưu — bạn có thể tự nhập thông tin.');
+      setScanErr(
+        res?.rawText
+          ? 'Đọc được mã QR nhưng không phải QR CCCD gắn chip. Ảnh vẫn được lưu khi bấm Lưu — bạn có thể tự nhập thông tin.'
+          : 'Không đọc được mã QR CCCD trong ảnh. Ảnh vẫn được lưu khi bấm Lưu — bạn có thể tự nhập thông tin.',
+      );
       return;
     }
 

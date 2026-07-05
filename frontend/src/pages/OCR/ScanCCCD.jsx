@@ -4,6 +4,7 @@ import api from '../../hooks/useApi';
 import { useAuth } from '../../context/AuthContext';
 import { useCongTyList, useVenders } from '../../hooks/useCongNhan';
 import { parseCccdQr } from '../../utils/parseCccdQr';
+import { decodeCccdQrFromImage } from '../../utils/decodeCccdImage';
 
 // dd/mm/yyyy → YYYY-MM-DD (DB cần ISO)
 function ddmmyyyyToIso(s) {
@@ -57,6 +58,7 @@ export default function ScanCCCD() {
   const [anhFile, setAnhFile] = useState(null);
   const [anhUrl, setAnhUrl]   = useState(null);
   const [uploadingAnh, setUploadingAnh] = useState(false);
+  const [pendingFile, setPendingFile] = useState(null); // ảnh đọc QR trượt — cho nhập tay
 
   const videoRef   = useRef(null);
   const scannerRef = useRef(null);
@@ -138,25 +140,41 @@ export default function ScanCCCD() {
     e.target.value = ''; // cho phép chọn lại cùng 1 file
     if (!file) return;
     setScanErr(null);
+    setPendingFile(null);
     setStage('processing');
-    try {
-      const result = await QrScanner.scanImage(file, { returnDetailedScanResult: true });
-      const parsed = parseCccdQr(result?.data ?? result);
-      if (!parsed) {
-        setScanErr('Không tìm thấy QR CCCD hợp lệ trong ảnh.');
-        setStage('scan');
-        return;
-      }
-      setForm((cur) => ({ ...cur, ...parsed, cong_ty_id: cur.cong_ty_id || defaultCongTyId() }));
+    // Pipeline nhiều lượt tiền xử lý (xoay EXIF, tương phản, Otsu, phóng to...)
+    const res = await decodeCccdQrFromImage(file).catch(() => null);
+    if (res?.parsed) {
+      setForm((cur) => ({ ...cur, ...res.parsed, cong_ty_id: cur.cong_ty_id || defaultCongTyId() }));
       setPreview(URL.createObjectURL(file));
       setAnhFile(file);
       setAnhUrl(null);
       setStage('review');
       uploadAnhBackground(file); // lưu ảnh nền, không chặn UI
-    } catch (err) {
-      setScanErr('Không đọc được QR trong ảnh. Ảnh cần rõ nét và thấy đủ mã QR ở góc CCCD.');
-      setStage('scan');
+      return;
     }
+    // Không đọc được — giữ ảnh lại để cho phép nhập tay, không bắt quét lại từ đầu.
+    setPendingFile(file);
+    setScanErr(
+      res?.rawText
+        ? 'Đọc được mã QR nhưng không phải QR CCCD gắn chip. Hãy quét đúng mã ở góc trên mặt trước.'
+        : 'Không đọc được QR trong ảnh. Ảnh cần rõ nét, đủ sáng, thấy trọn mã QR ở góc CCCD và chụp thẳng (không nghiêng, không loá).',
+    );
+    setStage('scan');
+  }
+
+  // Nhập tay từ ảnh vừa chọn khi QR không đọc được — vẫn lưu ảnh vào hồ sơ.
+  function goManualFromPending() {
+    const file = pendingFile;
+    if (!file) return;
+    setForm((cur) => ({ ...cur, cong_ty_id: cur.cong_ty_id || defaultCongTyId() }));
+    setPreview(URL.createObjectURL(file));
+    setAnhFile(file);
+    setAnhUrl(null);
+    setScanErr(null);
+    setPendingFile(null);
+    setStage('review');
+    uploadAnhBackground(file);
   }
 
   // Upload ảnh lên Cloudinary, trả URL (best-effort)
@@ -250,6 +268,7 @@ export default function ScanCCCD() {
     setForm(EMPTY_FORM);
     setErrors({}); setSubmitErr(null); setScanErr(null);
     setPreview(null); setAnhFile(null); setAnhUrl(null);
+    setPendingFile(null);
     handledRef.current = false;
     setStage('scan');
   }
@@ -257,6 +276,7 @@ export default function ScanCCCD() {
   function switchMode(next) {
     if (next === mode) return;
     setScanErr(null);
+    setPendingFile(null);
     setMode(next);
   }
 
@@ -274,7 +294,20 @@ export default function ScanCCCD() {
             <button style={tabStyle(mode === 'upload')} onClick={() => switchMode('upload')}>🖼️ Tải ảnh CCCD</button>
           </div>
 
-          {scanErr && <div style={s.errorBox}>{scanErr}</div>}
+          {scanErr && (
+            <div style={s.errorBox}>
+              <div>{scanErr}</div>
+              {pendingFile && (
+                <button
+                  className="btn-ghost"
+                  style={{ marginTop: 10, color: 'var(--accent)', padding: '6px 12px', fontSize: 12 }}
+                  onClick={goManualFromPending}
+                >
+                  ✎ Nhập tay từ ảnh vừa chọn
+                </button>
+              )}
+            </div>
+          )}
 
           {mode === 'camera' ? (
             <div style={s.cameraWrap}>
