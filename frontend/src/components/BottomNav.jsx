@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 
 const TABS = [
   {
-    to: '/', label: 'Tổng quan', exact: true,
+    to: '/quan-ly', label: 'Tổng quan', exact: true,
     roles: ['admin','quan_ly','vender','ke_toan'],
     icon: (
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none">

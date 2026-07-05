@@ -25,7 +25,7 @@ export default function Login() {
     setLoading(true);
     try {
       await login(form.ten_dang_nhap, form.mat_khau);
-      navigate('/', { replace: true });
+      navigate('/quan-ly', { replace: true });
     } catch (err) {
       setError(err.message || 'Đăng nhập thất bại');
     } finally {

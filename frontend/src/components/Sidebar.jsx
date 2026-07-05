@@ -7,7 +7,7 @@ import TaiKhoanModal from './TaiKhoanModal';
 // Nav items có thêm `roles` để lọc theo quyền
 const NAV = [
   {
-    to: '/', label: 'Dashboard', exact: true,
+    to: '/quan-ly', label: 'Dashboard', exact: true,
     roles: ['admin','quan_ly','vender','ke_toan'],
     icon: (
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none">

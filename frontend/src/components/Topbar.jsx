@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import ThemeToggle from './ThemeToggle';
 
 const PAGE_TITLE = {
-  '/':          'Dashboard',
+  '/quan-ly':   'Dashboard',
   '/cong-nhan': 'Công nhân',
   '/cham-cong': 'Chấm công',
   '/tai-chinh': 'Tài chính',
@@ -86,6 +87,9 @@ export default function Topbar({ onMenuClick }) {
             <line x1="21" y1="21" x2="16.65" y2="16.65" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
           </svg>
         </button>
+
+        {/* Đổi giao diện sáng/tối (chỉ áp cho khu vực quản lý) */}
+        <ThemeToggle style={{ width: 34, height: 34 }} />
 
         {/* Notification bell */}
         <button style={s.iconBtn}>

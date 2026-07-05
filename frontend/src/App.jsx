@@ -7,6 +7,7 @@ import AppErrorBoundary from './components/AppErrorBoundary';
 // Pages
 import Login          from './pages/Login';
 import DangKy         from './pages/DangKy';
+import TuyenDung      from './pages/TuyenDung';
 import Dashboard      from './pages/Dashboard';
 import CongNhan       from './pages/CongNhan/index';
 import CongNhanDetail from './pages/CongNhan/Detail';
@@ -45,20 +46,20 @@ function RoleRoute({ children, allowedRoles, allowKtx }) {
   if (!isLoggedIn) return <Navigate to="/login" replace />;
   const okRole = allowedRoles.includes(user?.vai_tro);
   const okKtx  = allowKtx && user?.quyen_ktx;
-  if (!okRole && !okKtx) return <Navigate to="/" replace />;
+  if (!okRole && !okKtx) return <Navigate to="/quan-ly" replace />;
   return <Layout>{children}</Layout>;
 }
 
 function LoginRoute() {
   const { isLoggedIn, isAuthReady } = useAuth();
   if (!isAuthReady) return <div style={{ minHeight: '100vh', background: 'var(--bg0)' }} />;
-  return isLoggedIn ? <Navigate to="/" replace /> : <Login />;
+  return isLoggedIn ? <Navigate to="/quan-ly" replace /> : <Login />;
 }
 
 function DangKyRoute() {
   const { isLoggedIn, isAuthReady } = useAuth();
   if (!isAuthReady) return <div style={{ minHeight: '100vh', background: 'var(--bg0)' }} />;
-  return isLoggedIn ? <Navigate to="/" replace /> : <DangKy />;
+  return isLoggedIn ? <Navigate to="/quan-ly" replace /> : <DangKy />;
 }
 
 export default function App() {
@@ -71,8 +72,11 @@ export default function App() {
               <Route path="/login"   element={<LoginRoute />} />
               <Route path="/dang-ky" element={<DangKyRoute />} />
 
-            {/* Tất cả role */}
-            <Route path="/"              element={<PrivateRoute><Dashboard /></PrivateRoute>} />
+            {/* Trang tuyển dụng công khai — homepage, không cần đăng nhập */}
+            <Route path="/"              element={<TuyenDung />} />
+
+            {/* Trang quản lý (dashboard) — cần đăng nhập */}
+            <Route path="/quan-ly"       element={<PrivateRoute><Dashboard /></PrivateRoute>} />
             <Route path="/cong-nhan"     element={<PrivateRoute><CongNhan /></PrivateRoute>} />
             <Route path="/cong-nhan/import-excel" element={
               <RoleRoute allowedRoles={['admin','quan_ly']}><ImportExcel /></RoleRoute>

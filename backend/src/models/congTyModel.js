@@ -60,6 +60,22 @@ async function findById(id) {
   return result.rows[0] || null;
 }
 
+// Danh sách công ty cho trang tuyển dụng CÔNG KHAI (không cần đăng nhập).
+// Chỉ trả các field an toàn phục vụ quảng cáo tuyển dụng — KHÔNG lộ cấu hình
+// lương chi tiết, khấu trừ, đơn giá vender hay thông tin nội bộ khác.
+async function findPublicTuyenDung() {
+  const result = await db.query(
+    `SELECT ct.id, ct.ten_cong_ty, ct.dia_chi, ct.map_url,
+            ct.so_dien_thoai, ct.email,
+            ct.luong_co_ban, ct.luong_theo_gio,
+            ct.mo_ta_cong_viec, ct.media_urls
+       FROM cong_ty ct
+      WHERE ct.active = TRUE
+      ORDER BY ct.ten_cong_ty ASC`,
+  );
+  return result.rows;
+}
+
 async function create(data) {
   const { ten_cong_ty, dia_chi, map_url, so_dien_thoai, email,
           luong_co_ban, luong_theo_gio, he_so_ot, ngay_lam_chuan,
@@ -244,7 +260,7 @@ async function deleteRate(userId, congTyId) {
 }
 
 module.exports = {
-  findAll, findById, create, update, hardDelete,
+  findAll, findById, findPublicTuyenDung, create, update, hardDelete,
   findQuanLy, assignQuanLy, removeQuanLy,
   findRatesByCongTy, findRatesByUser, upsertRate, deleteRate,
 };

@@ -2,11 +2,13 @@ import { useState } from 'react';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
 import BottomNav from './BottomNav';
+import { ThemeScope } from '../context/ThemeContext';
 
 export default function Layout({ children }) {
   const [mobileSidebar, setMobileSidebar] = useState(false);
 
   return (
+    <ThemeScope storageKey="theme_quan_ly" style={{ minHeight: 'auto' }}>
     <div className="layout-root">
       {/* Desktop sidebar */}
       <div className="sidebar-wrap">
@@ -35,5 +37,6 @@ export default function Layout({ children }) {
         <BottomNav />
       </div>
     </div>
+    </ThemeScope>
   );
 }

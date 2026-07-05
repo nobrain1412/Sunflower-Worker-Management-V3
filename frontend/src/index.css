@@ -2,7 +2,14 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
+/* ========================================
+   THEME TOKENS
+   - :root = dark (fallback cho các trang ngoài ThemeScope, vd Login/Đăng ký)
+   - [data-theme="dark"] / [data-theme="light"]: mỗi khu vực (tuyển dụng,
+     quản lý) tự bọc trong 1 ThemeScope và chọn theme độc lập nhau.
+   ======================================== */
+:root,
+[data-theme="dark"] {
   --bg0: #0d0f14;
   --bg1: #141720;
   --bg2: #1c2030;
@@ -20,6 +27,29 @@
   --teal:   #2dd4bf;
   --mono:   'JetBrains Mono', monospace;
 }
+
+[data-theme="light"] {
+  --bg0: #eef1f7;
+  --bg1: #ffffff;
+  --bg2: #e9ecf4;
+  --bg3: #f1f3f9;
+  --border:  rgba(16,20,40,0.09);
+  --border2: rgba(16,20,40,0.15);
+  --text1: #1a1d29;
+  --text2: #565c72;
+  --text3: #8b90a4;
+  --accent:  #4f7cff;
+  --accent2: #7b5fff;
+  --green:  #0fa060;
+  --red:    #e23b4e;
+  --amber:  #c07d10;
+  --teal:   #0f9d8f;
+  --mono:   'JetBrains Mono', monospace;
+}
+
+/* Scrollbar sáng hơn trong theme light để nhìn rõ */
+[data-theme="light"] ::-webkit-scrollbar-track { background: var(--bg2); }
+[data-theme="light"] ::-webkit-scrollbar-thumb { background: #c9cede; }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 

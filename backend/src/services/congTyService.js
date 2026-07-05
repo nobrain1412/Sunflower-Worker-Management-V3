@@ -18,6 +18,12 @@ async function danhSach(query) {
   };
 }
 
+// Danh sách công ty cho trang tuyển dụng công khai (không auth).
+async function danhSachTuyenDung() {
+  const rows = await congTyModel.findPublicTuyenDung();
+  return rows;
+}
+
 async function chiTiet(id) {
   const congTy = await congTyModel.findById(id);
   if (!congTy) {
@@ -68,4 +74,4 @@ async function goQuanLy(congTyId, userId) {
   }
 }
 
-module.exports = { danhSach, chiTiet, taoMoi, capNhat, ganQuanLy, goQuanLy };
+module.exports = { danhSach, danhSachTuyenDung, chiTiet, taoMoi, capNhat, ganQuanLy, goQuanLy };
