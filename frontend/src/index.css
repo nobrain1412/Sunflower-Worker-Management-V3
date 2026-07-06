@@ -540,3 +540,81 @@ body.sheet-open .bottom-nav-wrap nav {
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
+
+/* ========================================
+   SUNFLOWER — trang tuyển dụng công khai (homepage)
+   Bộ token riêng theo thiết kế Sunflower, tách khỏi token quản lý
+   để tái tạo đúng nhận diện thương hiệu. Prefix `--sf-` tránh đè token
+   dùng chung. Theme sáng/tối bám theo data-theme của ThemeScope.
+   ======================================== */
+.sf-home {
+  --sf-bg: #faf9f7;
+  --sf-surface: #ffffff;
+  --sf-surface2: #f3f1ec;
+  --sf-text: #1d2436;
+  --sf-muted: #5c6478;
+  --sf-brd: #e8e5de;
+  --sf-navy: #2c4a8a;
+  --sf-navy-soft: #eaeff8;
+  --sf-navy-ink: #ffffff;
+  --sf-flame1: #f2b134;
+  --sf-flame2: #e58fb0;
+  --sf-herobg: linear-gradient(135deg, #fdf4e2 0%, #faf1f4 55%, #eef2fa 100%);
+  --sf-shadow: 0 1px 3px rgba(29, 36, 54, .06);
+  /* biến layout responsive — đổi theo media query */
+  --sf-job-cols: repeat(3, 1fr);
+  --sf-cat-cols: repeat(4, 1fr);
+  --sf-co-cols: repeat(5, 1fr);
+  --sf-nav-disp: flex;
+  --sf-burger-disp: none;
+  --sf-auth-disp: inline-flex;
+  --sf-search-dir: row;
+  --sf-footer-cols: 2.2fr 1fr 1fr 1fr;
+}
+.sf-home[data-theme="dark"] {
+  --sf-bg: #12151d;
+  --sf-surface: #1b202c;
+  --sf-surface2: #232a3a;
+  --sf-text: #edeff5;
+  --sf-muted: #9aa3b7;
+  --sf-brd: #2b3244;
+  --sf-navy: #7d9be0;
+  --sf-navy-soft: #232c42;
+  --sf-navy-ink: #101524;
+  --sf-herobg: linear-gradient(135deg, #1a1f2e 0%, #20202e 55%, #171d2c 100%);
+  --sf-shadow: 0 1px 3px rgba(0, 0, 0, .35);
+}
+
+@media (max-width: 1024px) {
+  .sf-home {
+    --sf-job-cols: repeat(2, 1fr);
+    --sf-cat-cols: repeat(2, 1fr);
+    --sf-co-cols: repeat(3, 1fr);
+    --sf-nav-disp: none;
+    --sf-burger-disp: inline-flex;
+    --sf-footer-cols: 1fr 1fr;
+  }
+}
+@media (max-width: 640px) {
+  .sf-home {
+    --sf-job-cols: 1fr;
+    --sf-co-cols: repeat(2, 1fr);
+    --sf-auth-disp: none;
+    --sf-search-dir: column;
+    --sf-footer-cols: 1fr;
+  }
+}
+
+/* --- Hover/transition (inline style không làm được :hover) --- */
+.sf-home a,
+.sf-home button { transition: background .15s, color .15s, border-color .15s, transform .15s, opacity .15s; }
+
+.sf-navlink:hover { color: var(--sf-navy) !important; background: var(--sf-navy-soft); }
+.sf-chip:hover { border-color: var(--sf-navy) !important; color: var(--sf-navy) !important; }
+.sf-card:hover { border-color: var(--sf-navy) !important; transform: translateY(-2px); }
+.sf-jobcard:hover { border-color: var(--sf-navy) !important; }
+.sf-link:hover { text-decoration: underline; }
+.sf-btn-navy:hover,
+.sf-btn-flame:hover { opacity: .9; }
+.sf-btn-outline:hover { background: var(--sf-navy-soft); }
+.sf-footlink:hover { color: var(--sf-navy) !important; }
