@@ -2,7 +2,7 @@ import { useTheme } from '../../context/ThemeContext';
 import { NAV_ITEMS } from './tuyenDungData';
 import Logo from './Logo';
 
-// Header sticky: logo + nav + nút đổi theme + đăng nhập/đăng ký + menu mobile (☰).
+// Header sticky: logo + nav + nút đổi theme + đăng nhập + menu mobile (☰).
 // `isLoggedIn` để đổi "Đăng nhập" → "Vào trang quản lý"; `onNav(path)` điều hướng thật.
 export default function Header({ isLoggedIn, onNav, menuOpen, onToggleMenu }) {
   const { theme, toggleTheme } = useTheme();
@@ -30,10 +30,7 @@ export default function Header({ isLoggedIn, onNav, menuOpen, onToggleMenu }) {
           {isLoggedIn ? (
             <a href="#" onClick={(e) => { e.preventDefault(); onNav('/quan-ly'); }} className="sf-btn-navy" style={{ ...s.authBase, ...s.btnNavy }}>Vào trang quản lý</a>
           ) : (
-            <>
-              <a href="#" onClick={(e) => { e.preventDefault(); onNav('/login'); }} className="sf-btn-outline" style={{ ...s.authBase, ...s.btnOutline }}>Đăng nhập</a>
-              <a href="#" onClick={(e) => { e.preventDefault(); onNav('/dang-ky'); }} className="sf-btn-navy" style={{ ...s.authBase, ...s.btnNavy }}>Đăng ký</a>
-            </>
+            <a href="#" onClick={(e) => { e.preventDefault(); onNav('/login'); }} className="sf-btn-outline" style={{ ...s.authBase, ...s.btnOutline }}>Đăng nhập</a>
           )}
           <a href="#" onClick={(e) => { e.preventDefault(); onNav(isLoggedIn ? '/quan-ly' : '/login'); }} className="sf-btn-flame" style={{ ...s.authBase, ...s.btnFlame }}>Đăng tuyển ngay</a>
 
@@ -52,10 +49,7 @@ export default function Header({ isLoggedIn, onNav, menuOpen, onToggleMenu }) {
             {isLoggedIn ? (
               <a href="#" onClick={(e) => { e.preventDefault(); onNav('/quan-ly'); }} style={{ ...s.mobileAuth, ...s.btnNavy, flex: 1, textAlign: 'center' }}>Vào trang quản lý</a>
             ) : (
-              <>
-                <a href="#" onClick={(e) => { e.preventDefault(); onNav('/login'); }} style={{ ...s.mobileAuth, ...s.btnOutline, flex: 1, textAlign: 'center' }}>Đăng nhập</a>
-                <a href="#" onClick={(e) => { e.preventDefault(); onNav('/dang-ky'); }} style={{ ...s.mobileAuth, ...s.btnNavy, flex: 1, textAlign: 'center' }}>Đăng ký</a>
-              </>
+              <a href="#" onClick={(e) => { e.preventDefault(); onNav('/login'); }} style={{ ...s.mobileAuth, ...s.btnOutline, flex: 1, textAlign: 'center' }}>Đăng nhập</a>
             )}
           </div>
         </div>
