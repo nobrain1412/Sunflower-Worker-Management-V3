@@ -38,7 +38,7 @@ const postTaoMoi = asyncWrapper(async (req, res) => {
   body.nguoi_tuyen_id = (isPrivileged && body.nguoi_tuyen_id)
     ? body.nguoi_tuyen_id
     : req.user.id;
-  const congNhan = await congNhanService.taoMoi(body);
+  const congNhan = await congNhanService.taoMoi(body, req.user.id);
   sendCreated(res, congNhan, 'Thêm công nhân thành công');
 });
 

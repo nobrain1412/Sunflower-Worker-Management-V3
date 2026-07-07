@@ -98,6 +98,8 @@ const taoMoiSchema = z.object({
   loi_nhuan_thang:          nullableNum(z.number().positive().nullable().optional()),
   so_thang_huong_loi_nhuan: nullableNum(z.number().int().positive().nullable().optional()),
   ngay_chinh_thuc: nullableDate('Ngày chính thức không hợp lệ (YYYY-MM-DD)'),
+  // Xác nhận kích hoạt lại 1 CN đã nghỉ việc (trùng CCCD) thay vì tạo bản ghi mới
+  kich_hoat_lai:   z.boolean().optional(),
 });
 
 // PUT cho phép partial update (mọi trường optional, chấp nhận null để xoá)

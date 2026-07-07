@@ -59,6 +59,8 @@ export default function AddCongNhanModal({ onClose }) {
   const [form, setForm]     = useState(() => ({ ...INIT }));
   const [errors, setErrors] = useState({});
   const [done, setDone]     = useState(false);
+  // Thông tin CN trùng CCCD (đã tồn tại) trả về từ backend để hỏi kích hoạt lại
+  const [dup, setDup]       = useState(null);
   const mutation = useTaoMoiCongNhan();
   const congTyArr = useCongTyList().data?.data ?? [];
   const venderArr = useVenders().data?.data ?? [];
@@ -95,6 +97,8 @@ export default function AddCongNhanModal({ onClose }) {
       return next;
     });
     if (errors[name]) setErrors((er) => ({ ...er, [name]: '' }));
+    // Sửa lại CCCD → bỏ cảnh báo trùng cũ
+    if (dup && name === 'cccd') setDup(null);
   }
 
   function handleDateChange(name) {
@@ -119,11 +123,13 @@ export default function AddCongNhanModal({ onClose }) {
     return errs;
   }
 
-  async function handleSubmit() {
+  async function handleSubmit({ kichHoatLai = false } = {}) {
     const errs = validate();
     if (Object.keys(errs).length) { setErrors(errs); return; }
 
     const payload = { ho_ten: form.ho_ten, trang_thai: form.trang_thai };
+    // Xác nhận kích hoạt lại CN đã nghỉ việc (trùng CCCD) thay vì báo lỗi
+    if (kichHoatLai) payload.kich_hoat_lai = true;
     ['cccd','gioi_tinh','dia_chi_hien_tai','so_dien_thoai','ghi_chu',
      'ngan_hang','so_tai_khoan','ten_chu_tk','ma_van_tay','bo_phan']
       .forEach((k) => { if (form[k]) payload[k] = form[k]; });
@@ -184,7 +190,15 @@ export default function AddCongNhanModal({ onClose }) {
       }
       setDone(true);
     } catch (err) {
-      setErrors({ submit: err.message || 'Có lỗi xảy ra' });
+      // Trùng CCCD: backend trả kèm thông tin CN cũ (đang làm ở đâu, đã nghỉ chưa)
+      // → hiển thị hộp xác nhận thay vì lỗi thường; CN đã nghỉ việc thì cho thêm lại.
+      const info = err.code === 'DUPLICATE_CCCD' ? err.details?.[0] : null;
+      if (info) {
+        setDup({ ...info, message: err.message });
+        setErrors({});
+      } else {
+        setErrors({ submit: err.message || 'Có lỗi xảy ra' });
+      }
     }
   }
 
@@ -421,10 +435,34 @@ export default function AddCongNhanModal({ onClose }) {
 
         {errors.submit && <div style={o.errBox}>{errors.submit}</div>}
 
+        {dup && (
+          <div style={o.dupBox}>
+            <div style={o.dupTitle}>⚠️ CCCD đã tồn tại trong hệ thống</div>
+            <div style={o.dupMsg}>{dup.message}</div>
+            {dup.co_the_kich_hoat_lai ? (
+              <div style={o.dupActions}>
+                <button className="btn-ghost" onClick={() => setDup(null)}>Đóng</button>
+                <button
+                  className="btn-primary"
+                  onClick={() => handleSubmit({ kichHoatLai: true })}
+                  disabled={mutation.isPending}
+                >
+                  {mutation.isPending ? 'Đang xử lý...' : '↻ Thêm lại vào công ty'}
+                </button>
+              </div>
+            ) : (
+              <div style={o.dupHint}>
+                Công nhân này đang làm việc nên không thể thêm mới. Nếu cần chuyển về
+                công ty của bạn, hãy liên hệ quản trị viên.
+              </div>
+            )}
+          </div>
+        )}
+
         <div style={o.footer}>
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
             <button className="btn-ghost" onClick={onClose}>Hủy</button>
-            <button className="btn-primary" onClick={handleSubmit} disabled={mutation.isPending}>
+            <button className="btn-primary" onClick={() => handleSubmit()} disabled={mutation.isPending}>
               {mutation.isPending ? 'Đang lưu...' : '✓ Lưu công nhân'}
             </button>
           </div>
@@ -453,6 +491,11 @@ const o = {
   close:   { background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text2)', padding: 4 },
   body:    { flex: 1, overflowY: 'auto', padding: '20px 24px' },
   errBox:  { margin: '0 24px', padding: '10px 14px', background: 'rgba(255,95,114,0.08)', border: '1px solid rgba(255,95,114,0.2)', borderRadius: 8, fontSize: 12, color: 'var(--red)' },
+  dupBox:  { margin: '0 24px', padding: '12px 14px', background: 'rgba(255,179,68,0.08)', border: '1px solid rgba(255,179,68,0.3)', borderRadius: 8 },
+  dupTitle:{ fontSize: 13, fontWeight: 700, color: 'var(--amber)' },
+  dupMsg:  { fontSize: 12.5, color: 'var(--text1)', marginTop: 6, lineHeight: 1.5 },
+  dupHint: { fontSize: 12, color: 'var(--text2)', marginTop: 8, lineHeight: 1.5 },
+  dupActions: { display: 'flex', gap: 8, marginTop: 12, justifyContent: 'flex-end' },
   footer:  { display: 'flex', padding: '16px 24px', borderTop: '1px solid var(--border)', gap: 8 },
 };
 

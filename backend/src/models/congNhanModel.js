@@ -141,12 +141,20 @@ async function findById(id) {
   return result.rows[0] || null;
 }
 
+// Tìm CN theo CCCD (bỏ qua bản ghi đã xoá mềm).
+// Trả kèm trạng thái + công ty đang làm để tầng service dựng thông báo
+// "đã tồn tại, đang làm ở đâu" và quyết định có cho kích hoạt lại không.
 async function findByCccd(cccd, excludeId = null) {
   const params = [cccd];
-  let sql = `SELECT id FROM cong_nhan WHERE cccd = $1 AND deleted_at IS NULL`;
+  let sql = `SELECT cn.id, cn.ho_ten, cn.trang_thai, cn.cong_ty_id,
+                    cn.ngay_nghi_viec, cn.nguoi_tuyen_id,
+                    ct.ten_cong_ty
+             FROM cong_nhan cn
+             LEFT JOIN cong_ty ct ON ct.id = cn.cong_ty_id
+             WHERE cn.cccd = $1 AND cn.deleted_at IS NULL`;
   if (excludeId) {
     params.push(excludeId);
-    sql += ` AND id != $2`;
+    sql += ` AND cn.id != $2`;
   }
   const result = await db.query(sql, params);
   return result.rows[0] || null;

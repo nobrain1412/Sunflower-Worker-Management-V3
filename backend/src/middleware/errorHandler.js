@@ -64,7 +64,8 @@ function errorHandler(err, req, res, next) {
     ? 'Lỗi hệ thống, vui lòng thử lại sau'
     : err.message || 'Lỗi không xác định';
 
-  return sendError(res, statusCode, err.code || 'INTERNAL_ERROR', message);
+  // Cho phép service đính kèm err.details (vd DUPLICATE_CCCD kèm thông tin CN cũ)
+  return sendError(res, statusCode, err.code || 'INTERNAL_ERROR', message, err.details || []);
 }
 
 module.exports = errorHandler;

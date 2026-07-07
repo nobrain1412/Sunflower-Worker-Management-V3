@@ -73,16 +73,40 @@ async function chiTiet(id, scope, vaiTro, viewerId) {
   return sanitizeForRole(congNhan, vaiTro, viewerId);
 }
 
-async function taoMoi(data) {
+async function taoMoi(data, actorUserId = null) {
   // Validate: trạng thái đang làm / mới vào bắt buộc có công ty
   assertCongTyKhiCanLamViec(data.trang_thai ?? 'moi_vao', data.cong_ty_id);
 
   if (data.cccd) {
     const existing = await congNhanModel.findByCccd(data.cccd);
     if (existing) {
-      const err = new Error('CCCD đã tồn tại trong hệ thống');
+      const daNghiViec = existing.trang_thai === 'nghi_viec';
+
+      // CN cũ đã nghỉ việc + người thêm xác nhận → kích hoạt lại hồ sơ cũ
+      // (KHÔNG tạo bản ghi trùng CCCD, chỉ cập nhật trạng thái + lịch sử vào).
+      if (daNghiViec && data.kich_hoat_lai) {
+        return kichHoatLai(existing, data, actorUserId);
+      }
+
+      // Ngược lại: chặn nhưng kèm thông tin CN đang ở đâu để người thêm biết,
+      // vì họ có thể không tìm thấy CN này (không phải mình tuyển / khác công ty).
+      const err = new Error(
+        daNghiViec
+          ? `Công nhân "${existing.ho_ten}" đã có trong hệ thống và đã nghỉ việc${existing.ten_cong_ty ? ` tại ${existing.ten_cong_ty}` : ''}. Bạn có thể thêm lại để cập nhật trạng thái và lịch sử vào làm.`
+          : `Công nhân "${existing.ho_ten}" đã tồn tại trong hệ thống${existing.ten_cong_ty ? `, hiện đang làm tại ${existing.ten_cong_ty}` : ' (chưa gán công ty)'}.`,
+      );
       err.statusCode = 409;
       err.code = 'DUPLICATE_CCCD';
+      err.details = [{
+        cong_nhan_id: existing.id,
+        ho_ten: existing.ho_ten,
+        trang_thai: existing.trang_thai,
+        cong_ty_id: existing.cong_ty_id,
+        ten_cong_ty: existing.ten_cong_ty ?? null,
+        da_nghi_viec: daNghiViec,
+        // Chỉ CN đã nghỉ việc mới cho phép kích hoạt lại
+        co_the_kich_hoat_lai: daNghiViec,
+      }];
       throw err;
     }
   }
@@ -102,6 +126,63 @@ async function taoMoi(data) {
   }
 
   return created;
+}
+
+// Kích hoạt lại 1 CN đã nghỉ việc: tái sử dụng hồ sơ cũ (giữ nguyên CCCD + thông
+// tin cá nhân) thay vì tạo bản ghi trùng CCCD. Chỉ cập nhật trạng thái + công ty
+// + ngày vào làm mới, xoá dấu nghỉ việc và mở một chặng phan_cong mới (lịch sử vào).
+async function kichHoatLai(existing, data, actorUserId = null) {
+  const today = new Date().toISOString().slice(0, 10);
+  // Honor trạng thái người dùng chọn; 'nghi_viec' vô nghĩa khi kích hoạt lại → 'moi_vao'
+  const trangThaiMoi = data.trang_thai && data.trang_thai !== 'nghi_viec'
+    ? data.trang_thai
+    : 'moi_vao';
+  assertCongTyKhiCanLamViec(trangThaiMoi, data.cong_ty_id);
+  const ngayVao = data.ngay_vao_lam || today;
+
+  const updated = await congNhanModel.update(existing.id, {
+    trang_thai:     trangThaiMoi,
+    cong_ty_id:     data.cong_ty_id ?? null,
+    ngay_vao_lam:   ngayVao,
+    ngay_nghi_viec: null, // xoá dấu nghỉ việc cũ
+  });
+
+  // Mở chặng làm việc mới (đóng chặng cũ nếu còn hở) — chỉ khi thực sự đi làm
+  if (data.cong_ty_id && trangThaiMoi !== 'doi_viec') {
+    try {
+      await syncPhanCong({
+        congNhanId: existing.id,
+        newCongTyId: data.cong_ty_id,
+        endDate: existing.ngay_nghi_viec || today,
+        startDate: ngayVao,
+      });
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn('syncPhanCong khi kích hoạt lại CN thất bại:', e.message);
+    }
+  }
+
+  // Audit log — fire-and-forget
+  try {
+    await hoatDongLog.create({
+      loai: 'kich_hoat_lai',
+      muc_do: 'quan_trong',
+      cong_nhan_id: existing.id,
+      nguoi_tuyen_id: updated.nguoi_tuyen_id,
+      du_lieu: {
+        tu_trang_thai: existing.trang_thai,
+        sang_trang_thai: trangThaiMoi,
+        cong_ty_id: data.cong_ty_id ?? null,
+      },
+      ghi_chu: `Kích hoạt lại CN đã nghỉ việc: ${updated.ho_ten}`,
+      created_by: actorUserId,
+    });
+  } catch (logErr) {
+    // eslint-disable-next-line no-console
+    console.warn('hoat_dong_log write failed:', logErr.message);
+  }
+
+  return updated;
 }
 
 // Tạo 1 dòng phan_cong (công nhân ↔ công ty) bắt đầu từ ngayBatDau (hoặc hôm nay).
