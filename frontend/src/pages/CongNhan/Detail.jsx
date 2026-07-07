@@ -638,15 +638,16 @@ export default function CongNhanDetail() {
     if (!cn) return;
     if (!window.confirm(
       `Xác nhận chuyển ${cn.ho_ten} sang trạng thái NGHỈ VIỆC?\n\n` +
-      `- Công ty hiện tại: ${cn.ten_cong_ty ?? '—'} → bỏ trống\n` +
+      `- Công ty làm gần nhất: ${cn.ten_cong_ty ?? '—'} → được giữ lại để biết CN nghỉ ở đâu\n` +
       `- Ngày nghỉ việc: hôm nay\n` +
-      `- Bảng công của công ty cũ sẽ được đóng lại.`
+      `- Bảng công của công ty này sẽ được đóng lại (chốt lịch sử làm).`
     )) return;
     const today = new Date().toISOString().slice(0, 10);
     try {
+      // Giữ nguyên cong_ty_id để phần "Công ty" vẫn hiển thị công ty làm gần nhất.
+      // Backend tự đóng phan_cong đang mở theo ngay_nghi_viec (chốt lịch sử làm).
       await capNhatCty.mutateAsync({
         trang_thai: 'nghi_viec',
-        cong_ty_id: null,
         ngay_nghi_viec: today,
       });
     } catch (e) {

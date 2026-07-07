@@ -135,6 +135,19 @@ async function syncPhanCong({ congNhanId, newCongTyId, endDate, startDate }) {
   }
 }
 
+// Mở lại phan_cong khi CN đi làm lại tại đúng công ty cũ (cong_ty_id không đổi).
+// Chỉ tạo dòng mới nếu hiện không còn phan_cong nào đang mở.
+async function moLaiPhanCongNeuCan(congNhanId, congTyId, ngayBatDau) {
+  const db = require('../utils/db');
+  const { rows } = await db.query(
+    `SELECT 1 FROM phan_cong WHERE cong_nhan_id = $1 AND ngay_ket_thuc IS NULL LIMIT 1`,
+    [congNhanId],
+  );
+  if (rows.length === 0) {
+    await taoPhanCong(congNhanId, congTyId, ngayBatDau);
+  }
+}
+
 async function capNhat(id, data, actorUserId = null, scope = null) {
   // Nếu có cập nhật CCCD, kiểm tra trùng
   if (data.cccd) {
@@ -188,16 +201,36 @@ async function capNhat(id, data, actorUserId = null, scope = null) {
     throw err;
   }
 
-  // Đồng bộ phan_cong khi cong_ty_id đổi
-  if (before && 'cong_ty_id' in data && before.cong_ty_id !== updated.cong_ty_id) {
+  // Đồng bộ bảng phan_cong (lịch sử làm việc) theo thay đổi công ty / nghỉ việc.
+  // Định nghĩa "đã nghỉ" bám theo FE: trang_thai = nghi_viec HOẶC có ngay_nghi_viec.
+  if (before) {
     const today = new Date().toISOString().slice(0, 10);
+    const congTyDoi = 'cong_ty_id' in data && before.cong_ty_id !== updated.cong_ty_id;
+    const nghiTruoc = before.trang_thai === 'nghi_viec' || !!before.ngay_nghi_viec;
+    const nghiSau   = updated.trang_thai === 'nghi_viec' || !!updated.ngay_nghi_viec;
+    const ngayNghi  = updated.ngay_nghi_viec
+      ? new Date(updated.ngay_nghi_viec).toISOString().slice(0, 10)
+      : today;
     try {
-      await syncPhanCong({
-        congNhanId: id,
-        newCongTyId: updated.cong_ty_id,
-        endDate: data.ngay_nghi_viec || today,
-        startDate: today,
-      });
+      if (congTyDoi) {
+        // Đổi công ty: đóng phan_cong cũ, mở phan_cong mới (nếu có công ty mới).
+        // Nếu vừa đổi vừa nghỉ việc → chỉ đóng theo ngày nghỉ, không mở mới.
+        await syncPhanCong({
+          congNhanId: id,
+          newCongTyId: nghiSau ? null : updated.cong_ty_id,
+          endDate: nghiSau ? ngayNghi : today,
+          startDate: today,
+        });
+      } else if (!nghiTruoc && nghiSau) {
+        // Vừa nghỉ việc mà KHÔNG đổi công ty (giữ lại công ty gần nhất):
+        // chỉ đóng phan_cong đang mở để chốt lịch sử làm (newCongTyId=null → không mở mới).
+        await syncPhanCong({ congNhanId: id, newCongTyId: null, endDate: ngayNghi });
+      } else if (nghiTruoc && !nghiSau && updated.cong_ty_id) {
+        // Đi làm lại tại đúng công ty cũ → mở lại phan_cong nếu chưa có dòng đang mở.
+        await moLaiPhanCongNeuCan(id, updated.cong_ty_id, updated.ngay_vao_lam
+          ? new Date(updated.ngay_vao_lam).toISOString().slice(0, 10)
+          : today);
+      }
     } catch (e) {
       // eslint-disable-next-line no-console
       console.warn('phan_cong sync failed:', e.message);
