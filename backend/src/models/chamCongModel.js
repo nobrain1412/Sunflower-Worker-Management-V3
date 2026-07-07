@@ -145,8 +145,7 @@ async function upsertBatch(phanCongId, entries) {
   let deleted = 0;
   const baoNghi = [];
 
-  await db.query('BEGIN');
-  try {
+  await db.withTransaction(async (client) => {
     for (const e of entries) {
       const n = normalizeEntry(e);
       const ghiChu = e.ghi_chu || null;
@@ -154,7 +153,7 @@ async function upsertBatch(phanCongId, entries) {
       // Xoá entry nếu giờ + ca + mốc giờ chấm đều rỗng (cell trống = bỏ chấm)
       if (n.soGio === 0 && n.soGioOt === 0 && !n.caLam
           && !n.gioDen && !n.gioNghiTrua && !n.gioVe) {
-        const del = await db.query(
+        const del = await client.query(
           `DELETE FROM cham_cong WHERE phan_cong_id = $1 AND ngay = $2 RETURNING id`,
           [phanCongId, e.ngay],
         );
@@ -162,7 +161,7 @@ async function upsertBatch(phanCongId, entries) {
         continue;
       }
 
-      const res = await db.query(
+      const res = await client.query(
         `INSERT INTO cham_cong
            (phan_cong_id, ngay, so_gio, so_gio_ot,
             gio_hc_ngay, gio_tc_ngay, gio_hc_dem, gio_tc_dem,
@@ -192,11 +191,7 @@ async function upsertBatch(phanCongId, entries) {
         baoNghi.push({ ngay: e.ngay, ca_lam: n.caLam });
       }
     }
-    await db.query('COMMIT');
-  } catch (err) {
-    await db.query('ROLLBACK');
-    throw err;
-  }
+  });
 
   return { inserted, updated, deleted, baoNghi };
 }

@@ -76,7 +76,8 @@ async function findPublicTuyenDung() {
   return result.rows;
 }
 
-async function create(data) {
+// exec: pool (mặc định) hoặc client transaction để chạy trong 1 transaction chung.
+async function create(data, exec = db) {
   const { ten_cong_ty, dia_chi, map_url, so_dien_thoai, email,
           luong_co_ban, luong_theo_gio, he_so_ot, ngay_lam_chuan,
           luong_tc_ngay, luong_hc_dem, luong_tc_dem, luong_chu_nhat, luong_ngay_le,
@@ -86,7 +87,7 @@ async function create(data) {
           mo_ta_cong_viec, media_urls,
           ghi_chu } = data;
 
-  const result = await db.query(
+  const result = await exec.query(
     `INSERT INTO cong_ty
        (ten_cong_ty, dia_chi, map_url, so_dien_thoai, email,
         luong_co_ban, luong_theo_gio, he_so_ot, ngay_lam_chuan,
@@ -110,7 +111,7 @@ async function create(data) {
   return result.rows[0];
 }
 
-async function update(id, data) {
+async function update(id, data, exec = db) {
   const allowed = ['ten_cong_ty', 'dia_chi', 'map_url', 'so_dien_thoai', 'email',
                    'luong_co_ban', 'luong_theo_gio', 'he_so_ot', 'ngay_lam_chuan',
                    'luong_tc_ngay', 'luong_hc_dem', 'luong_tc_dem', 'luong_chu_nhat', 'luong_ngay_le',
@@ -133,7 +134,7 @@ async function update(id, data) {
   if (fields.length === 0) return null;
 
   params.push(id);
-  const result = await db.query(
+  const result = await exec.query(
     `UPDATE cong_ty SET ${fields.join(', ')} WHERE id = $${params.length} RETURNING *`,
     params,
   );
@@ -144,33 +145,25 @@ async function update(id, data) {
 // cong_nhan.cong_ty_id sẽ tự SET NULL; user_cong_ty_rate & cong_ty_de_xuat tự CASCADE.
 // Toàn bộ chạy trong 1 transaction để đảm bảo nguyên tử.
 async function hardDelete(id) {
-  await db.query('BEGIN');
-  try {
-    const exists = await db.query(`SELECT id FROM cong_ty WHERE id = $1`, [id]);
-    if (exists.rows.length === 0) {
-      await db.query('ROLLBACK');
-      return null;
-    }
+  return db.withTransaction(async (client) => {
+    const exists = await client.query(`SELECT id FROM cong_ty WHERE id = $1`, [id]);
+    if (exists.rows.length === 0) return null;
 
     // 1. Chấm công thuộc các phân công của công ty
-    await db.query(
+    await client.query(
       `DELETE FROM cham_cong
         WHERE phan_cong_id IN (SELECT id FROM phan_cong WHERE cong_ty_id = $1)`,
       [id],
     );
     // 2. Phân công (RESTRICT nên phải xoá trước cong_ty)
-    await db.query(`DELETE FROM phan_cong WHERE cong_ty_id = $1`, [id]);
+    await client.query(`DELETE FROM phan_cong WHERE cong_ty_id = $1`, [id]);
     // 3. Phân quyền quản lý ↔ công ty (RESTRICT)
-    await db.query(`DELETE FROM quan_ly_cong_ty WHERE cong_ty_id = $1`, [id]);
+    await client.query(`DELETE FROM quan_ly_cong_ty WHERE cong_ty_id = $1`, [id]);
     // 4. Xoá công ty (cong_nhan.cong_ty_id → NULL, rate & đề xuất CASCADE)
-    const result = await db.query(`DELETE FROM cong_ty WHERE id = $1 RETURNING id`, [id]);
+    const result = await client.query(`DELETE FROM cong_ty WHERE id = $1 RETURNING id`, [id]);
 
-    await db.query('COMMIT');
     return result.rows[0] || null;
-  } catch (err) {
-    await db.query('ROLLBACK');
-    throw err;
-  }
+  });
 }
 
 // Lấy danh sách quản lý của 1 công ty

@@ -56,10 +56,14 @@ app.use(cors({
   credentials: true,
 }));
 
-// --- Rate limit: 100 req/phút/IP ---
+// --- Rate limit ---
+// App nội bộ ~20 user thường DÙNG CHUNG 1 IP (mạng văn phòng/NAT). Giới hạn theo IP
+// quá thấp sẽ chặn nhầm cả văn phòng vào giờ cao điểm. Nâng trần lên mức thoải mái
+// cho nhiều người sau cùng 1 IP, vẫn đủ chặn abuse/bot.
+// RATE_LIMIT_MAX cho phép chỉnh nhanh qua ENV mà không cần deploy lại code.
 app.use('/api/', rateLimit({
   windowMs: 60 * 1000,
-  max: 100,
+  max: parseInt(process.env.RATE_LIMIT_MAX || '1000', 10),
   standardHeaders: true,
   legacyHeaders: false,
   message: { success: false, error: { code: 'RATE_LIMIT', message: 'Quá nhiều yêu cầu, thử lại sau' } },
@@ -114,9 +118,30 @@ app.use('/api', (_req, res) => {
 // Serve frontend React app trong production (Railway)
 if (process.env.NODE_ENV === 'production') {
   const frontendDist = path.join(__dirname, '../../frontend/dist');
-  app.use(express.static(frontendDist));
-  // Mọi route không phải /api đều trả về index.html để React Router xử lý
+
+  // File asset có hash trong tên (Vite) → cache vĩnh viễn (immutable).
+  // index.html → no-cache để client luôn lấy bản mới nhất; nếu cache index.html cũ,
+  // nó sẽ trỏ tới file JS đã đổi hash và không còn tồn tại → màn hình trắng.
+  app.use(express.static(frontendDist, {
+    setHeaders: (res, filePath) => {
+      if (filePath.endsWith('index.html')) {
+        res.setHeader('Cache-Control', 'no-cache');
+      } else if (filePath.includes(`${path.sep}assets${path.sep}`)) {
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      }
+    },
+  }));
+
+  // Asset không tồn tại (client giữ index.html cũ trỏ tới JS đã đổi hash sau deploy)
+  // → trả 404 THẬT. KHÔNG để rơi vào catch-all bên dưới trả index.html: nếu trả HTML
+  // với Content-Type sai + header nosniff, trình duyệt từ chối chạy → trắng trang.
+  app.use('/assets', (_req, res) => {
+    res.status(404).json({ success: false, error: { code: 'ASSET_NOT_FOUND', message: 'Asset không tồn tại' } });
+  });
+
+  // Mọi route còn lại (không phải /api, /assets) đều trả index.html để React Router xử lý
   app.get('*', (_req, res) => {
+    res.setHeader('Cache-Control', 'no-cache');
     res.sendFile(path.join(frontendDist, 'index.html'));
   });
 }

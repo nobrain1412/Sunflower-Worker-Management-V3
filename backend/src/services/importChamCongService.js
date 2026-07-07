@@ -337,11 +337,10 @@ async function commitImport(rows, createdBy) {
   let updated = 0;
   const failed = [];
 
-  await db.query('BEGIN');
-  try {
+  await db.withTransaction(async (client) => {
     for (const r of toUpsert) {
       try {
-        const { rows: res } = await db.query(
+        const { rows: res } = await client.query(
           `INSERT INTO cham_cong
              (phan_cong_id, ngay, so_gio, so_gio_ot,
               gio_hc_ngay, gio_tc_ngay, gio_hc_dem, gio_tc_dem,
@@ -382,19 +381,14 @@ async function commitImport(rows, createdBy) {
       if (r.cong_nhan_id && r.bo_phan) boPhanByCn.set(r.cong_nhan_id, r.bo_phan);
     }
     for (const [congNhanId, boPhan] of boPhanByCn) {
-      await db.query(
+      await client.query(
         `UPDATE cong_nhan SET bo_phan = $1, updated_at = NOW()
          WHERE id = $2 AND deleted_at IS NULL
            AND (bo_phan IS DISTINCT FROM $1)`,
         [boPhan, congNhanId],
       );
     }
-
-    await db.query('COMMIT');
-  } catch (err) {
-    await db.query('ROLLBACK');
-    throw err;
-  }
+  });
 
   if (createdBy && (inserted + updated) > 0) {
     try {

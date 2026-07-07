@@ -628,8 +628,9 @@ function prevDayISO(iso) {
 }
 
 // Insert 1 công nhân mới với trạng thái cho trước. Trả id.
-async function insertCongNhan(d, trangThai) {
-  const ins = await db.query(
+// exec: pool (mặc định) hoặc client transaction để chạy trong 1 transaction chung.
+async function insertCongNhan(d, trangThai, exec = db) {
+  const ins = await exec.query(
     `INSERT INTO cong_nhan
        (ho_ten, cccd, ngay_sinh, dia_chi_hien_tai, so_dien_thoai,
         ngay_vao_lam, ma_van_tay, ghi_chu,
@@ -648,8 +649,8 @@ async function insertCongNhan(d, trangThai) {
 // Cập nhật công nhân hiện có nhưng CHỈ bổ sung các ô đang trống trong DB
 // (COALESCE: field cũ có giá trị → giữ nguyên; đang NULL → lấy giá trị từ file).
 // Không đụng cong_ty_id ở đây — việc gán công ty đi qua hành động "đổi công ty".
-async function updateFillEmpty(id, d) {
-  await db.query(
+async function updateFillEmpty(id, d, exec = db) {
+  await exec.query(
     `UPDATE cong_nhan SET
         ngay_sinh      = COALESCE(ngay_sinh, $2),
         dia_chi_hien_tai       = COALESCE(dia_chi_hien_tai, $3),
@@ -680,27 +681,26 @@ async function commitImport(rows, createdBy) {
   const failed = [];
   const today = new Date().toISOString().slice(0, 10);
 
-  await db.query('BEGIN');
-  try {
+  await db.withTransaction(async (client) => {
     for (const r of toProcess) {
       const d = r.data;
       const action = r._duplicate ? (r.action || 'skip') : 'new';
       try {
         if (action === 'update') {
-          await updateFillEmpty(r.existing.id, d);
+          await updateFillEmpty(r.existing.id, d, client);
           updated++;
         } else if (action === 'doi_cong_ty') {
-          await updateFillEmpty(r.existing.id, d);
+          await updateFillEmpty(r.existing.id, d, client);
           const start = d.ngay_vao_lam || today;       // bắt đầu công ty mới
           const end = prevDayISO(start);                // công ty cũ kết thúc hôm trước
           // Đóng mọi phan_cong đang mở của CN này
-          await db.query(
+          await client.query(
             `UPDATE phan_cong SET ngay_ket_thuc = $1
               WHERE cong_nhan_id = $2 AND ngay_ket_thuc IS NULL`,
             [end, r.existing.id],
           );
           // Tạo phan_cong mới ở công ty mới
-          await db.query(
+          await client.query(
             `INSERT INTO phan_cong (cong_nhan_id, cong_ty_id, ngay_bat_dau)
              VALUES ($1, $2, $3)`,
             [r.existing.id, d.cong_ty_id, start],
@@ -708,7 +708,7 @@ async function commitImport(rows, createdBy) {
           // Cập nhật công ty hiện tại (denormalized); nếu đang nghỉ việc → cho đi làm lại.
           // Vào lại đúng công ty cũ: cập nhật luôn ngày vào (ngày vào lại) và mã vân tay
           // mới (nếu file có) — vân tay khi vào lại có thể trùng hoặc khác.
-          await db.query(
+          await client.query(
             `UPDATE cong_nhan
                 SET cong_ty_id = $1,
                     ngay_nghi_viec = NULL,
@@ -722,10 +722,10 @@ async function commitImport(rows, createdBy) {
         } else {
           // 'new' hoặc 'them_moi' (trùng CCCD → chờ duyệt)
           const trangThai = action === 'them_moi' ? 'cho_duyet' : 'moi_vao';
-          const id = await insertCongNhan(d, trangThai);
+          const id = await insertCongNhan(d, trangThai, client);
           // Có công ty → tạo luôn phan_cong để CN hiện trong bảng công.
           if (d.cong_ty_id) {
-            await db.query(
+            await client.query(
               `INSERT INTO phan_cong (cong_nhan_id, cong_ty_id, ngay_bat_dau)
                VALUES ($1, $2, $3)`,
               [id, d.cong_ty_id, d.ngay_vao_lam || today],
@@ -737,11 +737,7 @@ async function commitImport(rows, createdBy) {
         failed.push({ rowNumber: r.rowNumber, message: err.message });
       }
     }
-    await db.query('COMMIT');
-  } catch (err) {
-    await db.query('ROLLBACK');
-    throw err;
-  }
+  });
 
   const tongXuLy = inserted + updated + doiCongTy + choDuyet;
   // Log activity (audit). Bọc try để không fail flow chính nếu schema chưa khớp.

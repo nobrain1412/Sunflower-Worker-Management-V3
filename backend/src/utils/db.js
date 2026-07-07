@@ -35,4 +35,34 @@ pool.on('error', (err) => {
   logger.error({ err }, 'Unexpected error on idle DB client');
 });
 
+/**
+ * Chạy fn trong 1 transaction trên MỘT client riêng lấy từ pool.
+ *   BEGIN → fn(client) → COMMIT; nếu lỗi → ROLLBACK. Luôn release client.
+ *
+ * QUAN TRỌNG: dùng thay cho pattern `db.query('BEGIN')` trực tiếp trên pool.
+ * Pool có thể trả mỗi câu lệnh trên connection khác nhau → BEGIN/COMMIT lạc
+ * connection, transaction sai và "bỏ quên" connection còn dở transaction về pool
+ * → nghẽn pool khi tải cao. fn phải dùng `client.query`, KHÔNG dùng `db.query`.
+ */
+async function withTransaction(fn) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await fn(client);
+    await client.query('COMMIT');
+    return result;
+  } catch (err) {
+    try {
+      await client.query('ROLLBACK');
+    } catch (rollbackErr) {
+      logger.error({ err: rollbackErr }, 'ROLLBACK thất bại');
+    }
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+pool.withTransaction = withTransaction;
+
 module.exports = pool;

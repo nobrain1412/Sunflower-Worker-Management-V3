@@ -65,8 +65,9 @@ async function findById(id) {
   return rows[0] || null;
 }
 
-async function markApproved(id, nguoiDuyetId, ghiChuAdmin) {
-  const { rows } = await db.query(
+// exec: pool (mặc định) hoặc client transaction để chạy trong 1 transaction chung.
+async function markApproved(id, nguoiDuyetId, ghiChuAdmin, exec = db) {
+  const { rows } = await exec.query(
     `UPDATE cong_ty_de_xuat
      SET trang_thai = 'da_duyet',
          nguoi_duyet_id = $2,

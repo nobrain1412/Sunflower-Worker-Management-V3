@@ -182,26 +182,23 @@ router.post('/:id/duyet',
       return sendSuccess(res, { de_xuat: approved }, 'Đã duyệt đề xuất');
     }
 
-    // Thực hiện thay đổi trong transaction: tạo/sửa công ty + mark approved
-    await db.query('BEGIN');
-    try {
-      let congTyResult;
+    // Thực hiện thay đổi trong transaction: tạo/sửa công ty + mark approved.
+    // Tất cả model call phải nhận `client` để chạy chung 1 transaction.
+    const { de_xuat: approved, cong_ty: congTyResult } = await db.withTransaction(async (client) => {
+      let cong_ty;
       if (dx.loai === 'tao_moi') {
-        congTyResult = await congTyModel.create(dx.du_lieu);
+        cong_ty = await congTyModel.create(dx.du_lieu, client);
       } else {
-        congTyResult = await congTyModel.update(dx.cong_ty_id, dx.du_lieu);
-        if (!congTyResult) {
+        cong_ty = await congTyModel.update(dx.cong_ty_id, dx.du_lieu, client);
+        if (!cong_ty) {
           const e = new Error('Công ty cần sửa không tồn tại nữa');
           e.statusCode = 404; throw e;
         }
       }
-      const approved = await deXuatModel.markApproved(id, req.user.id, ghiChuAdmin);
-      await db.query('COMMIT');
-      sendSuccess(res, { de_xuat: approved, cong_ty: congTyResult }, 'Đã duyệt đề xuất');
-    } catch (err) {
-      await db.query('ROLLBACK');
-      throw err;
-    }
+      const de_xuat = await deXuatModel.markApproved(id, req.user.id, ghiChuAdmin, client);
+      return { de_xuat, cong_ty };
+    });
+    sendSuccess(res, { de_xuat: approved, cong_ty: congTyResult }, 'Đã duyệt đề xuất');
   }),
 );
 

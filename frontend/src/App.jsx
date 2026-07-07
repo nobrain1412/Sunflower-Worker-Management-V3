@@ -1,30 +1,32 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Layout from './components/Layout';
 import AppErrorBoundary from './components/AppErrorBoundary';
 
-// Pages
-import Login          from './pages/Login';
-import DangKy         from './pages/DangKy';
-import TuyenDung      from './pages/TuyenDung';
-import Dashboard      from './pages/Dashboard';
-import CongNhan       from './pages/CongNhan/index';
-import CongNhanDetail from './pages/CongNhan/Detail';
-import ImportExcel    from './pages/CongNhan/ImportExcel';
-import DuyetQueue     from './pages/CongNhan/DuyetQueue';
-import ScanCCCD       from './pages/OCR/ScanCCCD';
-import BulkReview     from './pages/OCR/BulkReview';
-import ChamCong       from './pages/ChamCong/index';
-import ImportChamCong from './pages/ChamCong/ImportExcel';
-import TaiChinh       from './pages/TaiChinh/index';
-import KTX            from './pages/KTX/index';
-import CongTy         from './pages/CongTy/index';
-import CongTyDeXuat   from './pages/CongTy/DeXuatPage';
-import BaoCao         from './pages/BaoCao/index';
-import NhanSu         from './pages/NhanSu/index';
-import NhanVienDetail from './pages/NhanSu/Detail';
-import CongTacVienDetail from './pages/NhanSu/CongTacVienDetail';
+// Pages — lazy load để tách bundle theo route (recharts, qr-scanner... chỉ tải khi cần).
+// Giảm mạnh kích thước file JS tải lần đầu → vào web nhanh hơn nhiều.
+const Login          = lazy(() => import('./pages/Login'));
+const DangKy         = lazy(() => import('./pages/DangKy'));
+const TuyenDung      = lazy(() => import('./pages/TuyenDung'));
+const Dashboard      = lazy(() => import('./pages/Dashboard'));
+const CongNhan       = lazy(() => import('./pages/CongNhan/index'));
+const CongNhanDetail = lazy(() => import('./pages/CongNhan/Detail'));
+const ImportExcel    = lazy(() => import('./pages/CongNhan/ImportExcel'));
+const DuyetQueue     = lazy(() => import('./pages/CongNhan/DuyetQueue'));
+const ScanCCCD       = lazy(() => import('./pages/OCR/ScanCCCD'));
+const BulkReview     = lazy(() => import('./pages/OCR/BulkReview'));
+const ChamCong       = lazy(() => import('./pages/ChamCong/index'));
+const ImportChamCong = lazy(() => import('./pages/ChamCong/ImportExcel'));
+const TaiChinh       = lazy(() => import('./pages/TaiChinh/index'));
+const KTX            = lazy(() => import('./pages/KTX/index'));
+const CongTy         = lazy(() => import('./pages/CongTy/index'));
+const CongTyDeXuat   = lazy(() => import('./pages/CongTy/DeXuatPage'));
+const BaoCao         = lazy(() => import('./pages/BaoCao/index'));
+const NhanSu         = lazy(() => import('./pages/NhanSu/index'));
+const NhanVienDetail = lazy(() => import('./pages/NhanSu/Detail'));
+const CongTacVienDetail = lazy(() => import('./pages/NhanSu/CongTacVienDetail'));
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
@@ -68,6 +70,7 @@ export default function App() {
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
           <BrowserRouter>
+            <Suspense fallback={<div style={{ minHeight: '100vh', background: 'var(--bg0)' }} />}>
             <Routes>
               <Route path="/login"   element={<LoginRoute />} />
               <Route path="/dang-ky" element={<DangKyRoute />} />
@@ -132,6 +135,7 @@ export default function App() {
 
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
+            </Suspense>
           </BrowserRouter>
         </AuthProvider>
       </QueryClientProvider>

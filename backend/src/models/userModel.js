@@ -266,9 +266,8 @@ async function thanhToanCongTacVien({ ctvId, hinhThuc, thang, nam, createdBy, gh
   const targetThang = thang || (now.getMonth() + 1);
   const targetNam = nam || now.getFullYear();
 
-  await db.query('BEGIN');
-  try {
-    const ctvRes = await db.query(
+  return db.withTransaction(async (client) => {
+    const ctvRes = await client.query(
       `SELECT id, vai_tro FROM users WHERE id = $1`,
       [ctvId],
     );
@@ -281,7 +280,7 @@ async function thanhToanCongTacVien({ ctvId, hinhThuc, thang, nam, createdBy, gh
 
     if (hinhThuc === 'mot_lan') {
       // Mỗi CN đủ điều kiện được tính theo rate(ctv, cong_ty của CN).
-      const inserted = await db.query(
+      const inserted = await client.query(
         `WITH eligible AS (
            SELECT cn.id AS cong_nhan_id, cn.cong_ty_id
              FROM cong_nhan cn
@@ -313,7 +312,6 @@ async function thanhToanCongTacVien({ ctvId, hinhThuc, thang, nam, createdBy, gh
         [ctvId, ghiChu ?? null, createdBy ?? null],
       );
 
-      await db.query('COMMIT');
       return {
         hinh_thuc: 'mot_lan',
         so_luong:  Number(inserted.rows[0].so_luong || 0),
@@ -322,7 +320,7 @@ async function thanhToanCongTacVien({ ctvId, hinhThuc, thang, nam, createdBy, gh
     }
 
     // hang_thang: tien = gio * (rate(ctv, cong_ty CN) / 26 / 8)
-    const inserted = await db.query(
+    const inserted = await client.query(
       `WITH hours_by_worker AS (
          SELECT cn.id AS cong_nhan_id, cn.cong_ty_id,
                 COALESCE(SUM(cc.so_gio + cc.so_gio_ot), 0) AS tong_gio
@@ -359,7 +357,6 @@ async function thanhToanCongTacVien({ ctvId, hinhThuc, thang, nam, createdBy, gh
       [ctvId, targetThang, targetNam, ghiChu ?? null, createdBy ?? null],
     );
 
-    await db.query('COMMIT');
     return {
       hinh_thuc: 'hang_thang',
       thang: targetThang,
@@ -367,10 +364,7 @@ async function thanhToanCongTacVien({ ctvId, hinhThuc, thang, nam, createdBy, gh
       so_luong:  Number(inserted.rows[0].so_luong || 0),
       tong_tien: Number(inserted.rows[0].tong_tien || 0),
     };
-  } catch (error) {
-    await db.query('ROLLBACK');
-    throw error;
-  }
+  });
 }
 
 // Danh sách CN do 1 CTV tuyển kèm số liệu thanh toán/giờ làm

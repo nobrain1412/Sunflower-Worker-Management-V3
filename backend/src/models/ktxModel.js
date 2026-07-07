@@ -156,10 +156,9 @@ async function updatePhong(id, data) {
 // người đó về trạng thái "chưa có phòng" (không có chỗ ở).
 async function deletePhong(id) {
   const today = new Date().toISOString().slice(0, 10);
-  await db.query('BEGIN');
-  try {
+  return db.withTransaction(async (client) => {
     // Lấy danh sách người đang ở (thue_phong còn mở) thuộc các giường của phòng này
-    const occ = await db.query(
+    const occ = await client.query(
       `SELECT tp.id AS thue_phong_id, tp.cong_nhan_id
          FROM thue_phong tp
          JOIN giuong g ON g.id = tp.giuong_id
@@ -169,36 +168,32 @@ async function deletePhong(id) {
 
     for (const row of occ.rows) {
       // Đóng bản ghi thuê phòng
-      await db.query(
+      await client.query(
         `UPDATE thue_phong SET ngay_ra = $1 WHERE id = $2 AND ngay_ra IS NULL`,
         [today, row.thue_phong_id],
       );
       // Nếu không còn chỗ ở nào khác (KTX/phòng trọ) → về 'chua_co_phong'
-      const stillKtx = await db.query(
+      const stillKtx = await client.query(
         `SELECT 1 FROM thue_phong WHERE cong_nhan_id = $1 AND ngay_ra IS NULL LIMIT 1`,
         [row.cong_nhan_id],
       );
-      const inTro = await db.query(
+      const inTro = await client.query(
         `SELECT 1 FROM thue_phong_tro WHERE cong_nhan_id = $1 AND ngay_ra IS NULL LIMIT 1`,
         [row.cong_nhan_id],
       );
       if (!stillKtx.rows.length && !inTro.rows.length) {
-        await db.query(
+        await client.query(
           `UPDATE cong_nhan SET trang_thai_noi_o = 'chua_co_phong' WHERE id = $1`,
           [row.cong_nhan_id],
         );
       }
     }
 
-    const result = await db.query(
+    const result = await client.query(
       `UPDATE phong SET active = FALSE WHERE id = $1 RETURNING id`, [id],
     );
-    await db.query('COMMIT');
     return result.rows[0] || null;
-  } catch (err) {
-    await db.query('ROLLBACK');
-    throw err;
-  }
+  });
 }
 
 // ─── GIUONG: sửa thông tin giường (số thứ tự, ghi chú) ─────
