@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useCongNhanList, useVenders, useCongTyList, useXoaCongNhan, useDuyetCongNhan } from '../../hooks/useCongNhan';
 import { useTinhList } from '../../hooks/useProvinces';
@@ -19,6 +19,13 @@ const TRANG_THAI_PILL = {
 
 // Sentinel gửi lên BE để lọc các bản ghi có giá trị trống (NULL/rỗng)
 const EMPTY = '__empty__';
+
+// Lưu bộ lọc theo session để khi mở chi tiết rồi quay lại không bị reset
+const FILTER_KEY = 'cong_nhan_filters';
+function loadSavedFilters() {
+  try { return JSON.parse(sessionStorage.getItem(FILTER_KEY)) || {}; }
+  catch { return {}; }
+}
 
 const STATUS_OPTIONS = [
   { value: '', label: 'Tất cả trạng thái' },
@@ -208,8 +215,11 @@ export default function CongNhan() {
     catch (err) { alert(err?.message ?? 'Lỗi xoá'); }
   }
 
-  const [searchInput, setSearchInput] = useState(() => urlParams.get('q') ?? '');
-  const [search, setSearch]           = useState(() => urlParams.get('q') ?? '');
+  // Bộ lọc đã lưu ở session trước đó (đọc 1 lần khi mount)
+  const saved = useRef(loadSavedFilters()).current;
+
+  const [searchInput, setSearchInput] = useState(() => urlParams.get('q') ?? saved.search ?? '');
+  const [search, setSearch]           = useState(() => urlParams.get('q') ?? saved.search ?? '');
 
   // Nhận query ?q=... từ Topbar global search (mỗi lần URL đổi)
   useEffect(() => {
@@ -224,15 +234,15 @@ export default function CongNhan() {
     }
   }, [urlParams, setUrlParams]);
 
-  const [trangThai, setTrangThai]     = useState('');
-  const [trangThaiNoiO, setTrangThaiNoiO] = useState('');
-  const [venderId, setVenderId]       = useState('');
-  const [congTyId, setCongTyId]       = useState('');
-  const [tinh,     setTinh]           = useState('');
-  const [ngay,     setNgay]           = useState('');
-  const [sortBy,   setSortBy]         = useState('ho_ten');
-  const [sortOrder,setSortOrder]      = useState('asc');
-  const [page, setPage]               = useState(1);
+  const [trangThai, setTrangThai]     = useState(saved.trangThai ?? '');
+  const [trangThaiNoiO, setTrangThaiNoiO] = useState(saved.trangThaiNoiO ?? '');
+  const [venderId, setVenderId]       = useState(saved.venderId ?? '');
+  const [congTyId, setCongTyId]       = useState(saved.congTyId ?? '');
+  const [tinh,     setTinh]           = useState(saved.tinh ?? '');
+  const [ngay,     setNgay]           = useState(saved.ngay ?? '');
+  const [sortBy,   setSortBy]         = useState(saved.sortBy ?? 'ho_ten');
+  const [sortOrder,setSortOrder]      = useState(saved.sortOrder ?? 'asc');
+  const [page, setPage]               = useState(saved.page ?? 1);
   const [showAdd, setShowAdd]         = useState(false);
   const [showAddSheet, setShowAddSheet] = useState(false);
   const [showFilterSheet, setShowFilterSheet] = useState(false);
@@ -254,6 +264,14 @@ export default function CongNhan() {
     const t = setTimeout(() => { setSearch(searchInput); setPage(1); }, 500);
     return () => clearTimeout(t);
   }, [searchInput]);
+
+  // Lưu bộ lọc vào session để giữ nguyên khi vào chi tiết rồi quay lại danh sách
+  useEffect(() => {
+    sessionStorage.setItem(FILTER_KEY, JSON.stringify({
+      search: searchInput, trangThai, trangThaiNoiO, venderId, congTyId,
+      tinh, ngay, sortBy, sortOrder, page,
+    }));
+  }, [searchInput, trangThai, trangThaiNoiO, venderId, congTyId, tinh, ngay, sortBy, sortOrder, page]);
 
   const { data, isLoading, isError } = useCongNhanList({
     page, limit: 20, search, trang_thai: trangThai,
@@ -563,10 +581,23 @@ export default function CongNhan() {
                 style={{ fontSize: 12, padding: '6px 10px', whiteSpace: 'nowrap' }}
                 onClick={() => { setNgay(ngay === EMPTY ? '' : EMPTY); setPage(1); }}
               >
-                Chưa có
+                Chưa có ngày vào làm
               </button>
             </div>
           </div>
+
+          <button
+            type="button"
+            className="btn-primary"
+            style={{ marginTop: 4, width: '100%', justifyContent: 'center' }}
+            onClick={() => { setPage(1); setShowFilterSheet(false); }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+              <circle cx="11" cy="11" r="8" stroke="currentColor" strokeWidth="2"/>
+              <line x1="21" y1="21" x2="16.65" y2="16.65" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+            </svg>
+            Tìm kiếm
+          </button>
         </div>
       </BottomSheet>
 
