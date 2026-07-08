@@ -61,6 +61,16 @@ const postDuyet = asyncWrapper(async (req, res) => {
   sendSuccess(res, congNhan, 'Đã duyệt công nhân vào làm');
 });
 
+// Từ chối duyệt CN "đợi việc" / "chờ duyệt" → soft delete (kèm lý do tuỳ chọn)
+const postTuChoi = asyncWrapper(async (req, res) => {
+  const congNhan = await congNhanService.tuChoi(
+    toPositiveInt(req.params.id, 'ID công nhân'),
+    req.user,
+    req.validatedBody?.ly_do ?? null,
+  );
+  sendSuccess(res, congNhan, 'Đã từ chối duyệt công nhân');
+});
+
 const deleteXoa = asyncWrapper(async (req, res) => {
   await congNhanService.xoa(toPositiveInt(req.params.id, 'ID công nhân'), req.user);
   sendSuccess(res, null, 'Đã xoá công nhân');
@@ -79,4 +89,4 @@ const postGanCongTy = asyncWrapper(async (req, res) => {
   sendSuccess(res, result, `Đã gán công ty cho ${result.assigned} công nhân`);
 });
 
-module.exports = { getDanhSach, getChiTiet, postTaoMoi, putCapNhat, postDuyet, deleteXoa, postGanCongTy };
+module.exports = { getDanhSach, getChiTiet, postTaoMoi, putCapNhat, postDuyet, postTuChoi, deleteXoa, postGanCongTy };

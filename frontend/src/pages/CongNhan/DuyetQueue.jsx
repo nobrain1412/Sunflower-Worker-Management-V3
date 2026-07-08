@@ -4,8 +4,10 @@
  *   - Quản lý: chỉ thấy CN đợi việc thuộc công ty mình (backend tự lọc theo scope)
  * Bấm "Duyệt vào làm" → CN chuyển sang trạng thái "mới vào".
  */
-import { useCongNhanList, useDuyetCongNhan } from '../../hooks/useCongNhan';
+import { useState } from 'react';
+import { useCongNhanList, useDuyetCongNhan, useTuChoiCongNhan } from '../../hooks/useCongNhan';
 import { useAuth } from '../../context/AuthContext';
+import EditDuyetModal from './EditDuyetModal';
 
 function fmtDate(s) {
   if (!s) return '—';
@@ -53,7 +55,10 @@ export default function DuyetQueue() {
 }
 
 function DuyetCard({ cn }) {
-  const duyet = useDuyetCongNhan();
+  const duyet   = useDuyetCongNhan();
+  const tuChoi  = useTuChoiCongNhan();
+  const [editing, setEditing] = useState(false);
+  const busy = duyet.isPending || tuChoi.isPending;
 
   async function handleDuyet() {
     if (!window.confirm(
@@ -64,6 +69,21 @@ function DuyetCard({ cn }) {
       await duyet.mutateAsync(cn.id);
     } catch (err) {
       alert(err?.message ?? 'Duyệt thất bại');
+    }
+  }
+
+  async function handleTuChoi() {
+    const lyDo = window.prompt(
+      `Từ chối duyệt "${cn.ho_ten}"? Hồ sơ sẽ bị gỡ khỏi hàng đợi.\n`
+      + 'Nhập lý do (tuỳ chọn) rồi bấm OK:',
+      '',
+    );
+    // prompt trả null khi bấm Cancel → không làm gì
+    if (lyDo === null) return;
+    try {
+      await tuChoi.mutateAsync({ id: cn.id, ly_do: lyDo.trim() || null });
+    } catch (err) {
+      alert(err?.message ?? 'Từ chối thất bại');
     }
   }
 
@@ -85,9 +105,25 @@ function DuyetCard({ cn }) {
           <span>· Tạo: {fmtDate(cn.created_at)}</span>
         </div>
       </div>
-      <button onClick={handleDuyet} style={s.btnApprove} disabled={duyet.isPending}>
-        {duyet.isPending ? 'Đang duyệt...' : '✓ Duyệt vào làm'}
-      </button>
+      <div style={s.actions}>
+        <button onClick={() => setEditing(true)} style={s.btnEdit} disabled={busy}>
+          ✎ Sửa
+        </button>
+        <button onClick={handleTuChoi} style={s.btnReject} disabled={busy}>
+          {tuChoi.isPending ? 'Đang xử lý...' : '✕ Từ chối'}
+        </button>
+        <button onClick={handleDuyet} style={s.btnApprove} disabled={busy}>
+          {duyet.isPending ? 'Đang duyệt...' : '✓ Duyệt vào làm'}
+        </button>
+      </div>
+
+      {editing && (
+        <EditDuyetModal
+          congNhan={cn}
+          onClose={() => setEditing(false)}
+          onSaved={() => setEditing(false)}
+        />
+      )}
     </div>
   );
 }
@@ -123,10 +159,20 @@ const s = {
     background: 'rgba(255,179,68,0.14)', borderRadius: 6, padding: '2px 7px',
   },
   meta: { fontSize: 11, color: 'var(--text3)', display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 2 },
+  actions: { display: 'flex', gap: 8, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' },
   btnApprove: {
-    flexShrink: 0,
     background: 'var(--green)', color: '#fff', border: 'none', borderRadius: 8,
     padding: '9px 18px', fontSize: 12, fontWeight: 700, cursor: 'pointer',
+    fontFamily: "'Be Vietnam Pro', sans-serif",
+  },
+  btnEdit: {
+    background: 'var(--bg3)', color: 'var(--text1)', border: '1px solid var(--border2)',
+    borderRadius: 8, padding: '9px 14px', fontSize: 12, fontWeight: 700, cursor: 'pointer',
+    fontFamily: "'Be Vietnam Pro', sans-serif",
+  },
+  btnReject: {
+    background: 'rgba(255,95,114,0.12)', color: 'var(--red)', border: '1px solid rgba(255,95,114,0.28)',
+    borderRadius: 8, padding: '9px 14px', fontSize: 12, fontWeight: 700, cursor: 'pointer',
     fontFamily: "'Be Vietnam Pro', sans-serif",
   },
 };

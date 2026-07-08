@@ -105,6 +105,11 @@ const taoMoiSchema = z.object({
 // PUT cho phép partial update (mọi trường optional, chấp nhận null để xoá)
 const capNhatSchema = taoMoiSchema.partial();
 
+// Từ chối duyệt (lý do tuỳ chọn để lưu vào audit log)
+const tuChoiSchema = z.object({
+  ly_do: nullableStr(500),
+});
+
 // Gán công ty hàng loạt
 const ganCongTySchema = z.object({
   ids:        z.array(z.number().int().positive()).min(1, 'Chọn ít nhất 1 công nhân').max(500),
@@ -159,6 +164,14 @@ router.put('/:id',
 router.post('/:id/duyet',
   requireRole('admin', 'quan_ly'),
   ctrl.postDuyet,
+);
+
+// Từ chối duyệt CN "đợi việc" / "chờ duyệt" → soft delete + audit log.
+// admin: từ chối bất kỳ; quan_ly: chỉ CN thuộc công ty mình quản lý (check ở service).
+router.post('/:id/tu-choi',
+  requireRole('admin', 'quan_ly'),
+  validate(tuChoiSchema),
+  ctrl.postTuChoi,
 );
 
 // Xoá: admin xoá bất kỳ; vender/CTV chỉ xoá CN mình tuyển khi đang "đợi việc"
