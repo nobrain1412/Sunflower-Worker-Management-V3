@@ -15,6 +15,10 @@ import { parseCccdQr } from './parseCccdQr';
 //   { parsed }   đọc & tách được QR CCCD hợp lệ
 //   { rawText }  đọc được QR nhưng không phải CCCD
 //   null         không tìm thấy QR nào
+//
+// Khi gọi với { debug: true }, kèm thêm `debug` trong kết quả (kể cả khi không
+// đọc được — lúc đó trả { debug } thay vì null) để UI hiển thị ảnh đã tiền xử lý
+// giúp gỡ lỗi: xem QR có còn rõ sau xử lý không, decoder có bắt được mã nào không.
 
 // ─── Load & vẽ ảnh ───────────────────────────────────────────────────────────
 
@@ -223,29 +227,55 @@ function contrastStretch(ctx, w, h) {
 
 // ─── Public API ──────────────────────────────────────────────────────────────
 
-export async function decodeCccdQrFromImage(file) {
+// Thu nhỏ 1 canvas thành ảnh JPEG data URL để hiển thị gỡ lỗi (không đụng canvas gốc).
+function canvasThumb(canvas, max = 640) {
+  try {
+    const scale = Math.min(1, max / Math.max(canvas.width, canvas.height));
+    const w = Math.max(1, Math.round(canvas.width * scale));
+    const h = Math.max(1, Math.round(canvas.height * scale));
+    const { canvas: tc, ctx } = newCanvas(w, h);
+    ctx.drawImage(canvas, 0, 0, w, h);
+    return tc.toDataURL('image/jpeg', 0.72);
+  } catch { return null; }
+}
+
+export async function decodeCccdQrFromImage(file, { debug = false } = {}) {
   const engine = await QrScanner.createQrEngine().catch(() => undefined);
   let lastRaw = null;
+  let size = null;
+  const steps = debug ? [] : null; // mỗi lượt: { label, thumb, raw, found, ok }
 
   // Thử decode 1 nguồn (file/canvas/bitmap) → parse; trả object CCCD hoặc null.
-  const attempt = async (source) => {
+  // canvas (nếu có) chỉ dùng để chụp thumbnail khi bật debug.
+  const attempt = async (source, label, canvas) => {
+    let raw = null, parsed = null;
     try {
       const r = await QrScanner.scanImage(source, { qrEngine: engine, returnDetailedScanResult: true });
-      const raw = r?.data ?? r;
+      raw = r?.data ?? r ?? null;
       if (raw) {
         lastRaw = raw;
-        const parsed = parseCccdQr(raw);
-        if (parsed) return parsed;
+        parsed = parseCccdQr(raw);
       }
     } catch { /* nguồn này không đọc được — thử nguồn khác */ }
-    return null;
+    if (steps) {
+      steps.push({
+        label,
+        thumb: canvas ? canvasThumb(canvas) : null,
+        raw,
+        found: !!raw,
+        ok: !!parsed,
+      });
+    }
+    return parsed;
   };
+
+  const result = (extra) => (debug ? { ...extra, debug: { steps, lastRaw, size } } : extra);
 
   let cleanup = () => {};
   try {
     // P1 — ảnh gốc (đường <img>, tôn trọng EXIF, engine native nếu có).
-    let p = await attempt(file);
-    if (p) return { parsed: p };
+    let p = await attempt(file, 'Ảnh gốc (chưa xử lý)');
+    if (p) return result({ parsed: p });
 
     const loaded = await loadDrawable(file);
     cleanup = loaded.cleanup;
@@ -253,31 +283,35 @@ export async function decodeCccdQrFromImage(file) {
     const { w: bw, h: bh } = drawableSize(d);
     const maxSide = Math.max(bw, bh) || 0;
     const mainSide = Math.min(maxSide || 2200, 2200);
+    size = { w: bw, h: bh };
 
     // Lượt xử lý toàn ảnh (dừng ở lượt đầu ra kết quả).
     const passes = [
-      () => makeCanvas(d, mainSide, contrastStretch),
-      () => makeCanvas(d, mainSide, otsuBinarize),
-      () => makeCanvas(d, mainSide, adaptiveThreshold), // loá / sáng lệch
-      () => makeCanvas(d, mainSide, denoiseBinarize),   // nhiễu hạt
+      ['Kéo giãn tương phản', () => makeCanvas(d, mainSide, contrastStretch)],
+      ['Nhị phân Otsu', () => makeCanvas(d, mainSide, otsuBinarize)],
+      ['Ngưỡng thích nghi (loá/sáng lệch)', () => makeCanvas(d, mainSide, adaptiveThreshold)],
+      ['Khử nhiễu + Otsu', () => makeCanvas(d, mainSide, denoiseBinarize)],
     ];
-    if (maxSide && maxSide < 1600) passes.push(() => makeCanvas(d, maxSide * 2, otsuBinarize));
-    if (maxSide > 2600) passes.push(() => makeCanvas(d, 1100, denoiseBinarize));
+    if (maxSide && maxSide < 1600) passes.push(['Phóng to 2× + Otsu', () => makeCanvas(d, maxSide * 2, otsuBinarize)]);
+    if (maxSide > 2600) passes.push(['Thu nhỏ 1100 + khử nhiễu', () => makeCanvas(d, 1100, denoiseBinarize)]);
 
-    for (const make of passes) {
-      p = await attempt(make());
-      if (p) return { parsed: p };
+    for (const [label, make] of passes) {
+      const canvas = make();
+      p = await attempt(canvas, label, canvas);
+      if (p) return result({ parsed: p });
     }
 
     // QR nhỏ trong ảnh lớn — cắt lưới ô chồng lấn rồi phóng to từng ô.
     if (maxSide >= 1400) {
-      for (const region of tileRegions(bw, bh)) {
-        p = await attempt(cropCanvas(d, region, 1000, otsuBinarize));
-        if (p) return { parsed: p };
+      const regions = tileRegions(bw, bh);
+      for (let i = 0; i < regions.length; i++) {
+        const canvas = cropCanvas(d, regions[i], 1000, otsuBinarize);
+        p = await attempt(canvas, `Ô lưới ${i + 1}/${regions.length}`, canvas);
+        if (p) return result({ parsed: p });
       }
     }
 
-    return lastRaw ? { rawText: lastRaw } : null;
+    return lastRaw ? result({ rawText: lastRaw }) : result(null);
   } finally {
     cleanup();
     if (engine && typeof engine.terminate === 'function') {
