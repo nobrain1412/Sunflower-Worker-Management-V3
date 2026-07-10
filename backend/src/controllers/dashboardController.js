@@ -2,6 +2,11 @@ const db = require('../utils/db');
 const asyncWrapper = require('../utils/asyncWrapper');
 const { sendSuccess } = require('../utils/response');
 
+// Mốc "người vào mới" = ngày vào làm thực tế, không phải ngày nhập hồ sơ.
+// Hồ sơ cũ chưa có ngay_vao_lam thì lùi về ngày tạo — cùng quy ước migration 018/022.
+// Yêu cầu query đặt alias bảng cong_nhan là `cn`.
+const NGAY_VAO = `COALESCE(cn.ngay_vao_lam, cn.created_at::date)`;
+
 // Dashboard admin: tổng quan toàn hệ thống
 const getAdminDashboard = asyncWrapper(async (req, res) => {
   const [
@@ -16,14 +21,14 @@ const getAdminDashboard = asyncWrapper(async (req, res) => {
     // KPI tổng hợp công nhân
     db.query(`
       SELECT
-        COUNT(*) FILTER (WHERE deleted_at IS NULL)                                            AS tong_cong_nhan,
-        COUNT(*) FILTER (WHERE deleted_at IS NULL AND trang_thai = 'dang_lam')                AS dang_lam,
-        COUNT(*) FILTER (WHERE deleted_at IS NULL AND created_at::date = CURRENT_DATE)        AS cn_moi_hom_nay,
-        COUNT(*) FILTER (WHERE deleted_at IS NULL
-                          AND date_trunc('month', created_at) = date_trunc('month', NOW()))   AS cn_moi_thang_nay,
-        COUNT(*) FILTER (WHERE deleted_at IS NULL
-                          AND date_trunc('month', created_at) = date_trunc('month', NOW() - INTERVAL '1 month')) AS cn_moi_thang_truoc
-      FROM cong_nhan
+        COUNT(*) FILTER (WHERE cn.deleted_at IS NULL)                                          AS tong_cong_nhan,
+        COUNT(*) FILTER (WHERE cn.deleted_at IS NULL AND cn.trang_thai = 'dang_lam')           AS dang_lam,
+        COUNT(*) FILTER (WHERE cn.deleted_at IS NULL AND ${NGAY_VAO} = CURRENT_DATE)           AS cn_moi_hom_nay,
+        COUNT(*) FILTER (WHERE cn.deleted_at IS NULL
+                          AND date_trunc('month', ${NGAY_VAO}) = date_trunc('month', CURRENT_DATE)) AS cn_moi_thang_nay,
+        COUNT(*) FILTER (WHERE cn.deleted_at IS NULL
+                          AND date_trunc('month', ${NGAY_VAO}) = date_trunc('month', CURRENT_DATE - INTERVAL '1 month')) AS cn_moi_thang_truoc
+      FROM cong_nhan cn
     `),
     // Sức chứa & lấp đầy KTX
     db.query(`
@@ -37,9 +42,9 @@ const getAdminDashboard = asyncWrapper(async (req, res) => {
     db.query(`
       SELECT ct.id, ct.ten_cong_ty,
              COUNT(cn.id) FILTER (WHERE cn.deleted_at IS NULL)                                                AS so_luong_cn,
-             COUNT(cn.id) FILTER (WHERE cn.deleted_at IS NULL AND cn.created_at::date = CURRENT_DATE)         AS vao_hom_nay,
+             COUNT(cn.id) FILTER (WHERE cn.deleted_at IS NULL AND ${NGAY_VAO} = CURRENT_DATE)                 AS vao_hom_nay,
              COUNT(cn.id) FILTER (WHERE cn.deleted_at IS NULL
-                                   AND date_trunc('month', cn.created_at) = date_trunc('month', NOW()))      AS vao_thang_nay
+                                   AND date_trunc('month', ${NGAY_VAO}) = date_trunc('month', CURRENT_DATE)) AS vao_thang_nay
       FROM cong_ty ct
       LEFT JOIN cong_nhan cn ON cn.cong_ty_id = ct.id
       WHERE ct.active = TRUE
@@ -50,7 +55,7 @@ const getAdminDashboard = asyncWrapper(async (req, res) => {
     db.query(`
       SELECT u.id, u.ho_ten,
              COUNT(cn.id)                                                                  AS so_luong_cn,
-             COUNT(cn.id) FILTER (WHERE cn.created_at::date = CURRENT_DATE)                AS moi_hom_nay
+             COUNT(cn.id) FILTER (WHERE ${NGAY_VAO} = CURRENT_DATE)                        AS moi_hom_nay
       FROM users u
       LEFT JOIN cong_nhan cn ON cn.nguoi_tuyen_id = u.id AND cn.deleted_at IS NULL
       WHERE u.vai_tro IN ('vender','quan_ly','admin') AND u.active = TRUE
@@ -60,7 +65,7 @@ const getAdminDashboard = asyncWrapper(async (req, res) => {
     `),
     // 10 CN mới nhất (kèm tên công ty)
     db.query(`
-      SELECT cn.id, cn.ho_ten, cn.trang_thai, cn.created_at, cn.cong_ty_id,
+      SELECT cn.id, cn.ho_ten, cn.trang_thai, cn.ngay_vao_lam, cn.created_at, cn.cong_ty_id,
              cn.nguoi_tuyen_id,
              ct.ten_cong_ty,
              u.ho_ten AS ten_nguoi_tuyen
@@ -68,7 +73,7 @@ const getAdminDashboard = asyncWrapper(async (req, res) => {
       LEFT JOIN cong_ty ct ON ct.id = cn.cong_ty_id
       LEFT JOIN users   u  ON u.id  = cn.nguoi_tuyen_id
       WHERE cn.deleted_at IS NULL
-      ORDER BY cn.created_at DESC
+      ORDER BY ${NGAY_VAO} DESC, cn.created_at DESC
       LIMIT 10
     `),
     // Hoạt động gần đây (gộp CN mới + giao dịch + xếp giường)
@@ -171,14 +176,14 @@ const getQuanLyDashboard = asyncWrapper(async (req, res) => {
       `SELECT
          COUNT(*) FILTER (WHERE cn.deleted_at IS NULL ${ctyFilterSql})                                        AS tong_cong_nhan,
          COUNT(*) FILTER (WHERE cn.deleted_at IS NULL AND cn.trang_thai = 'dang_lam' ${ctyFilterSql})         AS dang_lam,
-         COUNT(*) FILTER (WHERE cn.deleted_at IS NULL AND cn.created_at::date = CURRENT_DATE ${ctyFilterSql}) AS cn_moi_hom_nay,
+         COUNT(*) FILTER (WHERE cn.deleted_at IS NULL AND ${NGAY_VAO} = CURRENT_DATE ${ctyFilterSql})         AS cn_moi_hom_nay,
          COUNT(*) FILTER (WHERE cn.deleted_at IS NULL ${ctyFilterSql}
-                            AND date_trunc('month', cn.created_at) = date_trunc('month', NOW()))             AS cn_moi_thang_nay
+                            AND date_trunc('month', ${NGAY_VAO}) = date_trunc('month', CURRENT_DATE))        AS cn_moi_thang_nay
        FROM cong_nhan cn`,
       ctyParams,
     ),
     db.query(
-      `SELECT cn.id, cn.ho_ten, cn.trang_thai, cn.created_at, cn.cong_ty_id,
+      `SELECT cn.id, cn.ho_ten, cn.trang_thai, cn.ngay_vao_lam, cn.created_at, cn.cong_ty_id,
               cn.nguoi_tuyen_id,
               ct.ten_cong_ty,
               u.ho_ten AS ten_nguoi_tuyen
@@ -186,7 +191,7 @@ const getQuanLyDashboard = asyncWrapper(async (req, res) => {
        LEFT JOIN cong_ty ct ON ct.id = cn.cong_ty_id
        LEFT JOIN users   u  ON u.id  = cn.nguoi_tuyen_id
        WHERE cn.deleted_at IS NULL ${filterIds.length ? `AND cn.cong_ty_id = ANY($1::int[])` : 'AND FALSE'}
-       ORDER BY cn.created_at DESC
+       ORDER BY ${NGAY_VAO} DESC, cn.created_at DESC
        LIMIT 10`,
       ctyParams,
     ),
@@ -213,20 +218,20 @@ const getVenderDashboard = asyncWrapper(async (req, res) => {
   const [kpiRow, cnMoiNhat] = await Promise.all([
     db.query(
       `SELECT
-         COUNT(*) FILTER (WHERE deleted_at IS NULL)                                            AS tong_cong_nhan,
-         COUNT(*) FILTER (WHERE deleted_at IS NULL AND trang_thai = 'dang_lam')                AS dang_lam,
-         COUNT(*) FILTER (WHERE deleted_at IS NULL
-                            AND date_trunc('month', created_at) = date_trunc('month', NOW())) AS moi_thang_nay,
-         COUNT(*) FILTER (WHERE deleted_at IS NULL AND created_at::date = CURRENT_DATE)        AS cn_moi_hom_nay
-       FROM cong_nhan
-       WHERE nguoi_tuyen_id = $1`,
+         COUNT(*) FILTER (WHERE cn.deleted_at IS NULL)                                         AS tong_cong_nhan,
+         COUNT(*) FILTER (WHERE cn.deleted_at IS NULL AND cn.trang_thai = 'dang_lam')          AS dang_lam,
+         COUNT(*) FILTER (WHERE cn.deleted_at IS NULL
+                            AND date_trunc('month', ${NGAY_VAO}) = date_trunc('month', CURRENT_DATE)) AS moi_thang_nay,
+         COUNT(*) FILTER (WHERE cn.deleted_at IS NULL AND ${NGAY_VAO} = CURRENT_DATE)          AS cn_moi_hom_nay
+       FROM cong_nhan cn
+       WHERE cn.nguoi_tuyen_id = $1`,
       [userId],
     ),
     db.query(
-      `SELECT id, ho_ten, trang_thai, so_dien_thoai, ngay_vao_lam, created_at
-       FROM cong_nhan
-       WHERE nguoi_tuyen_id = $1 AND deleted_at IS NULL
-       ORDER BY created_at DESC
+      `SELECT cn.id, cn.ho_ten, cn.trang_thai, cn.so_dien_thoai, cn.ngay_vao_lam, cn.created_at
+       FROM cong_nhan cn
+       WHERE cn.nguoi_tuyen_id = $1 AND cn.deleted_at IS NULL
+       ORDER BY ${NGAY_VAO} DESC, cn.created_at DESC
        LIMIT 10`,
       [userId],
     ),

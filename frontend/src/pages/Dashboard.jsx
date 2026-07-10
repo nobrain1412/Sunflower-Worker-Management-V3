@@ -27,6 +27,17 @@ function fmtMoney(n) {
   return Number(n || 0).toLocaleString('vi-VN') + 'đ';
 }
 
+// Ngày vào làm thực tế, không phải ngày nhập hồ sơ.
+// Hồ sơ cũ chưa có ngay_vao_lam thì lùi về created_at — khớp COALESCE bên backend.
+function ngayVao(cn) {
+  return cn.ngay_vao_lam ?? cn.created_at ?? null;
+}
+
+function fmtNgayVao(cn) {
+  const d = ngayVao(cn);
+  return d ? new Date(d).toLocaleDateString('vi-VN') : '—';
+}
+
 function activityToText(a) {
   if (a.loai === 'cong_nhan')  return `${a.title} vừa được thêm vào hệ thống`;
   if (a.loai === 'giao_dich')  return `${a.sub === 'tam_ung' ? 'Tạm ứng' : a.sub === 'luong' ? 'Trả lương' : 'Giao dịch'} ${fmtMoney(a.so_tien)} — ${a.title}`;
@@ -203,11 +214,11 @@ function AdminDashboard() {
     .map((c, i) => ({ name: c.ten_cong_ty, value: Number(c.so_luong_cn || 0), color: DONUT_COLORS[i % DONUT_COLORS.length] }))
     .filter((d) => d.value > 0);
 
-  // Group CN mới hôm nay theo công ty
+  // Group CN mới hôm nay theo công ty — tính theo ngày vào làm
   const cnMoiHomNay = cnMoiNhat.filter((cn) => {
-    const d = new Date(cn.created_at);
-    const today = new Date();
-    return d.toDateString() === today.toDateString();
+    const d = ngayVao(cn);
+    if (!d) return false;
+    return new Date(d).toDateString() === new Date().toDateString();
   });
   const groupedByCty = cnMoiHomNay.reduce((acc, cn) => {
     const key = cn.ten_cong_ty || 'Chưa phân công';
@@ -622,7 +633,7 @@ function QuanLyDashboard() {
                     <span className={`pill ${pill.cls}`}>{pill.label}</span>
                   </div>
                   <div style={md.cnMeta}>
-                    <span>Ngày vào: {cn.created_at ? new Date(cn.created_at).toLocaleDateString('vi-VN') : '—'}</span>
+                    <span>Ngày vào: {fmtNgayVao(cn)}</span>
                     <span>{tabCN === 'cty' ? `Vender: ${cn.ten_nguoi_tuyen ?? '—'}` : `Công ty: ${cn.ten_cong_ty ?? '—'}`}</span>
                   </div>
                 </div>
@@ -646,7 +657,7 @@ function QuanLyDashboard() {
                 return (
                   <tr key={cn.id} style={s.tr} onClick={() => navigate(`/cong-nhan/${cn.id}`)}>
                     <td style={s.td}><div style={{ ...s.cnName, color: 'var(--accent)' }}>{cn.ho_ten}</div></td>
-                    <td style={s.td}><span style={{ ...s.tdSub, fontFamily: "'JetBrains Mono', monospace" }}>{cn.created_at ? new Date(cn.created_at).toLocaleDateString('vi-VN') : '—'}</span></td>
+                    <td style={s.td}><span style={{ ...s.tdSub, fontFamily: "'JetBrains Mono', monospace" }}>{fmtNgayVao(cn)}</span></td>
                     <td style={s.td}><span className={`pill ${pill.cls}`}>{pill.label}</span></td>
                     <td style={s.td}><span style={s.tdSub}>{tabCN === 'cty' ? (cn.ten_nguoi_tuyen ?? '—') : (cn.ten_cong_ty ?? '—')}</span></td>
                   </tr>
@@ -805,7 +816,7 @@ function VenderDashboard() {
                   </div>
                   <div style={md.cnMeta}>
                     <span>SĐT: {cn.so_dien_thoai ?? '—'}</span>
-                    <span>Ngày vào: {cn.ngay_vao_lam ? new Date(cn.ngay_vao_lam).toLocaleDateString('vi-VN') : (cn.created_at ? new Date(cn.created_at).toLocaleDateString('vi-VN') : '—')}</span>
+                    <span>Ngày vào: {fmtNgayVao(cn)}</span>
                   </div>
                 </div>
               );
@@ -829,7 +840,7 @@ function VenderDashboard() {
                   <tr key={cn.id} style={s.tr} onClick={() => navigate(`/cong-nhan/${cn.id}`)}>
                     <td style={s.td}><div style={{ ...s.cnName, color: 'var(--accent)' }}>{cn.ho_ten}</div></td>
                     <td style={s.td}><span style={s.tdSub}>{cn.so_dien_thoai ?? '—'}</span></td>
-                    <td style={s.td}><span style={{ ...s.tdSub, fontFamily: "'JetBrains Mono', monospace" }}>{cn.ngay_vao_lam ? new Date(cn.ngay_vao_lam).toLocaleDateString('vi-VN') : (cn.created_at ? new Date(cn.created_at).toLocaleDateString('vi-VN') : '—')}</span></td>
+                    <td style={s.td}><span style={{ ...s.tdSub, fontFamily: "'JetBrains Mono', monospace" }}>{fmtNgayVao(cn)}</span></td>
                     <td style={s.td}><span className={`pill ${pill.cls}`}>{pill.label}</span></td>
                   </tr>
                 );
