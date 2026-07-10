@@ -33,11 +33,13 @@ export function useCapNhatCongNhan(id) {
   });
 }
 
-export function useVenders() {
+// enabled = false để bỏ qua fetch khi user không có quyền gọi /users/venders (admin | quan_ly)
+export function useVenders(enabled = true) {
   return useQuery({
     queryKey: ['users', 'venders'],
     queryFn:  () => api.get('/users/venders'),
     staleTime: 5 * 60_000,
+    enabled,
   });
 }
 

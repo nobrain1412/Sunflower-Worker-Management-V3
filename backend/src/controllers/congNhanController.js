@@ -43,9 +43,14 @@ const postTaoMoi = asyncWrapper(async (req, res) => {
 });
 
 const putCapNhat = asyncWrapper(async (req, res) => {
+  const body = { ...req.validatedBody };
+  // Chỉ admin được đổi người tuyển. Role khác gửi field này lên thì bỏ qua im lặng
+  // (thay vì báo lỗi) để form chung không phải phân nhánh theo vai trò.
+  if (req.user?.vai_tro !== 'admin') delete body.nguoi_tuyen_id;
+
   const congNhan = await congNhanService.capNhat(
     toPositiveInt(req.params.id, 'ID công nhân'),
-    req.validatedBody,
+    body,
     req.user?.id ?? null,
     req.scope,
   );

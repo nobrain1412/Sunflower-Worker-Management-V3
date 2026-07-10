@@ -1,6 +1,6 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useCongNhanDetail, useCapNhatCongNhan, useNoiOCongNhan, useTongUngCongNhan, useNoiOTruyCap, useCongTyList } from '../../hooks/useCongNhan';
+import { useCongNhanDetail, useCapNhatCongNhan, useNoiOCongNhan, useTongUngCongNhan, useNoiOTruyCap, useCongTyList, useVenders } from '../../hooks/useCongNhan';
 import { useGiaoDichCongNhan, useCapNhatHoanTien, useTaoGiaoDich } from '../../hooks/useTaiChinh';
 import { useLichSuPhong, usePhongList, useGiuongList } from '../../hooks/useKtx';
 import { useChamCongCongNhan } from '../../hooks/useChamCong';
@@ -57,6 +57,7 @@ const HDL_ICON = {
   doi_trang_thai: '🔁',
   cham_cong_batch: '📅',
   them_cn:        '➕',
+  doi_nguoi_tuyen: '👤',
 };
 const HDL_LABEL = {
   chuyen_cong_ty: 'Chuyển công ty',
@@ -67,6 +68,7 @@ const HDL_LABEL = {
   doi_trang_thai: 'Đổi trạng thái',
   cham_cong_batch: 'Cập nhật chấm công',
   them_cn:        'Thêm công nhân',
+  doi_nguoi_tuyen: 'Đổi người tuyển',
 };
 
 function fmt(n) { return Number(n || 0).toLocaleString('vi-VN') + 'đ'; }
@@ -188,6 +190,14 @@ function isoToDisplay(s) {
 function EditModal({ cn, onClose, noiOHienTai, isAdmin }) {
   const capNhat = useCapNhatCongNhan(cn.id);
   const noiOTruyCap = useNoiOTruyCap().data?.data ?? { ktx: [], phong_tro: [] };
+  // Chỉ admin được đổi người tuyển → chỉ admin mới cần tải danh sách
+  const venders = useVenders(isAdmin).data?.data ?? [];
+  // /users/venders chỉ trả user đang active. Nếu người tuyển hiện tại đã bị khoá,
+  // vẫn phải có option cho họ, nếu không select sẽ hiện nhầm sang người đầu danh sách.
+  const venderOptions = useMemo(() => {
+    if (!cn.nguoi_tuyen_id || venders.some((v) => v.id === cn.nguoi_tuyen_id)) return venders;
+    return [{ id: cn.nguoi_tuyen_id, ho_ten: cn.nguoi_tuyen_ho_ten ?? `#${cn.nguoi_tuyen_id}`, inactive: true }, ...venders];
+  }, [venders, cn.nguoi_tuyen_id, cn.nguoi_tuyen_ho_ten]);
 
   function toInputDate(s) { return s ? s.split('T')[0] : ''; }
 
@@ -212,6 +222,7 @@ function EditModal({ cn, onClose, noiOHienTai, isAdmin }) {
     ngay_muon_xe:     toInputDate(cn.ngay_muon_xe),
     ma_van_tay:       cn.ma_van_tay ?? '',
     bo_phan:          cn.bo_phan ?? '',
+    nguoi_tuyen_id:   cn.nguoi_tuyen_id ? String(cn.nguoi_tuyen_id) : '',
     ktx_id:           noiOHienTai?.ktx?.ktx_id ? String(noiOHienTai.ktx.ktx_id) : '',
     phong_id:         noiOHienTai?.ktx?.phong_id ? String(noiOHienTai.ktx.phong_id) : '',
     giuong_id:        noiOHienTai?.ktx?.giuong_id ? String(noiOHienTai.ktx.giuong_id) : '',
@@ -338,8 +349,14 @@ function EditModal({ cn, onClose, noiOHienTai, isAdmin }) {
       }
       const payload = {};
       for (const [k, v] of Object.entries(form)) {
-        if (['ktx_id', 'phong_id', 'giuong_id', 'phong_tro_id'].includes(k)) continue;
+        if (['ktx_id', 'phong_id', 'giuong_id', 'phong_tro_id', 'nguoi_tuyen_id'].includes(k)) continue;
         payload[k] = v === '' ? null : v;
+      }
+      // Người tuyển: chỉ admin gửi, và chỉ khi thực sự đổi. Gửi lại giá trị cũ sẽ làm
+      // CN có người tuyển đã bị khoá không lưu được field nào khác (backend chặn user inactive).
+      const nguoiTuyenCu = cn.nguoi_tuyen_id ? String(cn.nguoi_tuyen_id) : '';
+      if (isAdmin && form.nguoi_tuyen_id && form.nguoi_tuyen_id !== nguoiTuyenCu) {
+        payload.nguoi_tuyen_id = parseInt(form.nguoi_tuyen_id, 10);
       }
       const today = new Date().toISOString().split('T')[0];
       const targetNoiO = form.trang_thai_noi_o;
@@ -500,6 +517,20 @@ function EditModal({ cn, onClose, noiOHienTai, isAdmin }) {
             <label className="form-label">Bộ phận</label>
             <input className="form-input" name="bo_phan" value={form.bo_phan} onChange={handleChange} placeholder="VD: Tổ 1 / Đóng gói" maxLength={100} />
           </div>
+          {isAdmin && (
+            <div style={m.fieldWrap}>
+              <label className="form-label">Người tuyển</label>
+              <select className="form-input" name="nguoi_tuyen_id" value={form.nguoi_tuyen_id} onChange={handleChange}>
+                {/* Chưa có người tuyển → cho phép để trống; đã có thì không thể xoá, chỉ đổi sang người khác */}
+                {!cn.nguoi_tuyen_id && <option value="">— Chưa có —</option>}
+                {venderOptions.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.ho_ten}{v.ma_vender ? ` (${v.ma_vender})` : ''}{v.inactive ? ' — đã khoá' : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <div style={{ gridColumn: 'span 2', display: 'flex', flexDirection: 'column', gap: 4 }}>
             <label className="form-label">Ghi chú</label>
             <textarea className="form-input" name="ghi_chu" value={form.ghi_chu} onChange={handleChange} rows={2} style={{ resize: 'vertical' }} />

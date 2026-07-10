@@ -54,6 +54,7 @@ const HOAT_DONG_ICON = {
   bao_nghi_viec:  { icon: '🚪', color: 'var(--red)'     },
   doi_trang_thai: { icon: '🔁', color: 'var(--accent)'  },
   cham_cong_batch:{ icon: '📅', color: 'var(--accent)'  },
+  doi_nguoi_tuyen:{ icon: '👤', color: 'var(--accent2)' },
 };
 const HOAT_DONG_LABEL = {
   chuyen_cong_ty: 'Chuyển công ty',
@@ -63,6 +64,7 @@ const HOAT_DONG_LABEL = {
   bao_nghi_viec:  'Báo nghỉ việc',
   doi_trang_thai: 'Đổi trạng thái',
   cham_cong_batch:'Cập nhật chấm công',
+  doi_nguoi_tuyen:'Đổi người tuyển',
 };
 
 function activityIcon(loai) {

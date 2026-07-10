@@ -206,7 +206,8 @@ async function update(id, data) {
     'ho_ten', 'cccd', 'ngay_sinh', 'gioi_tinh',
     'dia_chi_hien_tai', 'so_dien_thoai', 'ngay_cap_cccd',
     'trang_thai', 'ngay_vao_lam', 'ngay_nghi_viec', 'ghi_chu',
-    'cong_ty_id', 'da_tra_dong_phuc', 'da_viet_don_nghi',
+    // nguoi_tuyen_id: chỉ admin gửi được — controller đã xoá field này với role khác
+    'cong_ty_id', 'nguoi_tuyen_id', 'da_tra_dong_phuc', 'da_viet_don_nghi',
     'ngan_hang', 'so_tai_khoan', 'ten_chu_tk',
     'cccd_da_tra', 'trang_thai_noi_o', 'muon_xe', 'loai_xe', 'xe_da_tra', 'ngay_muon_xe',
     'ma_van_tay', 'bo_phan',

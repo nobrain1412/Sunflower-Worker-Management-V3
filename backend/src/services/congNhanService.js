@@ -1,4 +1,5 @@
 const congNhanModel = require('../models/congNhanModel');
+const userModel = require('../models/userModel');
 const hoatDongLog = require('../models/hoatDongLogModel');
 const { sanitizeForRole, sanitizeListForRole } = require('../utils/sanitizeCongNhan');
 
@@ -261,6 +262,21 @@ async function capNhat(id, data, actorUserId = null, scope = null) {
     }
   }
 
+  // Đổi người tuyển (chỉ admin tới được đây — controller đã lọc theo vai trò).
+  // Bắt lỗi ở đây thay vì để FK ném 23503 thành 500 khó hiểu.
+  let nguoiTuyenMoi = null;
+  if ('nguoi_tuyen_id' in data) {
+    if (data.nguoi_tuyen_id == null) {
+      const err = new Error('Người tuyển không được để trống');
+      err.statusCode = 400; err.code = 'VALIDATION_ERROR'; throw err;
+    }
+    nguoiTuyenMoi = await userModel.findById(data.nguoi_tuyen_id);
+    if (!nguoiTuyenMoi || !nguoiTuyenMoi.active) {
+      const err = new Error('Người tuyển không tồn tại hoặc đã bị khoá');
+      err.statusCode = 400; err.code = 'VALIDATION_ERROR'; throw err;
+    }
+  }
+
   // Validate: nếu đổi trạng thái/công ty mà kết quả là "đang làm" / "mới vào"
   // thì bắt buộc phải có công ty. Chỉ chặn khi update NÀY mới gây ra vi phạm
   // (không chặn các bản ghi cũ vốn đã thiếu công ty khi sửa field khác).
@@ -329,6 +345,19 @@ async function capNhat(id, data, actorUserId = null, scope = null) {
           nguoi_tuyen_id: updated.nguoi_tuyen_id,
           du_lieu: { tu_cong_ty_id: before.cong_ty_id, sang_cong_ty_id: updated.cong_ty_id },
           ghi_chu: `Chuyển công ty (#${before.cong_ty_id ?? '—'} → #${updated.cong_ty_id ?? '—'})`,
+          created_by: actorUserId,
+        });
+      }
+      if ('nguoi_tuyen_id' in data && before.nguoi_tuyen_id !== updated.nguoi_tuyen_id) {
+        const cu = before.nguoi_tuyen_id ? await userModel.findById(before.nguoi_tuyen_id) : null;
+        await hoatDongLog.create({
+          loai: 'doi_nguoi_tuyen',
+          muc_do: 'quan_trong',
+          cong_nhan_id: id,
+          // Gắn log cho người tuyển MỚI để feed của họ thấy CN vừa được chuyển sang
+          nguoi_tuyen_id: updated.nguoi_tuyen_id,
+          du_lieu: { tu_nguoi_tuyen_id: before.nguoi_tuyen_id, sang_nguoi_tuyen_id: updated.nguoi_tuyen_id },
+          ghi_chu: `Đổi người tuyển: ${cu?.ho_ten ?? '—'} → ${nguoiTuyenMoi?.ho_ten ?? `#${updated.nguoi_tuyen_id}`}`,
           created_by: actorUserId,
         });
       }
