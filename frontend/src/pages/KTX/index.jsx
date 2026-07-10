@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useKtxList, useTaoKtx, useCapNhatKtx, useXoaKtx, usePhongList, useTaoPhong, useCapNhatPhong, useXoaPhong, useGiuongList, useCapNhatGiuong, useXepGiuong, useTraPhong, useChuyenPhongKtx, useSuaNgayVaoKtx, useHoaDonList, useTaoHoaDon, useHoaDonThangTruoc, useUngVienXepPhong } from '../../hooks/useKtx';
+import { useKtxList, useTaoKtx, useCapNhatKtx, useXoaKtx, usePhongList, useTaoPhong, useCapNhatPhong, useXoaPhong, useGiuongList, useCapNhatGiuong, useXepGiuong, useTraPhong, useChuyenPhongKtx, useSuaNgayVaoKtx, useXoaThuePhong, useHoaDonList, useTaoHoaDon, useHoaDonThangTruoc, useUngVienXepPhong } from '../../hooks/useKtx';
 import { usePhongTroList, useTaoPhongTro, useCapNhatPhongTro, useXoaPhongTro, usePhongTroThue, useTraPhongTro, useChuyenPhongTro, useSuaNgayVaoPhongTro, useHoaDonPhongTro, useHoaDonThangTruocPhongTro, useTaoHoaDonPhongTro } from '../../hooks/usePhongTro';
 import { useAuth } from '../../context/AuthContext';
 import { isEmbeddableMapUrl, normalizeMapUrl } from '../../constants/mapUrl';
@@ -821,6 +821,7 @@ function PhongDetail({ phong, ktxId, isAdmin }) {
   const giuongList = giuongRes?.data ?? [];
   const traPhong = useTraPhong(phong.id);
   const suaNgayVao = useSuaNgayVaoKtx(phong.id);
+  const xoaThuePhong = useXoaThuePhong(phong.id);
   const [xepModal, setXepModal] = useState(null);
   const [editGiuong, setEditGiuong] = useState(null);
   const [editPhong, setEditPhong] = useState(false);
@@ -831,6 +832,21 @@ function PhongDetail({ phong, ktxId, isAdmin }) {
   async function handleTra(tp) {
     if (!confirm(`Xác nhận trả phòng cho ${tp.cong_nhan_ten}?`)) return;
     await traPhong.mutateAsync({ thuephongId: tp.thue_phong_id, ngay_ra: new Date().toISOString().split('T')[0] });
+  }
+
+  // Gỡ = xếp nhầm, xoá hẳn bản ghi. Nói rõ khác biệt với "Trả" để không bấm nhầm.
+  async function handleGo(tp) {
+    const ok = confirm(
+      `Gỡ ${tp.cong_nhan_ten} khỏi giường ${tp.so_thu_tu}?\n\n`
+      + 'Dùng khi xếp nhầm phòng: bản ghi bị XOÁ HẲN, không tính tiền phòng những ngày đã ở.\n'
+      + 'Nếu công nhân thực sự đã ở rồi mới chuyển đi, hãy dùng nút "Trả" thay vì nút này.',
+    );
+    if (!ok) return;
+    try {
+      await xoaThuePhong.mutateAsync({ thuephongId: tp.thue_phong_id });
+    } catch (e) {
+      alert(e?.message ?? 'Không gỡ được công nhân khỏi giường');
+    }
   }
 
   return (
@@ -878,6 +894,7 @@ function PhongDetail({ phong, ktxId, isAdmin }) {
                 <div style={{ position: 'absolute', bottom: 10, right: 10, display: 'flex', gap: 5 }}>
                   <button style={{ ...s.assignBtn, position: 'static', color: 'var(--accent)', borderColor: 'rgba(79,124,255,0.3)' }} onClick={() => setChuyenModal(g)}>⇄ Chuyển</button>
                   <button style={{ ...s.assignBtn, position: 'static', color: 'var(--red)', borderColor: 'rgba(255,95,114,0.3)' }} onClick={() => handleTra(g)}>↩ Trả</button>
+                  <button title="Gỡ khỏi giường (xếp nhầm)" style={{ ...s.assignBtn, position: 'static', color: 'var(--text3)', borderColor: 'var(--border2)' }} onClick={() => handleGo(g)}>🗑 Gỡ</button>
                 </div>
               </>
             ) : (

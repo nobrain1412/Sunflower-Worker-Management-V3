@@ -114,6 +114,19 @@ export function useTraPhong(phongId) {
   });
 }
 
+// Gỡ CN xếp nhầm giường — xoá hẳn bản ghi, khác useTraPhong (giữ lịch sử)
+export function useXoaThuePhong(phongId) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ thuephongId }) => api.delete(`/ktx/thue-phong/${thuephongId}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['ktx', 'phong', phongId, 'giuong'] });
+      qc.invalidateQueries({ queryKey: ['ktx'] });
+      qc.invalidateQueries({ queryKey: ['cong-nhan'] });
+    },
+  });
+}
+
 // Ngày vào quyết định số ngày ở → hoá đơn tháng đó phải tính lại
 export function useSuaNgayVaoKtx(phongId) {
   const qc = useQueryClient();

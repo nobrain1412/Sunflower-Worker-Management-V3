@@ -141,6 +141,14 @@ router.post('/giuong/:giuongId/xep', requireKtxAccess,
   }),
 );
 
+// Gỡ công nhân bị xếp nhầm giường: XOÁ bản ghi thuê phòng, không giữ lịch sử.
+// Khác "trả phòng" (PUT .../tra) vốn chốt ngày ra để tính tiền.
+router.delete('/thue-phong/:id', requireKtxAccess, asyncWrapper(async (req, res) => {
+  const data = await ktxModel.xoaThuePhong(toPositiveInt(req.params.id, 'ID thuê phòng'));
+  if (!data) { const e = new Error('Không tìm thấy bản ghi thuê phòng'); e.statusCode = 404; throw e; }
+  sendSuccess(res, null, 'Đã gỡ công nhân khỏi giường');
+}));
+
 // Sửa ngày vào của 1 lượt ở (kể cả lượt đã trả phòng) — sửa dữ liệu nhập sai.
 // Ảnh hưởng tới số ngày ở → tiền phòng/điện/nước trên hoá đơn tháng đó.
 router.put('/thue-phong/:id/ngay-vao', requireKtxAccess,

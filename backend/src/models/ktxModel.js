@@ -325,29 +325,54 @@ async function suaNgayVaoThuePhong(thuePhongId, ngayVao) {
   return result.rows[0] || null;
 }
 
+// Hết 1 lượt ở (trả phòng hoặc gỡ): nếu CN không còn chỗ ở nào đang mở — kể cả
+// bên phòng trọ — thì đưa về "chưa có phòng".
+async function dongBoTrangThaiNoiO(congNhanId, exec = db) {
+  const conKtx = await exec.query(
+    `SELECT 1 FROM thue_phong WHERE cong_nhan_id = $1 AND ngay_ra IS NULL LIMIT 1`,
+    [congNhanId],
+  );
+  const conTro = await exec.query(
+    `SELECT 1 FROM thue_phong_tro WHERE cong_nhan_id = $1 AND ngay_ra IS NULL LIMIT 1`,
+    [congNhanId],
+  );
+  if (!conKtx.rows.length && !conTro.rows.length) {
+    await exec.query(
+      `UPDATE cong_nhan SET trang_thai_noi_o = 'chua_co_phong' WHERE id = $1`,
+      [congNhanId],
+    );
+  }
+}
+
 async function traPhong(thuephongId, ngayRa) {
   const result = await db.query(
     `UPDATE thue_phong SET ngay_ra = $1 WHERE id = $2 AND ngay_ra IS NULL RETURNING *`,
     [ngayRa, thuephongId],
   );
   const updated = result.rows[0] || null;
-  if (updated) {
-    const stillInKtx = await db.query(
-      `SELECT 1 FROM thue_phong WHERE cong_nhan_id = $1 AND ngay_ra IS NULL LIMIT 1`,
-      [updated.cong_nhan_id],
-    );
-    const inPhongTro = await db.query(
-      `SELECT 1 FROM thue_phong_tro WHERE cong_nhan_id = $1 AND ngay_ra IS NULL LIMIT 1`,
-      [updated.cong_nhan_id],
-    );
-    if (!stillInKtx.rows.length && !inPhongTro.rows.length) {
-      await db.query(
-        `UPDATE cong_nhan SET trang_thai_noi_o = 'chua_co_phong' WHERE id = $1`,
-        [updated.cong_nhan_id],
-      );
-    }
-  }
+  if (updated) await dongBoTrangThaiNoiO(updated.cong_nhan_id);
   return updated;
+}
+
+// Gỡ hẳn 1 lượt ở xếp nhầm giường: XOÁ bản ghi, khác "trả phòng" (giữ lịch sử
+// để tính tiền). Chỉ gỡ được lượt ĐANG ở — lượt đã trả phòng là dữ liệu tính
+// tiền của tháng trước, xoá đi sẽ làm hoá đơn cũ lệch.
+// Không bảng nào tham chiếu thue_phong nên DELETE không vướng khoá ngoại.
+async function xoaThuePhong(thuePhongId) {
+  return db.withTransaction(async (client) => {
+    const cur = await client.query(`SELECT * FROM thue_phong WHERE id = $1`, [thuePhongId]);
+    const rec = cur.rows[0];
+    if (!rec) return null;
+    if (rec.ngay_ra) {
+      const e = new Error('Chỉ gỡ được công nhân đang ở. Lượt đã trả phòng là lịch sử tính tiền.');
+      e.statusCode = 400;
+      e.code = 'ALREADY_CHECKED_OUT';
+      throw e;
+    }
+    await client.query(`DELETE FROM thue_phong WHERE id = $1`, [thuePhongId]);
+    await dongBoTrangThaiNoiO(rec.cong_nhan_id, client);
+    return rec;
+  });
 }
 
 async function findThuephongByCongNhan(congNhanId) {
@@ -643,7 +668,7 @@ module.exports = {
   findPhongByKtx, findPhongById, createPhong, updatePhong, deletePhong,
   findGiuongByPhong, findGiuongById, updateGiuong,
   xepGiuong, traPhong, chuyenPhong, findThuephongByCongNhan, findUngVienXepPhong,
-  suaNgayVaoThuePhong,
+  suaNgayVaoThuePhong, xoaThuePhong,
   findHoaDonByPhong, findHoaDonThang, findSoThangTruoc, createHoaDon,
   findHoaDonKtxReport,
 };
