@@ -183,7 +183,8 @@ export default function BaoCao() {
               <div style={s.reportTitle}>Hóa đơn KTX</div>
               <div style={s.reportDesc}>
                 Điện, nước, tiền phòng tháng <b>{thang}/{nam}</b> — chia cho từng công nhân theo số ngày ở
-                (tính từ ngày đầu tháng, chốt ngày cuối tháng)
+                (tính từ ngày đầu tháng, chốt ngày cuối tháng). Mỗi khu KTX một sheet riêng,
+                kèm chỉ số điện/nước cũ–mới; phòng chưa nhập hoá đơn được tô vàng.
               </div>
             </div>
             <span style={{ ...s.formatBadge, background: 'var(--amber)15', color: 'var(--amber)' }}>.xlsx</span>
@@ -246,6 +247,7 @@ export default function BaoCao() {
           <li><b>Danh sách công nhân</b>: chọn công ty (hoặc tất cả), lọc chỉ người chưa nghỉ việc và loại hợp đồng, rồi bấm Xuất .xlsx</li>
           <li>Quản lý chỉ xuất được công nhân thuộc công ty mình quản lý</li>
           <li><b>Hóa đơn KTX</b>: chọn tháng/năm ở bộ lọc trên; tiền được tính từ ngày đầu tháng và chốt tới ngày cuối tháng, chia theo số ngày mỗi công nhân ở</li>
+          <li>Phòng <b>tô vàng</b> trong file là phòng chưa nhập hoá đơn tháng đó — điện/nước để trống, tiền phòng chỉ là tạm tính. Vào trang KTX → nút "💡 Hóa đơn" để nhập</li>
           <li>Chọn tháng và năm cần xuất cho các báo cáo theo kỳ ở bộ lọc phía trên</li>
           <li>File Excel (.xlsx) được tạo bằng ExcelJS, file PDF bằng PDFKit</li>
         </ul>

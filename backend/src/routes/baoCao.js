@@ -19,6 +19,7 @@ const asyncWrapper = require('../utils/asyncWrapper');
 const congNhanModel = require('../models/congNhanModel');
 const ktxModel = require('../models/ktxModel');
 const baoCaoSvc = require('../services/baoCaoService');
+const baoCaoKtxSvc = require('../services/baoCaoKtxService');
 const db = require('../utils/db');
 
 function toThangNam(req) {
@@ -85,7 +86,7 @@ router.get('/hoa-don-ktx',
   asyncWrapper(async (req, res) => {
     const { thang, nam } = toThangNam(req);
     const report = await ktxModel.findHoaDonKtxReport(thang, nam);
-    const buffer = await baoCaoSvc.buildHoaDonKtx(report, { thang, nam });
+    const buffer = await baoCaoKtxSvc.buildHoaDonKtx(report, { thang, nam });
 
     const fileName = `hoa-don-ktx_T${thang}-${nam}_${new Date().toISOString().slice(0, 10).replace(/-/g, '')}.xlsx`;
     res.set('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');

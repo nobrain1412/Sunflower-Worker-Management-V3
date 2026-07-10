@@ -1,7 +1,9 @@
 /**
  * Sinh file Excel cho các báo cáo. Hiện có: Danh sách công nhân.
+ * Hóa đơn KTX nằm ở services/baoCaoKtxService.js
  */
 const ExcelJS = require('exceljs');
+const { dmy } = require('../utils/formatDate');
 
 const TRANG_THAI_LABEL = {
   dang_lam:  'Đang làm',
@@ -12,14 +14,6 @@ const TRANG_THAI_LABEL = {
   cho_duyet: 'Chờ duyệt',
 };
 const LOAI_CN_LABEL = { chinh_thuc: 'Chính thức', thoi_vu: 'Thời vụ' };
-
-// Date (ISO / Date) → dd/mm/yyyy để hiển thị trong file
-function dmy(v) {
-  if (!v) return '';
-  const d = v instanceof Date ? v : new Date(v);
-  if (isNaN(d.getTime())) return '';
-  return `${String(d.getUTCDate()).padStart(2, '0')}/${String(d.getUTCMonth() + 1).padStart(2, '0')}/${d.getUTCFullYear()}`;
-}
 
 /**
  * Dựng workbook danh sách công nhân.
@@ -69,7 +63,9 @@ async function buildDanhSachCongNhan(rows, opts = {}) {
     { header: 'Số tài khoản', key: 'so_tai_khoan',  width: 18 },
     { header: 'Chủ tài khoản',key: 'ten_chu_tk',    width: 24 },
   ];
-  ws.columns = columns;
+  // Chỉ gán key + width. Kèm `header` sẽ khiến ExcelJS ghi header vào hàng 1,
+  // đè mất dòng tiêu đề đã merge ở trên — header được ghi tay ở hàng 3.
+  ws.columns = columns.map(({ key, width }) => ({ key, width }));
 
   const headerRow = ws.getRow(3);
   columns.forEach((c, i) => { headerRow.getCell(i + 1).value = c.header; });
@@ -111,102 +107,4 @@ async function buildDanhSachCongNhan(rows, opts = {}) {
   return wb.xlsx.writeBuffer();
 }
 
-// ISO yyyy-mm-dd → dd/mm/yyyy
-function dmyIso(iso) {
-  const m = String(iso ?? '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  return m ? `${m[3]}/${m[2]}/${m[1]}` : String(iso ?? '');
-}
-
-/**
- * Workbook hóa đơn KTX theo tháng — kỳ tính từ ngày đầu tháng → cuối tháng.
- * @param report { rows, startISO, endISO } từ ktxModel.findHoaDonKtxReport
- * @param opts   { thang, nam }
- */
-async function buildHoaDonKtx(report, opts = {}) {
-  const { rows = [], startISO, endISO } = report || {};
-  const { thang, nam } = opts;
-
-  const wb = new ExcelJS.Workbook();
-  wb.creator = 'WorkerOS';
-  const ws = wb.addWorksheet(`Hóa đơn KTX T${thang}-${nam}`);
-
-  ws.mergeCells('A1:M1');
-  ws.getCell('A1').value = `HÓA ĐƠN KTX THÁNG ${thang}/${nam}`;
-  ws.getCell('A1').font = { bold: true, size: 15 };
-  ws.getCell('A1').alignment = { horizontal: 'center' };
-
-  ws.mergeCells('A2:M2');
-  ws.getCell('A2').value =
-    `Kỳ tính: ${dmyIso(startISO)} → ${dmyIso(endISO)} (chốt cuối tháng)  ·  `
-    + `Tiền phòng chia theo số ngày ở  ·  Xuất ngày ${dmy(new Date())}`;
-  ws.getCell('A2').font = { italic: true, size: 11, color: { argb: 'FF555555' } };
-  ws.getCell('A2').alignment = { horizontal: 'center' };
-
-  const columns = [
-    { header: 'STT',        key: 'stt',        width: 6 },
-    { header: 'KTX',        key: 'ktx',        width: 18 },
-    { header: 'Phòng',      key: 'phong',      width: 10 },
-    { header: 'Tầng',       key: 'tang',       width: 7 },
-    { header: 'Công nhân',  key: 'cong_nhan',  width: 24 },
-    { header: 'CCCD',       key: 'cccd',       width: 16 },
-    { header: 'Từ ngày',    key: 'tu_ngay',    width: 12 },
-    { header: 'Đến ngày',   key: 'den_ngay',   width: 12 },
-    { header: 'Số ngày',    key: 'so_ngay',    width: 9 },
-    { header: 'Tiền điện',  key: 'tien_dien',  width: 13 },
-    { header: 'Tiền nước',  key: 'tien_nuoc',  width: 13 },
-    { header: 'Tiền phòng', key: 'tien_phong', width: 14 },
-    { header: 'Tổng phải trả', key: 'tong',    width: 15 },
-  ];
-  ws.columns = columns;
-
-  const headerRow = ws.getRow(3);
-  columns.forEach((c, i) => { headerRow.getCell(i + 1).value = c.header; });
-  headerRow.font = { bold: true };
-  headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8F0FF' } };
-  headerRow.alignment = { vertical: 'middle', wrapText: true };
-  ws.views = [{ state: 'frozen', ySplit: 3 }];
-
-  ['cccd'].forEach((key) => {
-    const idx = columns.findIndex((c) => c.key === key) + 1;
-    ws.getColumn(idx).numFmt = '@';
-  });
-  // Định dạng tiền có phân cách nghìn
-  ['tien_dien', 'tien_nuoc', 'tien_phong', 'tong'].forEach((key) => {
-    const idx = columns.findIndex((c) => c.key === key) + 1;
-    ws.getColumn(idx).numFmt = '#,##0';
-  });
-
-  let tDien = 0, tNuoc = 0, tPhong = 0, tTong = 0;
-  rows.forEach((r, i) => {
-    ws.addRow({
-      stt:        i + 1,
-      ktx:        r.ktx_ten ?? '',
-      phong:      r.ten_phong ?? '',
-      tang:       r.tang ?? '',
-      cong_nhan:  r.cong_nhan_ten ?? '',
-      cccd:       r.cccd ?? '',
-      tu_ngay:    dmyIso(r.tu_ngay),
-      den_ngay:   dmyIso(r.den_ngay),
-      so_ngay:    r.so_ngay ?? 0,
-      tien_dien:  Number(r.tien_dien || 0),
-      tien_nuoc:  Number(r.tien_nuoc || 0),
-      tien_phong: Number(r.tien_phong || 0),
-      tong:       Number(r.tong || 0),
-    });
-    tDien += Number(r.tien_dien || 0);
-    tNuoc += Number(r.tien_nuoc || 0);
-    tPhong += Number(r.tien_phong || 0);
-    tTong += Number(r.tong || 0);
-  });
-
-  // Dòng tổng cộng
-  const totalRow = ws.addRow({
-    cong_nhan: 'TỔNG CỘNG', tien_dien: tDien, tien_nuoc: tNuoc, tien_phong: tPhong, tong: tTong,
-  });
-  totalRow.font = { bold: true };
-  totalRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F5FF' } };
-
-  return wb.xlsx.writeBuffer();
-}
-
-module.exports = { buildDanhSachCongNhan, buildHoaDonKtx };
+module.exports = { buildDanhSachCongNhan };

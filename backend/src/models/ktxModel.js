@@ -489,7 +489,7 @@ async function findHoaDonKtxReport(thang, nam) {
 
   // Công nhân có thời gian ở KTX GIAO với [đầu tháng, cuối tháng]
   const occ = await db.query(
-    `SELECT k.ten AS ktx_ten, p.id AS phong_id, p.ten_phong, p.tang,
+    `SELECT k.id AS ktx_id, k.ten AS ktx_ten, p.id AS phong_id, p.ten_phong, p.tang,
             p.tien_phong AS phong_tien_phong,
             cn.ho_ten AS cong_nhan_ten, cn.cccd,
             tp.ngay_vao, tp.ngay_ra
@@ -561,10 +561,22 @@ async function findHoaDonKtxReport(thang, nam) {
     const aNuoc = allocate(tienNuoc);
     const aPhong = allocate(tienPhong);
 
+    // Chỉ số công tơ của cả phòng — lặp lại trên mỗi dòng công nhân của phòng đó.
+    // Phòng chưa nhập hoá đơn → null để file Excel bỏ trống thay vì hiện số 0 giả.
+    const chiSo = {
+      dien_cu:      h ? Number(h.dien_cu) : null,
+      dien_moi:     h ? Number(h.dien_moi) : null,
+      don_gia_dien: h ? Number(h.don_gia_dien) : null,
+      nuoc_cu:      h ? Number(h.nuoc_cu) : null,
+      nuoc_moi:     h ? Number(h.nuoc_moi) : null,
+      don_gia_nuoc: h ? Number(h.don_gia_nuoc) : null,
+    };
+
     occupants.forEach((o, i) => {
       const a = Math.max(toUtc(o.ngay_vao), startMs);
       const b = Math.min(o.ngay_ra ? toUtc(o.ngay_ra) : endMs, endMs);
       rows.push({
+        ktx_id:        o.ktx_id,
         ktx_ten:       o.ktx_ten,
         ten_phong:     o.ten_phong,
         tang:          o.tang,
@@ -573,6 +585,7 @@ async function findHoaDonKtxReport(thang, nam) {
         tu_ngay:       new Date(a).toISOString().slice(0, 10),
         den_ngay:      new Date(b).toISOString().slice(0, 10),
         so_ngay:       daysArr[i],
+        ...chiSo,
         tien_dien:     aDien[i],
         tien_nuoc:     aNuoc[i],
         tien_phong:    aPhong[i],
