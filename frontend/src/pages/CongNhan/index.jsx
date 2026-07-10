@@ -259,8 +259,12 @@ export default function CongNhan() {
   }
   const sortIcon = (field) => sortBy === field ? (sortOrder === 'asc' ? ' ↑' : ' ↓') : '';
 
-  // Debounce live search để giảm dồn request khi gõ nhanh
+  // Debounce live search để giảm dồn request khi gõ nhanh.
+  // Bỏ qua lần chạy đầu: lúc mount searchInput chưa đổi, nếu không chặn thì setPage(1)
+  // sẽ xoá mất số trang vừa khôi phục từ session khi user bấm back về danh sách.
+  const boQuaDebounceDauTien = useRef(true);
   useEffect(() => {
+    if (boQuaDebounceDauTien.current) { boQuaDebounceDauTien.current = false; return; }
     const t = setTimeout(() => { setSearch(searchInput); setPage(1); }, 500);
     return () => clearTimeout(t);
   }, [searchInput]);
@@ -290,6 +294,15 @@ export default function CongNhan() {
   const rows = data?.data ?? [];
   const meta = data?.meta ?? { total: 0, total_pages: 1 };
   const isMobile = useIsMobile();
+
+  // Trang khôi phục từ session có thể đã vượt quá số trang hiện có (CN bị xoá,
+  // đổi công ty...) → BE trả về rỗng. Kéo về trang cuối cùng còn dữ liệu.
+  // Chỉ chạy khi đã có meta thật, tránh nhảy về trang 1 trong lúc đang tải.
+  useEffect(() => {
+    if (!data) return;
+    const soTrang = Math.max(1, meta.total_pages);
+    if (page > soTrang) setPage(soTrang);
+  }, [data, meta.total_pages, page]);
 
   return (
     <div style={s.root}>
