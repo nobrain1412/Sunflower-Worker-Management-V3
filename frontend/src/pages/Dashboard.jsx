@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Tooltip, ResponsiveContainer, Cell, PieChart, Pie,
@@ -36,6 +36,16 @@ function ngayVao(cn) {
 function fmtNgayVao(cn) {
   const d = ngayVao(cn);
   return d ? new Date(d).toLocaleDateString('vi-VN') : '—';
+}
+
+// Công ty đã tắt vẫn có thể còn công nhân — đánh dấu để không nhầm là cty đang hoạt động
+function tenCongTyHienThi(c) {
+  return c.active === false ? `${c.ten_cong_ty} (đã ngừng)` : c.ten_cong_ty;
+}
+
+// Tài khoản đã khoá vẫn có thể là người tuyển của nhiều CN
+function tenVenderHienThi(v) {
+  return v.active === false ? `${v.ho_ten} (đã khoá)` : v.ho_ten;
 }
 
 function activityToText(a) {
@@ -167,9 +177,12 @@ function AdminDashboard() {
   const { data: dashRes, isLoading } = useDashboard();
   const dash = dashRes?.data ?? {};
   const kpiData = dash.kpi ?? {};
-  const cnTheoCongTy = dash.cn_theo_cong_ty ?? [];
+  const cnTheoCongTyRaw = dash.cn_theo_cong_ty ?? [];
   const cnTheoVender = dash.cn_theo_vender  ?? [];
-  const cnMoiNhat    = dash.cn_moi_nhat     ?? [];
+  const cnVaoHomNay  = dash.cn_vao_hom_nay  ?? [];
+  const gioiHanHomNay = dash.cn_vao_hom_nay_gioi_han ?? 0;
+  const chuaPhanCong = dash.chua_phan_cong  ?? null;
+  const khongNguoiTuyen = dash.khong_nguoi_tuyen ?? null;
   const baseHoatDong = dash.hoat_dong       ?? [];
   const phongKtx     = dash.phong_ktx       ?? [];
 
@@ -187,10 +200,19 @@ function AdminDashboard() {
     .sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime())
     .slice(0, 15);
 
+  // CN chưa gán công ty là một "nhóm" thật — nếu bỏ qua thì donut không cộng ra tổng CN.
+  // id = 0 vì SERIAL của cong_ty bắt đầu từ 1, không đụng id thật.
+  const cnTheoCongTy = useMemo(() => {
+    if (!chuaPhanCong || chuaPhanCong.so_luong_cn === 0) return cnTheoCongTyRaw;
+    return [...cnTheoCongTyRaw, { id: 0, ten_cong_ty: 'Chưa phân công', active: true, ...chuaPhanCong }];
+  }, [cnTheoCongTyRaw, chuaPhanCong]);
+
   const [statCtyId, setStatCtyId] = useState(null);
   const ctyStat = cnTheoCongTy.find((c) => c.id === statCtyId) ?? cnTheoCongTy[0] ?? null;
-  const tongHomNay   = cnTheoCongTy.reduce((s, c) => s + Number(c.vao_hom_nay   || 0), 0);
-  const tongThangNay = cnTheoCongTy.reduce((s, c) => s + Number(c.vao_thang_nay || 0), 0);
+  // Lấy thẳng từ KPI thay vì cộng dồn theo công ty: cộng dồn sẽ bỏ sót CN chưa phân công
+  // và CN của công ty đã tắt, nên ô này từng lệch với "Mới vào tháng này".
+  const tongHomNay   = Number(kpiData.cn_moi_hom_nay   ?? 0);
+  const tongThangNay = Number(kpiData.cn_moi_thang_nay ?? 0);
 
   // KPI cards từ API
   const KPI = [
@@ -211,18 +233,26 @@ function AdminDashboard() {
       color: 'var(--amber)', icon: 'home' },
   ];
 
-  // Donut: tỉ lệ phân bổ công nhân theo công ty
+  // Donut: tỉ lệ phân bổ công nhân theo công ty. Có cả công ty đã ngừng hoạt động
+  // (vẫn còn CN) và nhóm chưa phân công, nên tổng donut khớp "Tổng công nhân".
   const DONUT_DATA = cnTheoCongTy
-    .map((c, i) => ({ name: c.ten_cong_ty, value: Number(c.so_luong_cn || 0), color: DONUT_COLORS[i % DONUT_COLORS.length] }))
+    .map((c, i) => ({
+      name: tenCongTyHienThi(c),
+      value: Number(c.so_luong_cn || 0),
+      color: DONUT_COLORS[i % DONUT_COLORS.length],
+    }))
     .filter((d) => d.value > 0);
 
-  // Group CN mới hôm nay theo công ty — tính theo ngày vào làm
-  const cnMoiHomNay = cnMoiNhat.filter((cn) => {
-    const d = ngayVao(cn);
-    if (!d) return false;
-    return new Date(d).toDateString() === new Date().toDateString();
-  });
-  const groupedByCty = cnMoiHomNay.reduce((acc, cn) => {
+  // CN không có người tuyển (thường do import Excel không khớp tên vender) không thuộc
+  // vender nào — thêm một dòng riêng để cột "Vào hôm nay" cộng lại đúng bằng tổng.
+  const venderRows = useMemo(() => {
+    if (!khongNguoiTuyen || khongNguoiTuyen.so_luong_cn === 0) return cnTheoVender;
+    return [...cnTheoVender, { id: null, ho_ten: 'Chưa rõ người tuyển', ...khongNguoiTuyen }];
+  }, [cnTheoVender, khongNguoiTuyen]);
+
+  // Group CN vào hôm nay theo công ty. Danh sách do BE lọc sẵn theo ngày vào làm —
+  // trước đây lọc client-side từ "10 CN mới nhất" nên tối đa chỉ ra 10 người.
+  const groupedByCty = cnVaoHomNay.reduce((acc, cn) => {
     const key = cn.ten_cong_ty || 'Chưa phân công';
     (acc[key] ||= []).push(cn);
     return acc;
@@ -275,7 +305,7 @@ function AdminDashboard() {
                 <option value="thang_nay">Tháng này</option>
               </select>
               <select style={ql.select} value={statCtyId ?? ctyStat?.id ?? ''} onChange={(e) => setStatCtyId(parseInt(e.target.value, 10))}>
-                {cnTheoCongTy.map((c) => <option key={c.id} value={c.id}>{c.ten_cong_ty}</option>)}
+                {cnTheoCongTy.map((c) => <option key={c.id} value={c.id}>{tenCongTyHienThi(c)}</option>)}
               </select>
             </div>
           </div>
@@ -288,14 +318,14 @@ function AdminDashboard() {
               <div style={kpi.sub}>Tổng CN mới</div>
             </div>
             <div style={{ background: 'var(--bg2)', borderRadius: 10, padding: '12px 14px' }}>
-              <div style={kpi.label}>{ctyStat?.ten_cong_ty ?? '—'} — {statRange === 'hom_nay' ? 'hôm nay' : 'tháng này'}</div>
+              <div style={kpi.label}>{ctyStat ? tenCongTyHienThi(ctyStat) : '—'} — {statRange === 'hom_nay' ? 'hôm nay' : 'tháng này'}</div>
               <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--green)', fontFamily: "'JetBrains Mono', monospace" }}>
                 +{statRange === 'hom_nay' ? Number(ctyStat?.vao_hom_nay ?? 0) : Number(ctyStat?.vao_thang_nay ?? 0)}
               </div>
               <div style={kpi.sub}>CN mới của công ty</div>
             </div>
             <div style={{ background: 'var(--bg2)', borderRadius: 10, padding: '12px 14px' }}>
-              <div style={kpi.label}>{ctyStat?.ten_cong_ty ?? '—'} — Tổng</div>
+              <div style={kpi.label}>{ctyStat ? tenCongTyHienThi(ctyStat) : '—'} — Tổng</div>
               <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--teal)', fontFamily: "'JetBrains Mono', monospace" }}>
                 {Number(ctyStat?.so_luong_cn ?? 0)}
               </div>
@@ -309,7 +339,14 @@ function AdminDashboard() {
       <div className="dash-row">
         <div style={{ ...s.card, flex: 1, minWidth: 320 }}>
           <div style={s.cardHeader}>
-            <div style={s.cardTitle}>Công nhân mới hôm nay</div>
+            <div>
+              <div style={s.cardTitle}>Công nhân mới hôm nay</div>
+              <div style={s.cardSub}>Tổng <b style={{ color: 'var(--text1)' }}>{tongHomNay}</b> người
+                {gioiHanHomNay > 0 && cnVaoHomNay.length >= gioiHanHomNay
+                  ? ` — chỉ liệt kê ${gioiHanHomNay} người đầu`
+                  : ''}
+              </div>
+            </div>
             <a href="/cong-nhan" style={s.viewAll}>Xem tất cả →</a>
           </div>
           {Object.keys(groupedByCty).length === 0 ? (
@@ -400,11 +437,12 @@ function AdminDashboard() {
           </div>
           {isMobile ? (
             <div style={md.venderList}>
-              {cnTheoVender.length === 0 ? (
+              {venderRows.length === 0 ? (
                 <div style={{ padding: 14, fontSize: 12, color: 'var(--text3)' }}>Chưa có dữ liệu</div>
-              ) : cnTheoVender.map((v) => (
-                <div key={v.id} style={md.venderCard} onClick={() => navigate(`/nhan-vien/${v.id}`)}>
-                  <div style={md.cnTitle}>{v.ho_ten}</div>
+              ) : venderRows.map((v) => (
+                <div key={v.id ?? 'khong-nguoi-tuyen'} style={md.venderCard}
+                  onClick={() => v.id && navigate(`/nhan-vien/${v.id}`)}>
+                  <div style={md.cnTitle}>{tenVenderHienThi(v)}</div>
                   <div style={md.venderMeta}>
                     <span>Tổng CN: <b>{Number(v.so_luong_cn || 0)}</b></span>
                     <span>Hôm nay: {Number(v.moi_hom_nay || 0) > 0 ? `+${Number(v.moi_hom_nay)}` : '—'}</span>
@@ -422,11 +460,14 @@ function AdminDashboard() {
                 </tr>
               </thead>
               <tbody>
-                {cnTheoVender.length === 0 ? (
+                {venderRows.length === 0 ? (
                   <tr><td colSpan={3} style={{ ...s.td, color: 'var(--text3)', textAlign: 'center', padding: 20 }}>Chưa có dữ liệu</td></tr>
-                ) : cnTheoVender.map((v) => (
-                  <tr key={v.id} style={s.tr} onClick={() => navigate(`/nhan-vien/${v.id}`)}>
-                    <td style={s.td}><div style={{ ...s.cnName, color: 'var(--accent)' }}>{v.ho_ten}</div></td>
+                ) : venderRows.map((v) => (
+                  <tr key={v.id ?? 'khong-nguoi-tuyen'} style={s.tr}
+                    onClick={() => v.id && navigate(`/nhan-vien/${v.id}`)}>
+                    <td style={s.td}>
+                      <div style={{ ...s.cnName, color: v.id ? 'var(--accent)' : 'var(--text3)' }}>{tenVenderHienThi(v)}</div>
+                    </td>
                     <td style={s.td}><span style={{ ...s.tdSub, fontFamily: "'JetBrains Mono', monospace", fontWeight: 600 }}>{Number(v.so_luong_cn || 0)}</span></td>
                     <td style={s.td}>
                       {Number(v.moi_hom_nay || 0) > 0
