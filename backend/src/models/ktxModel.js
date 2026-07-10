@@ -2,6 +2,7 @@
  * KTX model — ky_tuc_xa, phong, giuong, thue_phong, hoa_don_ktx
  */
 const db = require('../utils/db');
+const { toIso, timChongLanNoiO, timChongLanGiuong, loiChongLan } = require('./noiOChungModel');
 
 // ─── KY_TUC_XA ────────────────────────────────────────────
 async function findAllKtx() {
@@ -282,6 +283,46 @@ async function xepGiuong(congNhanId, giuongId, ngayVao) {
     [congNhanId],
   );
   return result.rows[0];
+}
+
+// Sửa ngày vào của 1 lượt ở KTX (kể cả lượt đã trả phòng) — dùng khi nhập sai ngày.
+// Ngày vào quyết định số ngày ở, mà tiền điện/nước/phòng chia theo số ngày → phải
+// chặn các giá trị làm hỏng dữ liệu thay vì để hoá đơn tính sai âm thầm.
+async function suaNgayVaoThuePhong(thuePhongId, ngayVao) {
+  const cur = await db.query(`SELECT * FROM thue_phong WHERE id = $1`, [thuePhongId]);
+  const rec = cur.rows[0];
+  if (!rec) return null;
+
+  const ngayRa = toIso(rec.ngay_ra);
+  if (ngayRa && ngayVao > ngayRa) {
+    throw loiChongLan(`Ngày vào không được sau ngày ra (${ngayRa.split('-').reverse().join('/')})`);
+  }
+
+  const trung = await timChongLanNoiO({
+    congNhanId: rec.cong_nhan_id, ngayVao, ngayRa, boQuaKtxId: thuePhongId,
+  });
+  if (trung) {
+    const noi = trung.nguon === 'ktx' ? 'KTX' : 'phòng trọ';
+    throw loiChongLan(
+      `Khoảng thời gian này trùng với lượt ở ${noi} khác của công nhân (${trung.mo_ta}, `
+      + `từ ${toIso(trung.ngay_vao)}${trung.ngay_ra ? ` đến ${toIso(trung.ngay_ra)}` : ' đến nay'})`,
+    );
+  }
+
+  const trungGiuong = await timChongLanGiuong({
+    giuongId: rec.giuong_id, ngayVao, ngayRa, boQuaThuePhongId: thuePhongId,
+  });
+  if (trungGiuong) {
+    throw loiChongLan(
+      `Giường này đã có ${trungGiuong.cong_nhan_ten} ở trong khoảng thời gian đó`,
+    );
+  }
+
+  const result = await db.query(
+    `UPDATE thue_phong SET ngay_vao = $1 WHERE id = $2 RETURNING *`,
+    [ngayVao, thuePhongId],
+  );
+  return result.rows[0] || null;
 }
 
 async function traPhong(thuephongId, ngayRa) {
@@ -602,6 +643,7 @@ module.exports = {
   findPhongByKtx, findPhongById, createPhong, updatePhong, deletePhong,
   findGiuongByPhong, findGiuongById, updateGiuong,
   xepGiuong, traPhong, chuyenPhong, findThuephongByCongNhan, findUngVienXepPhong,
+  suaNgayVaoThuePhong,
   findHoaDonByPhong, findHoaDonThang, findSoThangTruoc, createHoaDon,
   findHoaDonKtxReport,
 };

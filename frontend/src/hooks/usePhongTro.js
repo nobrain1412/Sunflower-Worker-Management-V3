@@ -53,6 +53,14 @@ export function useGanCongNhanPhongTro(id) {
   });
 }
 
+export function useSuaNgayVaoPhongTro() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ thueId, ngay_vao }) => api.put(`/phong-tro/thue/${thueId}/ngay-vao`, { ngay_vao }),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: ['phong-tro'] }),
+  });
+}
+
 export function useTraPhongTro() {
   const qc = useQueryClient();
   return useMutation({

@@ -125,6 +125,23 @@ router.post('/:id/thue', requireRole('admin', 'quan_ly', 'vender'),
   }),
 );
 
+// Sửa ngày vào của 1 lượt ở phòng trọ (kể cả lượt đã trả phòng)
+router.put('/thue/:thueId/ngay-vao', requireRole('admin', 'quan_ly', 'vender'),
+  validate(z.object({
+    ngay_vao: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Ngày vào không hợp lệ (định dạng YYYY-MM-DD)'),
+  })),
+  asyncWrapper(async (req, res) => {
+    const thueId = toPositiveInt(req.params.thueId, 'ID thuê phòng trọ');
+    const thue = await model.findThueById(thueId);
+    if (!thue) { const e = new Error('Không tìm thấy bản ghi thuê phòng trọ'); e.statusCode = 404; throw e; }
+    // Nhà trọ riêng tư → chỉ admin hoặc người tạo nhà trọ đó mới được sửa
+    await assertCanAccess(req, thue.phong_tro_id);
+
+    const data = await model.suaNgayVaoThue(thueId, req.validatedBody.ngay_vao);
+    sendSuccess(res, data, 'Đã cập nhật ngày vào');
+  }),
+);
+
 router.put('/thue/:thueId/tra', requireRole('admin', 'quan_ly', 'vender'),
   validate(traSchema),
   asyncWrapper(async (req, res) => {

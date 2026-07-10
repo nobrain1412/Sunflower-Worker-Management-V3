@@ -114,6 +114,18 @@ export function useTraPhong(phongId) {
   });
 }
 
+// Ngày vào quyết định số ngày ở → hoá đơn tháng đó phải tính lại
+export function useSuaNgayVaoKtx(phongId) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ thuephongId, ngay_vao }) => api.put(`/ktx/thue-phong/${thuephongId}/ngay-vao`, { ngay_vao }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['ktx', 'phong', phongId, 'giuong'] });
+      qc.invalidateQueries({ queryKey: ['ktx', 'lich-su'] });
+    },
+  });
+}
+
 export function useChuyenPhongKtx(phongId) {
   const qc = useQueryClient();
   return useMutation({

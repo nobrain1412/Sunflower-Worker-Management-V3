@@ -2,6 +2,7 @@
  * Phòng trọ model — phong_tro, thue_phong_tro
  */
 const db = require('../utils/db');
+const { toIso, timChongLanNoiO, loiChongLan } = require('./noiOChungModel');
 
 // scope: { isAdmin: bool, userId: int }
 // - admin: xem tất cả nhà trọ
@@ -129,6 +130,41 @@ async function ganCongNhan({ cong_nhan_id, phong_tro_id, ngay_vao, ghi_chu }) {
   return result.rows[0];
 }
 
+async function findThueById(thueId) {
+  const result = await db.query(`SELECT * FROM thue_phong_tro WHERE id = $1`, [thueId]);
+  return result.rows[0] || null;
+}
+
+// Sửa ngày vào của 1 lượt ở phòng trọ (kể cả lượt đã trả phòng).
+// Không kiểm tra sức chứa vì phòng trọ ở chung nhiều người; chỉ chặn việc một
+// công nhân ở hai nơi cùng lúc.
+async function suaNgayVaoThue(thueId, ngayVao) {
+  const rec = await findThueById(thueId);
+  if (!rec) return null;
+
+  const ngayRa = toIso(rec.ngay_ra);
+  if (ngayRa && ngayVao > ngayRa) {
+    throw loiChongLan(`Ngày vào không được sau ngày ra (${ngayRa.split('-').reverse().join('/')})`);
+  }
+
+  const trung = await timChongLanNoiO({
+    congNhanId: rec.cong_nhan_id, ngayVao, ngayRa, boQuaTroId: thueId,
+  });
+  if (trung) {
+    const noi = trung.nguon === 'ktx' ? 'KTX' : 'phòng trọ';
+    throw loiChongLan(
+      `Khoảng thời gian này trùng với lượt ở ${noi} khác của công nhân (${trung.mo_ta}, `
+      + `từ ${toIso(trung.ngay_vao)}${trung.ngay_ra ? ` đến ${toIso(trung.ngay_ra)}` : ' đến nay'})`,
+    );
+  }
+
+  const result = await db.query(
+    `UPDATE thue_phong_tro SET ngay_vao = $1 WHERE id = $2 RETURNING *`,
+    [ngayVao, thueId],
+  );
+  return result.rows[0] || null;
+}
+
 async function traPhong(thueId, ngay_ra) {
   const result = await db.query(
     `UPDATE thue_phong_tro
@@ -247,5 +283,6 @@ async function createHoaDonPhongTro(data) {
 module.exports = {
   findAll, findById, create, update, remove,
   listThue, ganCongNhan, traPhong, chuyenPhongTro,
+  findThueById, suaNgayVaoThue,
   findHoaDonByPhongTro, findSoThangTruocPhongTro, createHoaDonPhongTro,
 };

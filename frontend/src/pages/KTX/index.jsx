@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useKtxList, useTaoKtx, useCapNhatKtx, useXoaKtx, usePhongList, useTaoPhong, useCapNhatPhong, useXoaPhong, useGiuongList, useCapNhatGiuong, useXepGiuong, useTraPhong, useChuyenPhongKtx, useHoaDonList, useTaoHoaDon, useHoaDonThangTruoc, useUngVienXepPhong } from '../../hooks/useKtx';
-import { usePhongTroList, useTaoPhongTro, useCapNhatPhongTro, useXoaPhongTro, usePhongTroThue, useTraPhongTro, useChuyenPhongTro, useHoaDonPhongTro, useHoaDonThangTruocPhongTro, useTaoHoaDonPhongTro } from '../../hooks/usePhongTro';
+import { useKtxList, useTaoKtx, useCapNhatKtx, useXoaKtx, usePhongList, useTaoPhong, useCapNhatPhong, useXoaPhong, useGiuongList, useCapNhatGiuong, useXepGiuong, useTraPhong, useChuyenPhongKtx, useSuaNgayVaoKtx, useHoaDonList, useTaoHoaDon, useHoaDonThangTruoc, useUngVienXepPhong } from '../../hooks/useKtx';
+import { usePhongTroList, useTaoPhongTro, useCapNhatPhongTro, useXoaPhongTro, usePhongTroThue, useTraPhongTro, useChuyenPhongTro, useSuaNgayVaoPhongTro, useHoaDonPhongTro, useHoaDonThangTruocPhongTro, useTaoHoaDonPhongTro } from '../../hooks/usePhongTro';
 import { useAuth } from '../../context/AuthContext';
 import { isEmbeddableMapUrl, normalizeMapUrl } from '../../constants/mapUrl';
 import MediaUploader from '../../components/MediaUploader';
@@ -304,6 +304,54 @@ function XepGiuongModal({ giuong, phongId, onClose }) {
         <div style={M.actions}>
           <button className="btn-ghost" onClick={onClose}>Hủy</button>
           <button className="btn-primary" onClick={handle} disabled={xep.isPending}>{xep.isPending ? 'Đang xếp...' : 'Xác nhận'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Modal sửa ngày vào (dùng chung KTX + phòng trọ) ──────
+// Ngày vào quyết định số ngày ở → ảnh hưởng tiền phòng/điện/nước trên hoá đơn.
+function SuaNgayVaoModal({ tenCongNhan, moTaNoiO, ngayVaoHienTai, ngayRa, dangLuu, onSave, onClose }) {
+  const toInput = (d) => (d ? new Date(d).toISOString().split('T')[0] : '');
+  const [ngayVao, setNgayVao] = useState(toInput(ngayVaoHienTai));
+  const [err, setErr] = useState('');
+
+  const ngayRaIso = toInput(ngayRa);
+  const khongDoi = ngayVao === toInput(ngayVaoHienTai);
+
+  async function handle() {
+    setErr('');
+    if (!ngayVao) { setErr('Vui lòng chọn ngày vào'); return; }
+    try {
+      await onSave(ngayVao);
+      onClose();
+    } catch (e) { setErr(e?.message ?? 'Lỗi'); }
+  }
+
+  return (
+    <div style={M.overlay} onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div style={M.modal}>
+        <div style={M.title}>Sửa ngày vào — {tenCongNhan}</div>
+        <div style={{ fontSize: 12, color: 'var(--text2)', marginBottom: 12 }}>
+          {moTaNoiO}
+          {ngayRaIso && <> · Đã trả phòng ngày <b>{new Date(ngayRa).toLocaleDateString('vi-VN')}</b></>}
+        </div>
+        <div style={{ marginBottom: 10 }}>
+          <label className="form-label">Ngày vào</label>
+          <input className="form-input" type="date" value={ngayVao}
+            max={ngayRaIso || undefined}
+            onChange={(e) => setNgayVao(e.target.value)} />
+        </div>
+        <div style={{ fontSize: 11, color: 'var(--amber)', marginBottom: 10 }}>
+          ⚠ Đổi ngày vào sẽ làm tiền phòng, điện, nước của các tháng liên quan được chia lại theo số ngày ở.
+        </div>
+        {err && <div style={M.err}>{err}</div>}
+        <div style={M.actions}>
+          <button className="btn-ghost" onClick={onClose}>Hủy</button>
+          <button className="btn-primary" onClick={handle} disabled={dangLuu || khongDoi}>
+            {dangLuu ? 'Đang lưu...' : 'Lưu'}
+          </button>
         </div>
       </div>
     </div>
@@ -772,11 +820,13 @@ function PhongDetail({ phong, ktxId, isAdmin }) {
   const { data: giuongRes } = useGiuongList(phong.id);
   const giuongList = giuongRes?.data ?? [];
   const traPhong = useTraPhong(phong.id);
+  const suaNgayVao = useSuaNgayVaoKtx(phong.id);
   const [xepModal, setXepModal] = useState(null);
   const [editGiuong, setEditGiuong] = useState(null);
   const [editPhong, setEditPhong] = useState(false);
   const [hoaDonModal, setHoaDonModal] = useState(false);
   const [chuyenModal, setChuyenModal] = useState(null); // giuong object
+  const [ngayVaoModal, setNgayVaoModal] = useState(null); // giuong object
 
   async function handleTra(tp) {
     if (!confirm(`Xác nhận trả phòng cho ${tp.cong_nhan_ten}?`)) return;
@@ -820,7 +870,11 @@ function PhongDetail({ phong, ktxId, isAdmin }) {
                 >
                   {g.cong_nhan_ten}
                 </button>
-                <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 2 }}>Vào: {g.ngay_vao ? new Date(g.ngay_vao).toLocaleDateString('vi-VN') : '—'}</div>
+                <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 2, display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <span>Vào: {g.ngay_vao ? new Date(g.ngay_vao).toLocaleDateString('vi-VN') : '—'}</span>
+                  <button title="Sửa ngày vào" onClick={() => setNgayVaoModal(g)}
+                    style={{ background: 'transparent', border: 'none', color: 'var(--text3)', cursor: 'pointer', fontSize: 10, padding: 0, lineHeight: 1 }}>✏️</button>
+                </div>
                 <div style={{ position: 'absolute', bottom: 10, right: 10, display: 'flex', gap: 5 }}>
                   <button style={{ ...s.assignBtn, position: 'static', color: 'var(--accent)', borderColor: 'rgba(79,124,255,0.3)' }} onClick={() => setChuyenModal(g)}>⇄ Chuyển</button>
                   <button style={{ ...s.assignBtn, position: 'static', color: 'var(--red)', borderColor: 'rgba(255,95,114,0.3)' }} onClick={() => handleTra(g)}>↩ Trả</button>
@@ -836,6 +890,17 @@ function PhongDetail({ phong, ktxId, isAdmin }) {
         ))}
       </div>
       {xepModal && <XepGiuongModal giuong={xepModal} phongId={phong.id} onClose={() => setXepModal(null)} />}
+      {ngayVaoModal && (
+        <SuaNgayVaoModal
+          tenCongNhan={ngayVaoModal.cong_nhan_ten}
+          moTaNoiO={`Phòng ${phong.ten_phong} · Giường ${ngayVaoModal.so_thu_tu}`}
+          ngayVaoHienTai={ngayVaoModal.ngay_vao}
+          ngayRa={ngayVaoModal.ngay_ra}
+          dangLuu={suaNgayVao.isPending}
+          onSave={(ngay_vao) => suaNgayVao.mutateAsync({ thuephongId: ngayVaoModal.thue_phong_id, ngay_vao })}
+          onClose={() => setNgayVaoModal(null)}
+        />
+      )}
       {chuyenModal && <ChuyenPhongKtxModal giuong={chuyenModal} phong={phong} onClose={() => setChuyenModal(null)} />}
       {editGiuong && <EditGiuongModal giuong={editGiuong} phongId={phong.id} onClose={() => setEditGiuong(null)} />}
       {editPhong && <EditPhongModal phong={phong} ktxId={ktxId} onClose={() => setEditPhong(false)} />}
@@ -1102,12 +1167,14 @@ function PhongTroSection({ canDelete }) {
   const capNhat = useCapNhatPhongTro();
   const xoa = useXoaPhongTro();
   const traPhongTro = useTraPhongTro();
+  const suaNgayVaoPt = useSuaNgayVaoPhongTro();
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ ten: '', dia_chi: '', map_url: '', chu_tro: '', sdt_chu_tro: '', so_phong: 0, ghi_chu: '', media_urls: [] });
   const [editing, setEditing] = useState(null);
   const [selectedPhongTro, setSelectedPhongTro] = useState(null);
   const [chuyenPtState, setChuyenPtState] = useState(null); // { thue, phongTro }
   const [hoaDonPtModal, setHoaDonPtModal] = useState(null); // phongTro object
+  const [ngayVaoPtModal, setNgayVaoPtModal] = useState(null); // thue object
   const [err, setErr] = useState('');
   const { data: thueRes } = usePhongTroThue(selectedPhongTro?.id);
   const thueList = thueRes?.data ?? [];
@@ -1355,8 +1422,11 @@ function PhongTroSection({ canDelete }) {
                 <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', borderBottom: '1px solid var(--border)' }}>
                   <div>
                     <div style={{ fontSize: 13, color: 'var(--text1)', fontWeight: 600 }}>{t.cong_nhan_ten}</div>
-                    <div style={{ fontSize: 11, color: 'var(--text3)' }}>
-                      Vào: {t.ngay_vao ? new Date(t.ngay_vao).toLocaleDateString('vi-VN') : '—'} · {t.so_dien_thoai || 'Không SĐT'}
+                    <div style={{ fontSize: 11, color: 'var(--text3)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <span>Vào: {t.ngay_vao ? new Date(t.ngay_vao).toLocaleDateString('vi-VN') : '—'}</span>
+                      <button title="Sửa ngày vào" onClick={() => setNgayVaoPtModal(t)}
+                        style={{ background: 'transparent', border: 'none', color: 'var(--text3)', cursor: 'pointer', fontSize: 10, padding: 0, lineHeight: 1 }}>✏️</button>
+                      <span>· {t.so_dien_thoai || 'Không SĐT'}</span>
                     </div>
                   </div>
                   {!t.ngay_ra ? (
@@ -1386,6 +1456,18 @@ function PhongTroSection({ canDelete }) {
             </div>
           </div>
         </div>
+      )}
+      {/* Đặt sau overlay "Chi tiết phòng trọ" để nổi lên trên nó */}
+      {ngayVaoPtModal && (
+        <SuaNgayVaoModal
+          tenCongNhan={ngayVaoPtModal.cong_nhan_ten}
+          moTaNoiO={selectedPhongTro?.ten ?? 'Phòng trọ'}
+          ngayVaoHienTai={ngayVaoPtModal.ngay_vao}
+          ngayRa={ngayVaoPtModal.ngay_ra}
+          dangLuu={suaNgayVaoPt.isPending}
+          onSave={(ngay_vao) => suaNgayVaoPt.mutateAsync({ thueId: ngayVaoPtModal.id, ngay_vao })}
+          onClose={() => setNgayVaoPtModal(null)}
+        />
       )}
     </div>
   );

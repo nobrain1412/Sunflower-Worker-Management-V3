@@ -141,6 +141,22 @@ router.post('/giuong/:giuongId/xep', requireKtxAccess,
   }),
 );
 
+// Sửa ngày vào của 1 lượt ở (kể cả lượt đã trả phòng) — sửa dữ liệu nhập sai.
+// Ảnh hưởng tới số ngày ở → tiền phòng/điện/nước trên hoá đơn tháng đó.
+router.put('/thue-phong/:id/ngay-vao', requireKtxAccess,
+  validate(z.object({
+    ngay_vao: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Ngày vào không hợp lệ (định dạng YYYY-MM-DD)'),
+  })),
+  asyncWrapper(async (req, res) => {
+    const data = await ktxModel.suaNgayVaoThuePhong(
+      toPositiveInt(req.params.id, 'ID thuê phòng'),
+      req.validatedBody.ngay_vao,
+    );
+    if (!data) { const e = new Error('Không tìm thấy bản ghi thuê phòng'); e.statusCode = 404; throw e; }
+    sendSuccess(res, data, 'Đã cập nhật ngày vào');
+  }),
+);
+
 router.put('/thue-phong/:id/tra', requireKtxAccess,
   validate(z.object({ ngay_ra: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Ngày ra không hợp lệ (định dạng YYYY-MM-DD)') })),
   asyncWrapper(async (req, res) => {
