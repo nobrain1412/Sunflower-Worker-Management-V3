@@ -209,7 +209,7 @@ async function analyzeAgainstExisting(parsed, congTyId, thang, nam) {
 /**
  * UPSERT ghi đè toàn bộ dữ liệu tháng.
  */
-async function commit(congTyId, thang, nam, parsed, userId) {
+async function commit(congTyId, thang, nam, parsed, userId, { skipLog = false } = {}) {
   const duLieu = {
     headers: parsed.headers,
     rows: parsed.rows,
@@ -231,7 +231,7 @@ async function commit(congTyId, thang, nam, parsed, userId) {
   );
   const isInsert = !!rows[0]?.is_insert;
 
-  if (userId) {
+  if (userId && !skipLog) {
     try {
       await db.query(
         `INSERT INTO hoat_dong_log (loai, du_lieu, ghi_chu, created_by, muc_do)
