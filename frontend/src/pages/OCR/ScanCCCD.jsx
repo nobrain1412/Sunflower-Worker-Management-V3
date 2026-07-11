@@ -59,6 +59,7 @@ export default function ScanCCCD() {
   const [anhUrl, setAnhUrl]   = useState(null);
   const [uploadingAnh, setUploadingAnh] = useState(false);
   const [pendingFile, setPendingFile] = useState(null); // ảnh đọc QR trượt — cho nhập tay
+  const [debugInfo, setDebugInfo] = useState(null);      // ảnh đã tiền xử lý (gỡ lỗi)
 
   const videoRef   = useRef(null);
   const scannerRef = useRef(null);
@@ -141,9 +142,12 @@ export default function ScanCCCD() {
     if (!file) return;
     setScanErr(null);
     setPendingFile(null);
+    setDebugInfo(null);
     setStage('processing');
     // Pipeline nhiều lượt tiền xử lý (xoay EXIF, tương phản, Otsu, phóng to...)
-    const res = await decodeCccdQrFromImage(file).catch(() => null);
+    // Bật debug để lấy ảnh đã xử lý + mã QR thô — hiển thị khi cần gỡ lỗi.
+    const res = await decodeCccdQrFromImage(file, { debug: true }).catch(() => null);
+    setDebugInfo(res?.debug ?? null);
     if (res?.parsed) {
       setForm((cur) => ({ ...cur, ...res.parsed, cong_ty_id: cur.cong_ty_id || defaultCongTyId() }));
       setPreview(URL.createObjectURL(file));
@@ -268,7 +272,7 @@ export default function ScanCCCD() {
     setForm(EMPTY_FORM);
     setErrors({}); setSubmitErr(null); setScanErr(null);
     setPreview(null); setAnhFile(null); setAnhUrl(null);
-    setPendingFile(null);
+    setPendingFile(null); setDebugInfo(null);
     handledRef.current = false;
     setStage('scan');
   }
@@ -277,6 +281,7 @@ export default function ScanCCCD() {
     if (next === mode) return;
     setScanErr(null);
     setPendingFile(null);
+    setDebugInfo(null);
     setMode(next);
   }
 
@@ -308,6 +313,8 @@ export default function ScanCCCD() {
               )}
             </div>
           )}
+
+          {debugInfo && stage === 'scan' && <DebugPanel debug={debugInfo} />}
 
           {mode === 'camera' ? (
             <div style={s.cameraWrap}>
@@ -468,6 +475,65 @@ export default function ScanCCCD() {
   );
 }
 
+// Panel gỡ lỗi: hiển thị ảnh sau mỗi lượt tiền xử lý + mã QR thô (nếu đọc được).
+// Giúp phát hiện vấn đề: QR có còn rõ sau xử lý không? decoder bắt được mã nào chưa?
+function DebugPanel({ debug }) {
+  const [open, setOpen] = useState(false);
+  const steps = debug?.steps ?? [];
+  const withThumb = steps.filter((st) => st.thumb);
+  const foundAny = steps.some((st) => st.found);
+
+  return (
+    <div style={s.debugBox}>
+      <button style={s.debugToggle} onClick={() => setOpen((o) => !o)}>
+        <span>🔍 Gỡ lỗi — xem ảnh đã xử lý ({withThumb.length} lượt)</span>
+        <span style={{ color: 'var(--text3)' }}>{open ? '▲' : '▼'}</span>
+      </button>
+
+      {open && (
+        <div style={{ marginTop: 12 }}>
+          <div style={s.debugMeta}>
+            {debug.size && <span>Kích thước ảnh: <b>{debug.size.w}×{debug.size.h}px</b></span>}
+            <span>
+              QR phát hiện:{' '}
+              <b style={{ color: foundAny ? 'var(--green)' : 'var(--red)' }}>
+                {foundAny ? 'CÓ' : 'KHÔNG'}
+              </b>
+            </span>
+          </div>
+
+          {debug.lastRaw && (
+            <div style={s.debugRaw}>
+              <div style={{ color: 'var(--text2)', marginBottom: 4 }}>Chuỗi QR đọc được (không đúng định dạng CCCD):</div>
+              <code style={{ wordBreak: 'break-all' }}>{debug.lastRaw}</code>
+            </div>
+          )}
+
+          <div style={s.debugHint}>
+            {foundAny
+              ? 'Đã đọc được mã QR nhưng không phải QR CCCD gắn chip (7 trường ngăn bởi "|"). Kiểm tra chuỗi ở trên.'
+              : 'Không bắt được mã QR nào. Xem các ảnh bên dưới: nếu mã QR bị mờ/vỡ/mất góc định vị sau khi xử lý thì ảnh gốc chưa đủ rõ — chụp lại gần & thẳng hơn.'}
+          </div>
+
+          <div className="cccd-debug-grid">
+            {withThumb.map((st, i) => (
+              <a key={i} href={st.thumb} target="_blank" rel="noreferrer" style={s.debugCell} title="Bấm để xem to">
+                <img src={st.thumb} alt={st.label} style={s.debugImg} />
+                <div style={s.debugLabel}>
+                  <span>{st.label}</span>
+                  <span style={{ color: st.found ? 'var(--green)' : 'var(--text3)' }}>
+                    {st.ok ? '✓ CCCD' : st.found ? '● có QR' : '—'}
+                  </span>
+                </div>
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Field({ label, error, span2, children }) {
   return (
     <div style={{ ...f.field, ...(span2 ? { gridColumn: 'span 2' } : {}) }} className={span2 ? 'cccd-field-span2' : ''}>
@@ -530,4 +596,12 @@ const s = {
   doneTitle:   { fontSize: 20, fontWeight: 700, color: 'var(--text1)' },
   doneSub:     { fontSize: 13, color: 'var(--text2)' },
   doneActions: { display: 'flex', gap: 10, marginTop: 16, flexWrap: 'wrap', justifyContent: 'center' },
+  debugBox: { background: 'var(--bg1)', border: '1px solid var(--border)', borderRadius: 12, padding: '12px 16px' },
+  debugToggle: { width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'transparent', border: 'none', color: 'var(--text2)', fontSize: 12, fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer', padding: 0 },
+  debugMeta: { display: 'flex', gap: 18, flexWrap: 'wrap', fontSize: 12, color: 'var(--text2)', marginBottom: 10 },
+  debugRaw: { background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 10px', fontSize: 11, fontFamily: "'JetBrains Mono', monospace", color: 'var(--amber)', marginBottom: 10 },
+  debugHint: { fontSize: 12, color: 'var(--text2)', lineHeight: 1.5, marginBottom: 12 },
+  debugCell: { display: 'block', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden', textDecoration: 'none', background: 'var(--bg2)' },
+  debugImg: { width: '100%', display: 'block', aspectRatio: '4 / 3', objectFit: 'contain', background: '#000' },
+  debugLabel: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6, padding: '5px 8px', fontSize: 10, color: 'var(--text2)' },
 };
