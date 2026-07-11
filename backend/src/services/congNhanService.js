@@ -469,6 +469,55 @@ async function duyet(id, user) {
   return updated;
 }
 
+// Từ chối duyệt 1 CN đang chờ (doi_viec / cho_duyet) → soft delete + ghi audit log.
+// Dùng khi phỏng vấn không đạt hoặc bản ghi trùng CCCD thêm nhầm.
+// - Phải đang ở trạng thái chờ duyệt (DUYET_STATES), tránh xoá nhầm CN đang làm.
+// - admin: từ chối bất kỳ; quan_ly: chỉ CN thuộc công ty mình quản lý HOẶC do mình tuyển.
+async function tuChoi(id, user, lyDo = null) {
+  const before = await congNhanModel.findById(id);
+  if (!before) {
+    const err = new Error('Không tìm thấy công nhân');
+    err.statusCode = 404; err.code = 'NOT_FOUND'; throw err;
+  }
+  if (!DUYET_STATES.includes(before.trang_thai)) {
+    const err = new Error('Công nhân không ở trạng thái chờ duyệt');
+    err.statusCode = 400; err.code = 'INVALID_STATE'; throw err;
+  }
+  if (user?.vai_tro === 'quan_ly') {
+    const congTyIds = user.cong_ty_ids ?? [];
+    const laNguoiTuyen = before.nguoi_tuyen_id === user.id;
+    // CN đợi việc có thể chưa gán công ty → cho phép nếu chính mình tuyển.
+    if (!congTyIds.includes(before.cong_ty_id) && !laNguoiTuyen) {
+      const err = new Error('Bạn chỉ được từ chối công nhân thuộc công ty mình quản lý');
+      err.statusCode = 403; err.code = 'FORBIDDEN'; throw err;
+    }
+  }
+
+  const deleted = await congNhanModel.softDelete(id);
+  if (!deleted) {
+    const err = new Error('Không tìm thấy công nhân');
+    err.statusCode = 404; err.code = 'NOT_FOUND'; throw err;
+  }
+
+  // Audit log — fire-and-forget, không chặn response
+  try {
+    await hoatDongLog.create({
+      loai: 'tu_choi_cong_nhan',
+      muc_do: 'quan_trong',
+      cong_nhan_id: id,
+      nguoi_tuyen_id: before.nguoi_tuyen_id,
+      du_lieu: { tu_trang_thai: before.trang_thai, cong_ty_id: before.cong_ty_id, ly_do: lyDo ?? null },
+      ghi_chu: `Từ chối duyệt: ${before.ho_ten}${lyDo ? ` — ${lyDo}` : ''}`,
+      created_by: user?.id ?? null,
+    });
+  } catch (logErr) {
+    // eslint-disable-next-line no-console
+    console.warn('hoat_dong_log write failed:', logErr.message);
+  }
+
+  return before;
+}
+
 async function xoa(id, user) {
   // Kiểm tra quyền xoá theo role:
   // - admin: xoá bất kỳ
@@ -552,4 +601,4 @@ async function ganCongTyHangLoat({ ids, congTyId, trangThai, user, scope }) {
   return { assigned, skipped };
 }
 
-module.exports = { danhSach, chiTiet, taoMoi, capNhat, duyet, xoa, ganCongTyHangLoat };
+module.exports = { danhSach, chiTiet, taoMoi, capNhat, duyet, tuChoi, xoa, ganCongTyHangLoat };

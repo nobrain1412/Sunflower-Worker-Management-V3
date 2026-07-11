@@ -85,6 +85,14 @@ export function useDuyetCongNhan() {
   });
 }
 
+export function useTuChoiCongNhan() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ly_do }) => api.post(`/cong-nhan/${id}/tu-choi`, { ly_do: ly_do ?? null }),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: ['cong-nhan'] }),
+  });
+}
+
 export function useXoaCongNhan() {
   const qc = useQueryClient();
   return useMutation({
