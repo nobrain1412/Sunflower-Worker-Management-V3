@@ -152,12 +152,18 @@ export default function ChamCong() {
             Nhập 4 loại giờ: HC ngày, TC ngày, HC đêm, TC đêm. Nghỉ phép = P, nghỉ việc = V.
           </div>
         </div>
-        {canImport && (
-          <button className="btn-primary" onClick={() => navigate('/cham-cong/import-excel')}
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn-ghost" onClick={() => navigate('/cham-cong/tra-cuu-van-tay')}
             style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            📊 Import vân tay
+            🔍 Tra cứu vân tay
           </button>
-        )}
+          {canImport && (
+            <button className="btn-primary" onClick={() => navigate('/cham-cong/import-excel')}
+              style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              📊 Import vân tay
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Chuyển chế độ */}

@@ -297,10 +297,51 @@ async function lookup(congTyId, thang, nam, { q, page, limit }) {
   };
 }
 
+/**
+ * Tra cứu theo MÃ VÂN TAY xuyên tất cả các tháng đã lưu (cho ô tìm kiếm 1 field).
+ * Trả về các dòng khớp, mỗi dòng gắn thêm cột "Công ty" và "Tháng".
+ */
+async function lookupByMa(ma, { congTyId, page, limit }) {
+  const params = [];
+  let where = '';
+  if (congTyId) { params.push(congTyId); where = `WHERE b.cong_ty_id = $${params.length}`; }
+
+  const { rows: recs } = await db.query(
+    `SELECT b.cong_ty_id, b.thang, b.nam, b.du_lieu, c.ten_cong_ty
+       FROM bang_van_tay_thang b
+       JOIN cong_ty c ON c.id = b.cong_ty_id
+       ${where}
+       ORDER BY b.nam DESC, b.thang DESC`,
+    params,
+  );
+
+  const needle = normalizeSearch(ma);
+  let baseHeaders = null;
+  const matched = [];
+  for (const rec of recs) {
+    const du = rec.du_lieu || {};
+    const hs = du.headers || [];
+    const maH = du.ma_header || findMaHeader(hs);
+    if (!maH) continue;
+    if (!baseHeaders) baseHeaders = hs; // dùng bộ cột của bản mới nhất làm chuẩn
+    for (const row of du.rows || []) {
+      if (normalizeSearch(row[maH]).includes(needle)) {
+        matched.push({ 'Công ty': rec.ten_cong_ty, 'Tháng': `${rec.thang}/${rec.nam}`, ...row });
+      }
+    }
+  }
+
+  const headers = ['Công ty', 'Tháng', ...(baseHeaders || [])];
+  const total = matched.length;
+  const start = (page - 1) * limit;
+  return { headers, rows: matched.slice(start, start + limit), meta: { page, limit, total } };
+}
+
 module.exports = {
   parseWorkbook,
   analyzeAgainstExisting,
   commit,
   listThang,
   lookup,
+  lookupByMa,
 };

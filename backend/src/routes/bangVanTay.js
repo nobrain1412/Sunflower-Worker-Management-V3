@@ -131,7 +131,7 @@ router.post('/commit',
 
 router.get('/thang',
   authenticate,
-  requireRole('admin', 'quan_ly', 'xem'),
+  requireRole('admin', 'quan_ly', 'ke_toan', 'vender', 'xem'),
   asyncWrapper(async (req, res) => {
     const congTyId = parsePositiveInt(req.query.cong_ty_id, 'cong_ty_id');
     const list = await svc.listThang(congTyId);
@@ -139,9 +139,27 @@ router.get('/thang',
   }),
 );
 
+// Tra cứu theo mã vân tay (1 ô input) — quét mọi tháng đã lưu.
+router.get('/tra-cuu-ma',
+  authenticate,
+  requireRole('admin', 'quan_ly', 'ke_toan', 'vender', 'xem'),
+  asyncWrapper(async (req, res) => {
+    const ma = String(req.query.ma || '').trim();
+    if (!ma) {
+      const e = new Error('Vui lòng nhập mã vân tay'); e.statusCode = 400; e.code = 'VALIDATION_ERROR'; throw e;
+    }
+    const congTyId = req.query.cong_ty_id ? parsePositiveInt(req.query.cong_ty_id, 'cong_ty_id') : null;
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(500, Math.max(1, parseInt(req.query.limit, 10) || 100));
+
+    const result = await svc.lookupByMa(ma, { congTyId, page, limit });
+    sendSuccess(res, { headers: result.headers, rows: result.rows }, 'Tra cứu thành công', 200, result.meta);
+  }),
+);
+
 router.get('/',
   authenticate,
-  requireRole('admin', 'quan_ly', 'xem'),
+  requireRole('admin', 'quan_ly', 'ke_toan', 'vender', 'xem'),
   asyncWrapper(async (req, res) => {
     const congTyId = parsePositiveInt(req.query.cong_ty_id, 'cong_ty_id');
     const { thang, nam } = parseThangNam(req.query.thang, req.query.nam);
