@@ -25,6 +25,7 @@ const chamCongRoutes  = require('./routes/chamCong');
 const hoatDongRoutes  = require('./routes/hoatDong');
 const importCongNhanRoutes = require('./routes/importCongNhan');
 const importChamCongRoutes = require('./routes/importChamCong');
+const bangVanTayRoutes     = require('./routes/bangVanTay');
 const congTyDeXuatRoutes   = require('./routes/congTyDeXuat');
 const todoRoutes           = require('./routes/todo');
 const baoCaoRoutes         = require('./routes/baoCao');
@@ -103,6 +104,7 @@ app.use('/api/upload',    uploadRoutes);
 // Import chấm công từ Excel — phải đặt TRƯỚC chamCongRoutes vì overlap path
 app.use('/api/cham-cong/import-excel', importChamCongRoutes);
 app.use('/api/cham-cong', chamCongRoutes);
+app.use('/api/bang-van-tay', bangVanTayRoutes);
 app.use('/api/hoat-dong', hoatDongRoutes);
 app.use('/api/todo',      todoRoutes);
 app.use('/api/bao-cao',   baoCaoRoutes);

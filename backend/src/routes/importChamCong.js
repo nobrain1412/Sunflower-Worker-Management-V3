@@ -2,7 +2,9 @@
  * Routes import chấm công từ file Excel máy vân tay.
  *
  *   POST /api/cham-cong/import-excel/preview  — parse + validate, không ghi DB
- *   POST /api/cham-cong/import-excel/commit   — parse + UPSERT
+ *   POST /api/cham-cong/import-excel/commit   — parse + UPSERT cham_cong,
+ *                                               đồng thời snapshot nguyên bảng
+ *                                               vào bang_van_tay_thang (tra cứu)
  *
  * Body: multipart (file: .xlsx, cong_ty_id: number)
  */
@@ -13,8 +15,10 @@ const { uploadExcel } = require('../middleware/upload');
 const asyncWrapper = require('../utils/asyncWrapper');
 const { sendSuccess } = require('../utils/response');
 const importSvc = require('../services/importChamCongService');
+const bangVanTaySvc = require('../services/bangVanTayService');
 const { resolveTemplate } = require('../services/chamCongTemplates');
 const db = require('../utils/db');
+const logger = require('../utils/logger');
 
 const router = Router();
 
@@ -101,8 +105,24 @@ router.post('/commit',
     await importSvc.resolveAndValidate(rows, congTyId);
     const result = await importSvc.commitImport(rows, req.user.id);
 
-    sendSuccess(res, result,
-      `Import xong: thêm ${result.inserted}, cập nhật ${result.updated}, skip ${result.skipped}`);
+    // Đồng thời snapshot NGUYÊN bảng vân tay vào kho tra cứu (bang_van_tay_thang)
+    // để màn "Tra cứu vân tay" dùng — kể cả các dòng không khớp công nhân/phân công.
+    // Lỗi snapshot KHÔNG được làm hỏng import chính (cham_cong đã commit ở trên).
+    let traCuu = null;
+    try {
+      const parsed = await bangVanTaySvc.parseWorkbook(req.file.buffer);
+      if (parsed.months.length > 0) {
+        const { thang, nam } = parsed.months[0];
+        await bangVanTaySvc.commit(congTyId, thang, nam, parsed, req.user.id, { skipLog: true });
+        traCuu = { thang, nam, so_dong: parsed.soDong };
+      }
+    } catch (err) {
+      logger.warn({ err }, 'Snapshot bảng vân tay tra cứu thất bại (import cham_cong vẫn thành công)');
+    }
+
+    const msgTraCuu = traCuu ? ` · đã lưu tra cứu T${traCuu.thang}/${traCuu.nam} (${traCuu.so_dong} dòng)` : '';
+    sendSuccess(res, { ...result, tra_cuu: traCuu },
+      `Import xong: thêm ${result.inserted}, cập nhật ${result.updated}, skip ${result.skipped}${msgTraCuu}`);
   }),
 );
 

@@ -19,6 +19,7 @@ const ScanCCCD       = lazy(() => import('./pages/OCR/ScanCCCD'));
 const BulkReview     = lazy(() => import('./pages/OCR/BulkReview'));
 const ChamCong       = lazy(() => import('./pages/ChamCong/index'));
 const ImportChamCong = lazy(() => import('./pages/ChamCong/ImportExcel'));
+const TraCuuVanTay   = lazy(() => import('./pages/ChamCong/TraCuuVanTay'));
 const TaiChinh       = lazy(() => import('./pages/TaiChinh/index'));
 const KTX            = lazy(() => import('./pages/KTX/index'));
 const CongTy         = lazy(() => import('./pages/CongTy/index'));
@@ -91,6 +92,9 @@ export default function App() {
             <Route path="/cham-cong"     element={<PrivateRoute><ChamCong /></PrivateRoute>} />
             <Route path="/cham-cong/import-excel" element={
               <RoleRoute allowedRoles={['admin','quan_ly']}><ImportChamCong /></RoleRoute>
+            } />
+            <Route path="/cham-cong/tra-cuu-van-tay" element={
+              <RoleRoute allowedRoles={['admin','quan_ly','ke_toan','vender']}><TraCuuVanTay /></RoleRoute>
             } />
 
             {/* OCR: vender/quản lý/admin (ke_toan không tham gia tuyển) */}
