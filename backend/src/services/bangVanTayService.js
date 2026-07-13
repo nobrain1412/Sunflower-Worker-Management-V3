@@ -299,9 +299,13 @@ async function lookup(congTyId, thang, nam, { q, page, limit }) {
 
 /**
  * Tra cứu theo MÃ VÂN TAY xuyên tất cả các tháng đã lưu (cho ô tìm kiếm 1 field).
- * Trả về các dòng khớp, mỗi dòng gắn thêm cột "Công ty" và "Tháng".
+ *
+ * Kết quả NHÓM THEO CÔNG TY: mỗi công ty là 1 nhóm với đúng bộ cột (format) của
+ * công ty đó — vì mỗi công ty xuất file định dạng cột khác nhau. Trong 1 công ty,
+ * headers là hợp (union) header của mọi tháng khớp (giữ thứ tự, bản mới trước) để
+ * không rớt cột khi format đổi nhẹ giữa các tháng. Cột "Tháng" luôn đứng đầu.
  */
-async function lookupByMa(ma, { congTyId, page, limit, exact = false }) {
+async function lookupByMa(ma, { congTyId, limit = 500, exact = false }) {
   const params = [];
   let where = '';
   if (congTyId) { params.push(congTyId); where = `WHERE b.cong_ty_id = $${params.length}`; }
@@ -321,25 +325,42 @@ async function lookupByMa(ma, { congTyId, page, limit, exact = false }) {
     ? (v) => normalizeSearch(v) === needle
     : (v) => normalizeSearch(v).includes(needle);
 
-  let baseHeaders = null;
-  const matched = [];
+  // Gom theo cong_ty_id, giữ thứ tự công ty theo lần xuất hiện đầu tiên.
+  const groupsMap = new Map(); // cong_ty_id -> { cong_ty, headerOrder, headerSet, rows }
+  let total = 0;
   for (const rec of recs) {
     const du = rec.du_lieu || {};
     const hs = du.headers || [];
     const maH = du.ma_header || findMaHeader(hs);
     if (!maH) continue;
-    if (!baseHeaders) baseHeaders = hs; // dùng bộ cột của bản mới nhất làm chuẩn
-    for (const row of du.rows || []) {
-      if (isMatch(row[maH])) {
-        matched.push({ 'Công ty': rec.ten_cong_ty, 'Tháng': `${rec.thang}/${rec.nam}`, ...row });
-      }
+    const matchedRows = (du.rows || []).filter((r) => isMatch(r[maH]));
+    if (matchedRows.length === 0) continue;
+
+    let g = groupsMap.get(rec.cong_ty_id);
+    if (!g) {
+      g = { cong_ty: rec.ten_cong_ty, headerOrder: [], headerSet: new Set(), rows: [] };
+      groupsMap.set(rec.cong_ty_id, g);
+    }
+    for (const h of hs) {
+      if (!g.headerSet.has(h)) { g.headerSet.add(h); g.headerOrder.push(h); }
+    }
+    for (const r of matchedRows) {
+      g.rows.push({ 'Tháng': `${rec.thang}/${rec.nam}`, ...r });
+      total++;
     }
   }
 
-  const headers = ['Công ty', 'Tháng', ...(baseHeaders || [])];
-  const total = matched.length;
-  const start = (page - 1) * limit;
-  return { headers, rows: matched.slice(start, start + limit), meta: { page, limit, total } };
+  // Giới hạn tổng số dòng trả về (an toàn) — cắt lần lượt theo nhóm.
+  let remaining = limit;
+  const groups = [];
+  for (const g of groupsMap.values()) {
+    if (remaining <= 0) break;
+    const rows = g.rows.slice(0, remaining);
+    remaining -= rows.length;
+    groups.push({ cong_ty: g.cong_ty, headers: ['Tháng', ...g.headerOrder], rows });
+  }
+
+  return { groups, meta: { total, shown: Math.min(total, limit) } };
 }
 
 module.exports = {
