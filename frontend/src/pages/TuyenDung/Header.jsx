@@ -17,7 +17,9 @@ export default function Header({ isLoggedIn, onNav, menuOpen, onToggleMenu }) {
 
         <nav style={s.nav}>
           {NAV_ITEMS.map((nv) => (
-            <a key={nv} href="#" className="sf-navlink" onClick={(e) => e.preventDefault()} style={s.navLink}>{nv}</a>
+            <a key={nv.label} href="#" className="sf-navlink"
+              onClick={(e) => { e.preventDefault(); if (nv.to) onNav(nv.to); }}
+              style={s.navLink}>{nv.label}</a>
           ))}
         </nav>
 
@@ -43,7 +45,9 @@ export default function Header({ isLoggedIn, onNav, menuOpen, onToggleMenu }) {
       {menuOpen && (
         <div style={s.mobileMenu}>
           {NAV_ITEMS.map((nv) => (
-            <a key={nv} href="#" onClick={(e) => e.preventDefault()} style={s.mobileLink}>{nv}</a>
+            <a key={nv.label} href="#"
+              onClick={(e) => { e.preventDefault(); if (nv.to) { onNav(nv.to); onToggleMenu(); } }}
+              style={s.mobileLink}>{nv.label}</a>
           ))}
           <div style={{ display: 'flex', gap: 10, padding: '12px 8px' }}>
             {isLoggedIn ? (

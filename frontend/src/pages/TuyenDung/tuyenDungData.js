@@ -36,7 +36,14 @@ export function salaryText(ct) {
 
 export const toArr = (v) => (Array.isArray(v) ? v : []);
 
-export const NAV_ITEMS = ['Việc làm', 'Hồ sơ & CV', 'Công ty', 'Công cụ', 'Cẩm nang nghề nghiệp'];
+// Mỗi mục có thể kèm `to` để điều hướng thật; không có `to` là link marketing (trơ).
+export const NAV_ITEMS = [
+  { label: 'Việc làm' },
+  { label: 'Hồ sơ & CV' },
+  { label: 'Công ty' },
+  { label: 'Công cụ' },
+  { label: 'Tra cứu vân tay', to: '/cham-cong/tra-cuu-van-tay' },
+];
 
 export const HOT_KEYWORDS = ['Kế toán', 'Marketing', 'IT', 'Ngân hàng', 'Bán hàng', 'Nhân sự'];
 
