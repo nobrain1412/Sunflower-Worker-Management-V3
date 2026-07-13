@@ -10,6 +10,7 @@ import AppErrorBoundary from './components/AppErrorBoundary';
 const Login          = lazy(() => import('./pages/Login'));
 const DangKy         = lazy(() => import('./pages/DangKy'));
 const TuyenDung      = lazy(() => import('./pages/TuyenDung'));
+const TraCuuCong     = lazy(() => import('./pages/TraCuuCong'));
 const Dashboard      = lazy(() => import('./pages/Dashboard'));
 const CongNhan       = lazy(() => import('./pages/CongNhan/index'));
 const CongNhanDetail = lazy(() => import('./pages/CongNhan/Detail'));
@@ -78,6 +79,8 @@ export default function App() {
 
             {/* Trang tuyển dụng công khai — homepage, không cần đăng nhập */}
             <Route path="/"              element={<TuyenDung />} />
+            {/* Tra cứu ngày công công khai — công nhân tự kiểm tra, không cần đăng nhập */}
+            <Route path="/tra-cuu-cong"  element={<TraCuuCong />} />
 
             {/* Trang quản lý (dashboard) — cần đăng nhập */}
             <Route path="/quan-ly"       element={<PrivateRoute><Dashboard /></PrivateRoute>} />

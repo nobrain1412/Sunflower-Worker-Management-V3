@@ -301,7 +301,7 @@ async function lookup(congTyId, thang, nam, { q, page, limit }) {
  * Tra cứu theo MÃ VÂN TAY xuyên tất cả các tháng đã lưu (cho ô tìm kiếm 1 field).
  * Trả về các dòng khớp, mỗi dòng gắn thêm cột "Công ty" và "Tháng".
  */
-async function lookupByMa(ma, { congTyId, page, limit }) {
+async function lookupByMa(ma, { congTyId, page, limit, exact = false }) {
   const params = [];
   let where = '';
   if (congTyId) { params.push(congTyId); where = `WHERE b.cong_ty_id = $${params.length}`; }
@@ -316,6 +316,11 @@ async function lookupByMa(ma, { congTyId, page, limit }) {
   );
 
   const needle = normalizeSearch(ma);
+  // exact: khớp đúng mã (trang công khai) · else: khớp chứa (tra cứu nội bộ)
+  const isMatch = exact
+    ? (v) => normalizeSearch(v) === needle
+    : (v) => normalizeSearch(v).includes(needle);
+
   let baseHeaders = null;
   const matched = [];
   for (const rec of recs) {
@@ -325,7 +330,7 @@ async function lookupByMa(ma, { congTyId, page, limit }) {
     if (!maH) continue;
     if (!baseHeaders) baseHeaders = hs; // dùng bộ cột của bản mới nhất làm chuẩn
     for (const row of du.rows || []) {
-      if (normalizeSearch(row[maH]).includes(needle)) {
+      if (isMatch(row[maH])) {
         matched.push({ 'Công ty': rec.ten_cong_ty, 'Tháng': `${rec.thang}/${rec.nam}`, ...row });
       }
     }

@@ -30,6 +30,7 @@ const congTyDeXuatRoutes   = require('./routes/congTyDeXuat');
 const todoRoutes           = require('./routes/todo');
 const baoCaoRoutes         = require('./routes/baoCao');
 const tuyenDungRoutes      = require('./routes/tuyenDung');
+const traCuuCongRoutes     = require('./routes/traCuuCong');
 
 const app = express();
 
@@ -88,6 +89,8 @@ app.use((req, _res, next) => {
 app.use('/api/auth',      authRoutes);
 // Trang tuyển dụng công khai — KHÔNG yêu cầu đăng nhập
 app.use('/api/tuyen-dung', tuyenDungRoutes);
+// Tra cứu ngày công công khai — công nhân tự kiểm tra, KHÔNG cần đăng nhập
+app.use('/api/tra-cuu-cong', traCuuCongRoutes);
 // Import Excel phải đặt TRƯỚC congNhanRoutes vì path overlap (/api/cong-nhan/import-excel)
 app.use('/api/cong-nhan/import-excel', importCongNhanRoutes);
 app.use('/api/cong-nhan', congNhanRoutes);
