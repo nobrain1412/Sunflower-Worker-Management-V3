@@ -16,8 +16,7 @@ export default function TraCuuVanTay() {
   const [ma, setMa] = useState('');            // mã đã submit → kích hoạt query
 
   const { data: res, isFetching, isError, error } = useTraCuuVanTay(ma);
-  const headers = res?.data?.headers ?? [];
-  const rows = res?.data?.rows ?? [];
+  const groups = res?.data?.groups ?? [];
   const total = res?.meta?.total ?? 0;
 
   function handleSubmit(e) {
@@ -59,43 +58,44 @@ export default function TraCuuVanTay() {
         <div style={s.card}><div style={{ ...s.empty, color: 'var(--red)' }}>
           {error?.message || 'Có lỗi khi tra cứu'}
         </div></div>
-      ) : rows.length === 0 ? (
+      ) : groups.length === 0 ? (
         <div style={s.card}><div style={s.empty}>
           Không tìm thấy dữ liệu cho mã “{ma}”.
         </div></div>
       ) : (
-        <div style={s.card}>
+        <>
           <div style={s.resultMeta}>
             Tìm thấy <b style={{ color: 'var(--text1)' }}>{total}</b> dòng cho mã “{ma}”
-            {total > rows.length && ` (hiển thị ${rows.length} dòng đầu)`}
+            {groups.length > 1 && ` · ${groups.length} công ty`}
           </div>
-          <div style={s.tableWrap}>
-            <table style={s.table}>
-              <thead>
-                <tr>
-                  {headers.map((h) => (
-                    <th key={h} style={s.th}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row, i) => (
-                  <tr key={i} style={i % 2 ? s.trAlt : undefined}>
-                    {headers.map((h) => {
-                      const v = row[h];
-                      const numeric = NUMERIC_HINT.test(h);
-                      return (
-                        <td key={h} style={{ ...s.td, ...(numeric ? s.tdNum : {}) }}>
-                          {v == null || v === '' ? '' : String(v)}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+          {groups.map((g) => (
+            <div key={g.cong_ty} style={s.card}>
+              <div style={s.groupTitle}>{g.cong_ty}</div>
+              <div style={s.tableWrap}>
+                <table style={s.table}>
+                  <thead>
+                    <tr>{g.headers.map((h) => <th key={h} style={s.th}>{h}</th>)}</tr>
+                  </thead>
+                  <tbody>
+                    {g.rows.map((row, i) => (
+                      <tr key={i} style={i % 2 ? s.trAlt : undefined}>
+                        {g.headers.map((h) => {
+                          const v = row[h];
+                          const numeric = NUMERIC_HINT.test(h);
+                          return (
+                            <td key={h} style={{ ...s.td, ...(numeric ? s.tdNum : {}) }}>
+                              {v == null || v === '' ? '' : String(v)}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ))}
+        </>
       )}
     </div>
   );
@@ -110,7 +110,8 @@ const s = {
   search: { flex: 1, minWidth: 220, maxWidth: 420, padding: '9px 12px', fontSize: 13 },
   card: { background: 'var(--bg1)', border: '1px solid var(--border)', borderRadius: 14, padding: 14 },
   empty: { padding: 48, textAlign: 'center', color: 'var(--text3)', fontSize: 13 },
-  resultMeta: { fontSize: 12, color: 'var(--text2)', marginBottom: 10 },
+  resultMeta: { fontSize: 12, color: 'var(--text2)' },
+  groupTitle: { fontSize: 13, fontWeight: 700, color: 'var(--accent)', marginBottom: 10 },
   tableWrap: { overflowX: 'auto', border: '1px solid var(--border)', borderRadius: 10 },
   table: { borderCollapse: 'collapse', width: '100%', fontSize: 12, whiteSpace: 'nowrap' },
   th: {

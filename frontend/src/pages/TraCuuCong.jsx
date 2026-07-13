@@ -28,8 +28,7 @@ export default function TraCuuCong() {
     staleTime: 15_000,
   });
 
-  const headers = res?.data?.headers ?? [];
-  const rows = res?.data?.rows ?? [];
+  const groups = res?.data?.groups ?? [];
   const total = res?.meta?.total ?? 0;
 
   function handleSubmit(e) {
@@ -71,41 +70,44 @@ export default function TraCuuCong() {
           <div style={s.card}><div style={{ ...s.empty, color: '#c0392b' }}>
             {error?.message || 'Có lỗi khi tra cứu, vui lòng thử lại.'}
           </div></div>
-        ) : rows.length === 0 ? (
+        ) : groups.length === 0 ? (
           <div style={s.card}><div style={s.empty}>
             Không tìm thấy ngày công cho mã “{ma}”. Kiểm tra lại mã vân tay của bạn.
           </div></div>
         ) : (
-          <div style={s.card}>
+          <>
             <div style={s.resultMeta}>
               Tìm thấy <b style={{ color: 'var(--sf-text)' }}>{total}</b> ngày công cho mã “{ma}”
-              {total > rows.length && ` (hiển thị ${rows.length} dòng đầu)`}
+              {groups.length > 1 && ` · ${groups.length} công ty`}
             </div>
-            <div style={s.tableWrap}>
-              <table style={s.table}>
-                <thead>
-                  <tr>
-                    {headers.map((h) => <th key={h} style={s.th}>{h}</th>)}
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((row, i) => (
-                    <tr key={i} style={i % 2 ? s.trAlt : undefined}>
-                      {headers.map((h) => {
-                        const v = row[h];
-                        const numeric = NUMERIC_HINT.test(h);
-                        return (
-                          <td key={h} style={{ ...s.td, ...(numeric ? s.tdNum : {}) }}>
-                            {v == null || v === '' ? '' : String(v)}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+            {groups.map((g) => (
+              <div key={g.cong_ty} style={s.card}>
+                <div style={s.groupTitle}>{g.cong_ty}</div>
+                <div style={s.tableWrap}>
+                  <table style={s.table}>
+                    <thead>
+                      <tr>{g.headers.map((h) => <th key={h} style={s.th}>{h}</th>)}</tr>
+                    </thead>
+                    <tbody>
+                      {g.rows.map((row, i) => (
+                        <tr key={i} style={i % 2 ? s.trAlt : undefined}>
+                          {g.headers.map((h) => {
+                            const v = row[h];
+                            const numeric = NUMERIC_HINT.test(h);
+                            return (
+                              <td key={h} style={{ ...s.td, ...(numeric ? s.tdNum : {}) }}>
+                                {v == null || v === '' ? '' : String(v)}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ))}
+          </>
         )}
       </main>
 
@@ -138,7 +140,8 @@ const s = {
   btn: { padding: '12px 24px', borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: 'pointer', border: 'none' },
   card: { background: 'var(--sf-surface)', border: '1px solid var(--sf-brd)', borderRadius: 16, padding: 16, boxShadow: 'var(--sf-shadow)' },
   empty: { padding: 40, textAlign: 'center', color: 'var(--sf-muted)', fontSize: 14 },
-  resultMeta: { fontSize: 13, color: 'var(--sf-muted)', marginBottom: 12 },
+  resultMeta: { fontSize: 13, color: 'var(--sf-muted)' },
+  groupTitle: { fontSize: 15, fontWeight: 800, color: 'var(--sf-navy)', marginBottom: 12 },
   tableWrap: { overflowX: 'auto', border: '1px solid var(--sf-brd)', borderRadius: 12 },
   table: { borderCollapse: 'collapse', width: '100%', fontSize: 13, whiteSpace: 'nowrap' },
   th: {

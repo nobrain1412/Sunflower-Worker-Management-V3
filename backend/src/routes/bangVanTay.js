@@ -149,11 +149,10 @@ router.get('/tra-cuu-ma',
       const e = new Error('Vui lòng nhập mã vân tay'); e.statusCode = 400; e.code = 'VALIDATION_ERROR'; throw e;
     }
     const congTyId = req.query.cong_ty_id ? parsePositiveInt(req.query.cong_ty_id, 'cong_ty_id') : null;
-    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
-    const limit = Math.min(500, Math.max(1, parseInt(req.query.limit, 10) || 100));
+    const limit = Math.min(1000, Math.max(1, parseInt(req.query.limit, 10) || 500));
 
-    const result = await svc.lookupByMa(ma, { congTyId, page, limit });
-    sendSuccess(res, { headers: result.headers, rows: result.rows }, 'Tra cứu thành công', 200, result.meta);
+    const result = await svc.lookupByMa(ma, { congTyId, limit });
+    sendSuccess(res, { groups: result.groups }, 'Tra cứu thành công', 200, result.meta);
   }),
 );
 
