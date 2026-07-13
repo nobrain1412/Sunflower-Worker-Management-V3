@@ -42,7 +42,7 @@ export const NAV_ITEMS = [
   { label: 'Hồ sơ & CV' },
   { label: 'Công ty' },
   { label: 'Công cụ' },
-  { label: 'Tra cứu vân tay', to: '/cham-cong/tra-cuu-van-tay' },
+  { label: 'Tra cứu vân tay', to: '/tra-cuu-cong' },
 ];
 
 export const HOT_KEYWORDS = ['Kế toán', 'Marketing', 'IT', 'Ngân hàng', 'Bán hàng', 'Nhân sự'];
