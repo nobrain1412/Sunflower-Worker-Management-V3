@@ -260,6 +260,12 @@ body {
    ======================================== */
 @media (max-width: 768px) {
 
+  /* iOS Safari tự zoom vào khi focus input có font-size < 16px và KHÔNG zoom lại
+     → người dùng phải vuốt để thu nhỏ. Ép 16px trên mobile để chặn hành vi này. */
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+
   /* ---- Layout ---- */
   .sidebar-wrap      { display: none !important; }
   .layout-main       { margin-left: 0 !important; padding-bottom: 0 !important; }

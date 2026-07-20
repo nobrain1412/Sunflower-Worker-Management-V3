@@ -881,8 +881,9 @@ function PhongDetail({ phong, ktxId, isAdmin }) {
             {g.cong_nhan_id ? (
               <>
                 <button
-                  style={{ fontSize: 12, fontWeight: 600, color: 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textAlign: 'left', fontFamily: "'Be Vietnam Pro', sans-serif", textDecoration: 'underline dotted' }}
+                  style={s.bedName}
                   onClick={() => navigate(`/cong-nhan/${g.cong_nhan_id}`)}
+                  title={g.cong_nhan_ten}
                 >
                   {g.cong_nhan_ten}
                 </button>
@@ -891,16 +892,18 @@ function PhongDetail({ phong, ktxId, isAdmin }) {
                   <button title="Sửa ngày vào" onClick={() => setNgayVaoModal(g)}
                     style={{ background: 'transparent', border: 'none', color: 'var(--text3)', cursor: 'pointer', fontSize: 10, padding: 0, lineHeight: 1 }}>✏️</button>
                 </div>
-                <div style={{ position: 'absolute', bottom: 10, right: 10, display: 'flex', gap: 5 }}>
-                  <button style={{ ...s.assignBtn, position: 'static', color: 'var(--accent)', borderColor: 'rgba(79,124,255,0.3)' }} onClick={() => setChuyenModal(g)}>⇄ Chuyển</button>
-                  <button style={{ ...s.assignBtn, position: 'static', color: 'var(--red)', borderColor: 'rgba(255,95,114,0.3)' }} onClick={() => handleTra(g)}>↩ Trả</button>
-                  <button title="Gỡ khỏi giường (xếp nhầm)" style={{ ...s.assignBtn, position: 'static', color: 'var(--text3)', borderColor: 'var(--border2)' }} onClick={() => handleGo(g)}>🗑 Gỡ</button>
+                <div style={s.bedActions}>
+                  <button style={{ ...s.assignBtn, color: 'var(--accent)', borderColor: 'rgba(79,124,255,0.3)' }} onClick={() => setChuyenModal(g)}>⇄ Chuyển</button>
+                  <button style={{ ...s.assignBtn, color: 'var(--red)', borderColor: 'rgba(255,95,114,0.3)' }} onClick={() => handleTra(g)}>↩ Trả</button>
+                  <button title="Gỡ khỏi giường (xếp nhầm)" style={{ ...s.assignBtn, color: 'var(--text3)', borderColor: 'var(--border2)' }} onClick={() => handleGo(g)}>🗑 Gỡ</button>
                 </div>
               </>
             ) : (
               <>
                 <div style={{ fontSize: 11, color: 'var(--text3)', fontStyle: 'italic' }}>Trống</div>
-                <button style={s.assignBtn} onClick={() => setXepModal(g)}>+ Xếp</button>
+                <div style={s.bedActions}>
+                  <button style={s.assignBtn} onClick={() => setXepModal(g)}>+ Xếp</button>
+                </div>
               </>
             )}
           </div>
@@ -1504,9 +1507,14 @@ const s = {
   roomId:  { fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', marginBottom: 4 },
   roomLabel: { fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', marginTop: 2 },
   legend:  { display: 'flex', gap: 14, marginTop: 12 },
-  bedsGrid:{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 },
-  bed:     { borderRadius: 10, padding: '12px 14px', position: 'relative', minHeight: 80 },
-  assignBtn: { position: 'absolute', bottom: 10, right: 10, background: 'var(--bg3)', border: '1px solid var(--border2)', borderRadius: 6, fontSize: 11, color: 'var(--accent)', cursor: 'pointer', padding: '3px 8px', fontFamily: "'Be Vietnam Pro', sans-serif" },
+  // auto-fill: màn hẹp tự rớt về 1 cột để tên + 3 nút không chen nhau
+  bedsGrid:{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10 },
+  bed:     { borderRadius: 10, padding: '12px 14px', minHeight: 80, display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 },
+  // Tên chiếm trọn 1 dòng, dài quá thì cắt bằng ellipsis (không xuống dòng, không bị nút đè)
+  bedName: { fontSize: 12, fontWeight: 600, color: 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textAlign: 'left', fontFamily: "'Be Vietnam Pro', sans-serif", textDecoration: 'underline dotted', display: 'block', width: '100%', minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' },
+  // Hàng nút nằm dưới cùng, dồn về phải (marginTop auto đẩy xuống đáy card)
+  bedActions: { display: 'flex', gap: 5, flexWrap: 'wrap', justifyContent: 'flex-end', marginTop: 'auto', paddingTop: 8 },
+  assignBtn: { background: 'var(--bg3)', border: '1px solid var(--border2)', borderRadius: 6, fontSize: 11, color: 'var(--accent)', cursor: 'pointer', padding: '4px 8px', fontFamily: "'Be Vietnam Pro', sans-serif", whiteSpace: 'nowrap' },
   tab:     { background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, color: 'var(--text3)', padding: '5px 10px', borderRadius: 7, fontFamily: "'Be Vietnam Pro', sans-serif" },
   tabActive:{ background: 'var(--bg3)', color: 'var(--text1)' },
   table:   { width: '100%', borderCollapse: 'collapse' },

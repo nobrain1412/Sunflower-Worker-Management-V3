@@ -12,7 +12,56 @@ import { ThemeScope } from '../context/ThemeContext';
 import Header from './TuyenDung/Header';
 import Footer from './TuyenDung/Footer';
 
-const NUMERIC_HINT = /(gio|ca|tang|ot|so)/i;
+// Chuẩn hoá header: bỏ dấu, đ→d, lowercase (khớp normalizeKey của BE).
+function norm(raw) {
+  return String(raw ?? '')
+    .toLowerCase()
+    .normalize('NFD').replace(/\p{Diacritic}/gu, '')
+    .replace(/đ/g, 'd')
+    .replace(/[^a-z0-9/]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// Cột danh tính — hiển thị 1 lần trên đầu bảng, không lặp lại từng dòng.
+const INFO_FIELDS = [
+  ['ten',    ['ho va ten', 'ho ten', 'ten']],
+  ['ma',     ['ma the', 'ma the cham cong', 'ma van tay', 'ma cham cong']],
+  ['boPhan', ['bo phan', 'phong ban', 'to', 'to nhom']],
+];
+
+// Giờ hành chính: ca ngày + ca đêm + chủ nhật + ngày lễ (gộp 1 cột).
+const HC_KEYS = ['ca ngay', 'ca dem', 'chu nhat', 'ngay le', 'gio hanh chinh', 'gio cong'];
+
+// Giờ tăng ca: mọi biến thể TC (trc/sau 9:45, đêm, chủ nhật, ngày lễ).
+const isTangCa = (k) => k.startsWith('tang ca') || k === 'trc 9 45' || k === 'sau 9 45' || k === 'ot';
+
+// Ô giờ → số (bỏ qua text/rỗng) để cộng dồn.
+function toNum(v) {
+  if (v == null || v === '') return 0;
+  const n = parseFloat(String(v).replace(',', '.'));
+  return Number.isFinite(n) ? n : 0;
+}
+
+const fmtGio = (n) => (n ? String(Math.round(n * 100) / 100) : '');
+
+/** Tách headers của 1 nhóm thành: cột danh tính, cột ngày/trạng thái/lịch sử, 2 bucket giờ. */
+function classify(headers) {
+  const map = {}; // vai trò -> header gốc
+  const hc = [];
+  const tc = [];
+  for (const h of headers) {
+    const k = norm(h);
+    const info = INFO_FIELDS.find(([, keys]) => keys.includes(k));
+    if (info) { map[info[0]] ??= h; continue; }
+    if (k === 'ngay') { map.ngay ??= h; continue; }
+    if (k === 'trang thai') { map.trangThai ??= h; continue; }
+    if (k.includes('lich su') || k === 'thoi gian cham') { map.lichSu ??= h; continue; }
+    if (HC_KEYS.includes(k)) { hc.push(h); continue; }
+    if (isTangCa(k)) tc.push(h);
+  }
+  return { map, hc, tc };
+}
 
 export default function TraCuuCong() {
   const navigate = useNavigate();
@@ -80,33 +129,51 @@ export default function TraCuuCong() {
               Tìm thấy <b style={{ color: 'var(--sf-text)' }}>{total}</b> ngày công cho mã “{ma}”
               {groups.length > 1 && ` · ${groups.length} công ty`}
             </div>
-            {groups.map((g) => (
-              <div key={g.cong_ty} style={s.card}>
-                <div style={s.groupTitle}>{g.cong_ty}</div>
-                <div style={s.tableWrap}>
-                  <table style={s.table}>
-                    <thead>
-                      <tr>{g.headers.map((h) => <th key={h} style={s.th}>{h}</th>)}</tr>
-                    </thead>
-                    <tbody>
-                      {g.rows.map((row, i) => (
-                        <tr key={i} style={i % 2 ? s.trAlt : undefined}>
-                          {g.headers.map((h) => {
-                            const v = row[h];
-                            const numeric = NUMERIC_HINT.test(h);
-                            return (
-                              <td key={h} style={{ ...s.td, ...(numeric ? s.tdNum : {}) }}>
-                                {v == null || v === '' ? '' : String(v)}
-                              </td>
-                            );
-                          })}
+            {groups.map((g) => {
+              const { map, hc, tc } = classify(g.headers);
+              const first = g.rows[0] || {};
+              return (
+                <div key={g.cong_ty} style={s.card}>
+                  <div style={s.groupTitle}>{g.cong_ty}</div>
+
+                  {/* Thông tin công nhân — ghi 1 lần, không lặp lại trong bảng */}
+                  <div style={s.info}>
+                    {map.ten && <span style={s.infoName}>{first[map.ten]}</span>}
+                    {map.ma && <span style={s.infoItem}>Mã thẻ <b style={s.infoVal}>{first[map.ma]}</b></span>}
+                    {map.boPhan && <span style={s.infoItem}>Bộ phận <b style={s.infoVal}>{first[map.boPhan]}</b></span>}
+                  </div>
+
+                  <div style={s.tableWrap}>
+                    <table style={s.table}>
+                      <thead>
+                        <tr>
+                          <th style={s.th}>Ngày</th>
+                          <th style={s.th}>Trạng thái</th>
+                          <th style={s.th}>Lịch sử chấm</th>
+                          <th style={{ ...s.th, ...s.thNum }}>Hành chính</th>
+                          <th style={{ ...s.th, ...s.thNum, ...s.lastCol }}>Tăng ca</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {g.rows.map((row, i) => {
+                          const gioHc = hc.reduce((sum, h) => sum + toNum(row[h]), 0);
+                          const gioTc = tc.reduce((sum, h) => sum + toNum(row[h]), 0);
+                          return (
+                            <tr key={i} style={i % 2 ? s.trAlt : undefined}>
+                              <td style={{ ...s.td, ...s.tdMono }}>{row[map.ngay] ?? ''}</td>
+                              <td style={{ ...s.td, ...s.tdStatus }}>{row[map.trangThai] ?? ''}</td>
+                              <td style={s.td}>{row[map.lichSu] ?? ''}</td>
+                              <td style={{ ...s.td, ...s.tdNum }}>{fmtGio(gioHc)}</td>
+                              <td style={{ ...s.td, ...s.tdNum, ...s.tdOt, ...s.lastCol }}>{fmtGio(gioTc)}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </>
         )}
       </main>
@@ -141,15 +208,32 @@ const s = {
   card: { background: 'var(--sf-surface)', border: '1px solid var(--sf-brd)', borderRadius: 16, padding: 16, boxShadow: 'var(--sf-shadow)' },
   empty: { padding: 40, textAlign: 'center', color: 'var(--sf-muted)', fontSize: 14 },
   resultMeta: { fontSize: 13, color: 'var(--sf-muted)' },
-  groupTitle: { fontSize: 15, fontWeight: 800, color: 'var(--sf-navy)', marginBottom: 12 },
+  groupTitle: { fontSize: 15, fontWeight: 800, color: 'var(--sf-navy)', marginBottom: 10 },
+  info: {
+    display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: '6px 18px',
+    padding: '10px 14px', marginBottom: 12, borderRadius: 10,
+    background: 'var(--sf-surface2)', border: '1px solid var(--sf-brd)',
+    fontSize: 13, color: 'var(--sf-muted)',
+  },
+  infoName: { fontSize: 16, fontWeight: 800, color: 'var(--sf-text)' },
+  infoItem: { display: 'inline-flex', gap: 6 },
+  infoVal: { color: 'var(--sf-text)', fontWeight: 700 },
   tableWrap: { overflowX: 'auto', border: '1px solid var(--sf-brd)', borderRadius: 12 },
   table: { borderCollapse: 'collapse', width: '100%', fontSize: 13, whiteSpace: 'nowrap' },
   th: {
     position: 'sticky', top: 0, background: 'var(--sf-surface2)', color: 'var(--sf-muted)',
-    fontWeight: 700, textAlign: 'left', padding: '10px 12px',
-    borderBottom: '1px solid var(--sf-brd)', fontSize: 12,
+    fontWeight: 700, textAlign: 'left', padding: '10px 12px', fontSize: 12,
+    borderBottom: '1px solid var(--sf-brd)', borderRight: '1px solid var(--sf-brd)',
   },
-  td: { padding: '9px 12px', color: 'var(--sf-text)', borderBottom: '1px solid var(--sf-brd)' },
-  tdNum: { textAlign: 'right', fontFamily: "'JetBrains Mono', monospace" },
+  thNum: { textAlign: 'right' },
+  td: {
+    padding: '9px 12px', color: 'var(--sf-text)',
+    borderBottom: '1px solid var(--sf-brd)', borderRight: '1px solid var(--sf-brd)',
+  },
+  tdMono: { fontFamily: "'JetBrains Mono', monospace" },
+  tdStatus: { color: 'var(--sf-muted)', fontWeight: 600 },
+  tdNum: { textAlign: 'right', fontFamily: "'JetBrains Mono', monospace", fontWeight: 600 },
+  tdOt: { color: 'var(--sf-navy)' },
+  lastCol: { borderRight: 'none' },
   trAlt: { background: 'var(--sf-surface2)' },
 };
