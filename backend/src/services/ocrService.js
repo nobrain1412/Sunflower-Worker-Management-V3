@@ -48,6 +48,7 @@ async function recognizeCCCDViaFPT(imageBuffer, apiKey) {
     cccd:     d.id        ?? '',
     ngay_sinh:d.dob       ?? '',
     gioi_tinh:mapFptSex(d.sex),
+    que_quan: d.home      ?? '',   // FPT `home` = quê quán (QR CCCD không có)
     dia_chi:  d.address   ?? '',
     ngay_cap: d.issue_date ?? '',
     _provider: 'fpt_ai',
@@ -80,7 +81,7 @@ function parseCCCD(fullText) {
 
   const result = {
     ho_ten: '', cccd: '', ngay_sinh: '', gioi_tinh: '',
-    dia_chi: '', ngay_cap: '',
+    que_quan: '', dia_chi: '', ngay_cap: '',
   };
 
   const cccdMatch = fullText.match(/\b(\d{12})\b/);
@@ -109,6 +110,11 @@ function parseCCCD(fullText) {
       const ctx = (lines[i] + ' ' + nxt).toLowerCase();
       if (/\bnam\b/.test(ctx)) result.gioi_tinh = 'Nam';
       else if (/\bn[ữu]\b/.test(ctx)) result.gioi_tinh = 'Nữ';
+    }
+
+    if (/qu[eê]\s*qu[áa]n|place\s+of\s+origin/i.test(lo)) {
+      const val = nxt.replace(/[:\/]/g, '').trim();
+      if (val && !/nơi|place\s+of\s+res/i.test(val)) result.que_quan = val;
     }
 
     if (/n[oơ]i\s+th[uư][oờ]ng\s+tr[uú]|place\s+of\s+res/i.test(lo)) {

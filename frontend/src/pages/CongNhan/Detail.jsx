@@ -11,6 +11,7 @@ import ChuyenKhoanModal from '../../components/ChuyenKhoanModal';
 import api from '../../hooks/useApi';
 import { useQueryClient } from '@tanstack/react-query';
 import { decodeCccdQrFromImage } from '../../utils/decodeCccdImage';
+import { ocrCccdFromImage } from '../../utils/ocrCccdImage';
 
 const TRANG_THAI_PILL = {
   cho_duyet: { cls: 'pill-amber', label: 'Chờ duyệt' },
@@ -206,6 +207,7 @@ function EditModal({ cn, onClose, noiOHienTai, isAdmin }) {
     cccd:             cn.cccd   ?? '',
     ngay_sinh:        toInputDate(cn.ngay_sinh),
     gioi_tinh:        cn.gioi_tinh ?? '',
+    que_quan:         cn.que_quan ?? '',
     dia_chi_hien_tai: cn.dia_chi_hien_tai ?? '',
     so_dien_thoai:    cn.so_dien_thoai    ?? '',
     ngay_cap_cccd:    toInputDate(cn.ngay_cap_cccd),
@@ -238,7 +240,7 @@ function EditModal({ cn, onClose, noiOHienTai, isAdmin }) {
   // Quét QR CCCD: tự điền field còn trống, field khác biệt → cho chọn ghi đè/giữ nguyên
   const [cccdFile, setCccdFile]       = useState(null);
   const [cccdPreview, setCccdPreview] = useState(null);
-  const [scanStatus, setScanStatus]   = useState(''); // '' | 'scanning' | 'ok' | 'error'
+  const [scanStatus, setScanStatus]   = useState(''); // '' | 'scanning' | 'ocr' | 'ok' | 'ok_ocr' | 'error'
   const [scanErr, setScanErr]         = useState('');
   const [conflicts, setConflicts]     = useState([]);
 
@@ -253,24 +255,35 @@ function EditModal({ cn, onClose, noiOHienTai, isAdmin }) {
     setScanStatus('scanning');
     // Pipeline nhiều lượt tiền xử lý (xoay EXIF, tương phản, Otsu, phóng to...)
     const res = await decodeCccdQrFromImage(file).catch(() => null);
-    const parsed = res?.parsed ?? null;
+    let parsed = res?.parsed ?? null;
+    let tuOcr  = false;
+
+    // Không có/không đọc được QR → nhận diện chữ trên ảnh (FPT.AI ở backend).
+    // OCR còn đọc được quê quán — thông tin QR không có.
+    if (!parsed) {
+      setScanStatus('ocr');
+      parsed = (await ocrCccdFromImage(file).catch(() => null))?.parsed ?? null;
+      tuOcr  = !!parsed;
+    }
+
     if (!parsed) {
       setConflicts([]);
       setScanStatus('error');
       setScanErr(
         res?.rawText
-          ? 'Đọc được mã QR nhưng không phải QR CCCD gắn chip. Ảnh vẫn được lưu khi bấm Lưu — bạn có thể tự nhập thông tin.'
-          : 'Không đọc được mã QR CCCD trong ảnh. Ảnh vẫn được lưu khi bấm Lưu — bạn có thể tự nhập thông tin.',
+          ? 'Đọc được mã QR nhưng không phải QR CCCD gắn chip, và cũng không nhận diện được chữ trên ảnh. Ảnh vẫn được lưu khi bấm Lưu — bạn có thể tự nhập thông tin.'
+          : 'Không đọc được mã QR lẫn thông tin trên ảnh. Ảnh vẫn được lưu khi bấm Lưu — bạn có thể tự nhập thông tin.',
       );
       return;
     }
 
-    // Map field QR → field trong form chỉnh sửa
+    // Map field QR/OCR → field trong form chỉnh sửa
     const mapping = [
       { key: 'cccd',             qr: parsed.cccd,      label: 'Số CCCD',            isDate: false },
       { key: 'ho_ten',           qr: parsed.ho_ten,    label: 'Họ và tên',          isDate: false },
       { key: 'ngay_sinh',        qr: parsed.ngay_sinh, label: 'Ngày sinh',          isDate: true  },
       { key: 'gioi_tinh',        qr: parsed.gioi_tinh, label: 'Giới tính',          isDate: false },
+      { key: 'que_quan',         qr: parsed.que_quan,  label: 'Quê quán',           isDate: false },
       { key: 'dia_chi_hien_tai', qr: parsed.dia_chi,   label: 'Địa chỉ thường trú', isDate: false },
       { key: 'ngay_cap_cccd',    qr: parsed.ngay_cap,  label: 'Ngày cấp CCCD',      isDate: true  },
     ];
@@ -297,7 +310,7 @@ function EditModal({ cn, onClose, noiOHienTai, isAdmin }) {
     }
     if (Object.keys(autofill).length) setForm((f) => ({ ...f, ...autofill }));
     setConflicts(newConflicts);
-    setScanStatus('ok');
+    setScanStatus(tuOcr ? 'ok_ocr' : 'ok');
   }
 
   function resolveConflict(c, overwrite) {
@@ -426,11 +439,14 @@ function EditModal({ cn, onClose, noiOHienTai, isAdmin }) {
               onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; handleCccdScan(f); }} />
           </label>
           <div style={{ flex: 1, minWidth: 180, fontSize: 12, color: 'var(--text2)', lineHeight: 1.5 }}>
-            Thêm ảnh mặt trước CCCD gắn chip — hệ thống tự đọc mã QR, điền các trường còn trống và lưu ảnh vào hồ sơ.
+            Thêm ảnh mặt trước CCCD — hệ thống đọc mã QR, không có QR thì tự nhận diện chữ trên ảnh,
+            rồi điền các trường còn trống và lưu ảnh vào hồ sơ.
             {scanStatus === 'scanning' && <div style={{ marginTop: 6, color: 'var(--accent)' }}>⏳ Đang đọc mã QR...</div>}
-            {scanStatus === 'ok' && (
-              <div style={{ marginTop: 6, color: 'var(--green)' }}>
-                ✓ Đã đọc QR{conflicts.length ? ' — có thông tin khác biệt, chọn xử lý bên dưới' : ' — đã điền các trường còn trống'}
+            {scanStatus === 'ocr' && <div style={{ marginTop: 6, color: 'var(--accent)' }}>⏳ Không thấy QR — đang nhận diện chữ trên ảnh...</div>}
+            {(scanStatus === 'ok' || scanStatus === 'ok_ocr') && (
+              <div style={{ marginTop: 6, color: scanStatus === 'ok' ? 'var(--green)' : 'var(--amber)' }}>
+                {scanStatus === 'ok' ? '✓ Đã đọc QR' : '⚠ Nhận diện từ ảnh (hãy đối chiếu lại)'}
+                {conflicts.length ? ' — có thông tin khác biệt, chọn xử lý bên dưới' : ' — đã điền các trường còn trống'}
               </div>
             )}
             {scanStatus === 'error' && <div style={{ marginTop: 6, color: 'var(--red)' }}>{scanErr}</div>}
@@ -484,6 +500,10 @@ function EditModal({ cn, onClose, noiOHienTai, isAdmin }) {
             <select className="form-input" name="trang_thai" value={form.trang_thai} onChange={handleChange}>
               {Object.entries(TRANG_THAI_PILL).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
             </select>
+          </div>
+          <div style={{ gridColumn: 'span 2', display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <label className="form-label">Quê quán</label>
+            <input className="form-input" name="que_quan" value={form.que_quan} onChange={handleChange} placeholder="Xã/Phường, Huyện, Tỉnh" />
           </div>
           <div style={{ gridColumn: 'span 2', display: 'flex', flexDirection: 'column', gap: 4 }}>
             <label className="form-label">Địa chỉ thường trú</label>
@@ -868,6 +888,7 @@ export default function CongNhanDetail() {
             <Field label="Ngày sinh" value={cn.ngay_sinh ? new Date(cn.ngay_sinh).toLocaleDateString('vi-VN') : null} />
             <Field label="Giới tính" value={cn.gioi_tinh} />
             <Field label="Số điện thoại" value={cn.so_dien_thoai} />
+            <Field label="Quê quán" value={cn.que_quan} />
             <Field label="Địa chỉ thường trú" value={cn.dia_chi_hien_tai} />
           </div>
         </div>

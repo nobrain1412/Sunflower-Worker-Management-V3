@@ -15,6 +15,7 @@ const FIELD_LABELS = {
   cccd: 'CCCD',
   ngay_sinh: 'Ngày sinh',
   gioi_tinh: 'Giới tính',
+  que_quan: 'Quê quán',
   dia_chi_hien_tai: 'Địa chỉ hiện tại',
   so_dien_thoai: 'Số điện thoại',
   ngay_cap_cccd: 'Ngày cấp CCCD',

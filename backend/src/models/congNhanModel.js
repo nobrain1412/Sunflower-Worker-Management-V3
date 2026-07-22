@@ -162,7 +162,7 @@ async function findByCccd(cccd, excludeId = null) {
 
 async function create(data) {
   const {
-    ho_ten, cccd, ngay_sinh, gioi_tinh,
+    ho_ten, cccd, ngay_sinh, gioi_tinh, que_quan,
     dia_chi_hien_tai, so_dien_thoai, ngay_cap_cccd,
     trang_thai, ngay_vao_lam, ghi_chu,
     nguoi_tuyen_id, cong_ty_id,
@@ -175,16 +175,16 @@ async function create(data) {
 
   const result = await db.query(
     `INSERT INTO cong_nhan
-       (ho_ten, cccd, ngay_sinh, gioi_tinh,
+       (ho_ten, cccd, ngay_sinh, gioi_tinh, que_quan,
         dia_chi_hien_tai, so_dien_thoai, ngay_cap_cccd,
         trang_thai, ngay_vao_lam, ghi_chu, nguoi_tuyen_id, cong_ty_id,
         ngan_hang, so_tai_khoan, ten_chu_tk,
         cccd_da_tra, trang_thai_noi_o, muon_xe, loai_xe, ma_van_tay, bo_phan,
         anh_cccd_truoc, anh_cccd_sau, anh_chan_dung,
         loai_cong_nhan, loi_nhuan_thang, so_thang_huong_loi_nhuan, ngay_chinh_thuc)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29)
      RETURNING *`,
-    [ho_ten, cccd ?? null, ngay_sinh ?? null, gioi_tinh ?? null,
+    [ho_ten, cccd ?? null, ngay_sinh ?? null, gioi_tinh ?? null, que_quan ?? null,
      dia_chi_hien_tai ?? null, so_dien_thoai ?? null, ngay_cap_cccd ?? null,
      trang_thai ?? 'doi_viec', ngay_vao_lam ?? null, ghi_chu ?? null,
      nguoi_tuyen_id ?? null, cong_ty_id ?? null,
@@ -203,7 +203,7 @@ async function update(id, data) {
   const params = [];
 
   const allowedFields = [
-    'ho_ten', 'cccd', 'ngay_sinh', 'gioi_tinh',
+    'ho_ten', 'cccd', 'ngay_sinh', 'gioi_tinh', 'que_quan',
     'dia_chi_hien_tai', 'so_dien_thoai', 'ngay_cap_cccd',
     'trang_thai', 'ngay_vao_lam', 'ngay_nghi_viec', 'ghi_chu',
     // nguoi_tuyen_id: chỉ admin gửi được — controller đã xoá field này với role khác

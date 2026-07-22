@@ -11,7 +11,7 @@ function todayDMY() {
 
 const INIT = {
   ho_ten: '', cccd: '', ngay_sinh: '', gioi_tinh: '',
-  dia_chi_hien_tai: '', so_dien_thoai: '',
+  que_quan: '', dia_chi_hien_tai: '', so_dien_thoai: '',
   ngay_cap_cccd: '',
   trang_thai: 'doi_viec', ngay_vao_lam: todayDMY(), ghi_chu: '',
   cong_ty_id: '',
@@ -130,7 +130,7 @@ export default function AddCongNhanModal({ onClose }) {
     const payload = { ho_ten: form.ho_ten, trang_thai: form.trang_thai };
     // Xác nhận kích hoạt lại CN đã nghỉ việc (trùng CCCD) thay vì báo lỗi
     if (kichHoatLai) payload.kich_hoat_lai = true;
-    ['cccd','gioi_tinh','dia_chi_hien_tai','so_dien_thoai','ghi_chu',
+    ['cccd','gioi_tinh','que_quan','dia_chi_hien_tai','so_dien_thoai','ghi_chu',
      'ngan_hang','so_tai_khoan','ten_chu_tk','ma_van_tay','bo_phan']
       .forEach((k) => { if (form[k]) payload[k] = form[k]; });
     payload.cccd_da_tra = !!form.cccd_da_tra;
@@ -258,6 +258,9 @@ export default function AddCongNhanModal({ onClose }) {
             </FormField>
             <FormField label="Ngày cấp CCCD" error={errors.ngay_cap_cccd}>
               <input className="form-input" name="ngay_cap_cccd" value={form.ngay_cap_cccd} onChange={handleDateChange('ngay_cap_cccd')} placeholder="dd/mm/yyyy" maxLength={10} />
+            </FormField>
+            <FormField label="Quê quán" style={{ gridColumn: 'span 2' }}>
+              <input className="form-input" name="que_quan" value={form.que_quan} onChange={handleChange} placeholder="Xã/Phường, Huyện, Tỉnh" />
             </FormField>
             <FormField label="Địa chỉ thường trú" style={{ gridColumn: 'span 2' }}>
               <input className="form-input" name="dia_chi_hien_tai" value={form.dia_chi_hien_tai} onChange={handleChange} placeholder="Số 123, Đường ABC, Tỉnh..." />

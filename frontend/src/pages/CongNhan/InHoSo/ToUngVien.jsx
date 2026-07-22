@@ -133,10 +133,10 @@ export default function ToUngVien({ cn, ngayIn }) {
             <L xam lines={['CMND/', 'ID / |身份证']} />
             <V span={4}>{cn.cccd}</V>
           </tr>
-          {/* Quê quán không còn lưu trong hệ thống → để trống viết tay */}
+          {/* Quê quán chỉ có khi quét ảnh CCCD (OCR) — chưa có thì để trống viết tay */}
           <tr style={{ height: `${H.r3}mm` }}>
             <L span={3} xam lines={['Quê quán/', 'Hometown /|老家']} />
-            <V span={10} />
+            <V span={10} style={{ fontSize: pt(9) }}>{cn.que_quan}</V>
           </tr>
           <tr style={{ height: `${H.r3}mm` }}>
             <L span={3} xam lines={['Địa chỉ/', 'Address/ |地址']} />

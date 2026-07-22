@@ -5,6 +5,12 @@ import { useAuth } from '../../context/AuthContext';
 import { useCongTyList, useVenders } from '../../hooks/useCongNhan';
 import { parseCccdQr } from '../../utils/parseCccdQr';
 import { decodeCccdQrFromImage } from '../../utils/decodeCccdImage';
+import { ocrCccdFromImage, captureVideoFrame } from '../../utils/ocrCccdImage';
+
+// Camera quét bao lâu mà không thấy QR thì tự chuyển sang nhận diện ảnh (ms)
+const CAM_OCR_DELAY_MS = 12000;
+// Số lần tự nhận diện ảnh từ camera cho mỗi phiên quét — tránh gọi OCR vô hạn
+const CAM_OCR_MAX_TRIES = 2;
 
 // dd/mm/yyyy → YYYY-MM-DD (DB cần ISO)
 function ddmmyyyyToIso(s) {
@@ -37,10 +43,29 @@ function formatDateInput(v) {
 
 const EMPTY_FORM = {
   ho_ten: '', cccd: '', ngay_sinh: '', gioi_tinh: '',
-  dia_chi: '', ngay_cap: '',
+  que_quan: '', dia_chi: '', ngay_cap: '',
   ngay_vao_lam: isoToDdmmyyyy(todayIso()),
   cong_ty_id: '', nguoi_tuyen_id: '', ma_van_tay: '',
   trang_thai: '', // '' → suy ra mặc định theo vai trò (defaultTrangThai)
+};
+
+// Nhãn bước review theo nguồn dữ liệu — OCR cần nhắc đối chiếu vì có thể sai chữ.
+const SOURCE_LABEL = {
+  qr: {
+    badge: '✓ QR đã đọc',
+    title: 'Thông tin từ QR',
+    sub:   'Kiểm tra & bổ sung trước khi thêm vào hệ thống',
+  },
+  ocr: {
+    badge: '⚠ Nhận diện từ ảnh',
+    title: 'Thông tin nhận diện từ ảnh',
+    sub:   'Ảnh không có mã QR — dữ liệu do máy đọc chữ, hãy đối chiếu kỹ với thẻ trước khi lưu',
+  },
+  manual: {
+    badge: '✎ Nhập tay',
+    title: 'Nhập thông tin từ ảnh',
+    sub:   'Không đọc được tự động — nhập tay theo ảnh bên cạnh',
+  },
 };
 
 export default function ScanCCCD() {
@@ -60,11 +85,15 @@ export default function ScanCCCD() {
   const [uploadingAnh, setUploadingAnh] = useState(false);
   const [pendingFile, setPendingFile] = useState(null); // ảnh đọc QR trượt — cho nhập tay
   const [debugInfo, setDebugInfo] = useState(null);      // ảnh đã tiền xử lý (gỡ lỗi)
+  const [source, setSource]   = useState('qr');          // 'qr' | 'ocr' — nguồn dữ liệu đang review
+  const [busyMsg, setBusyMsg] = useState('');            // mô tả việc đang chạy ở stage processing
 
   const videoRef   = useRef(null);
   const scannerRef = useRef(null);
   const fileRef    = useRef(null);
   const handledRef = useRef(false); // chặn xử lý 1 mã QR nhiều lần
+  const camTimerRef = useRef(null); // hẹn giờ tự chuyển sang OCR khi quét camera
+  const camTriesRef = useRef(0);    // số lần đã tự OCR từ camera trong phiên này
 
   const { user, isAdmin, isQuanLy } = useAuth();
   const congTyArr = useCongTyList().data?.data ?? [];
@@ -104,17 +133,73 @@ export default function ScanCCCD() {
       },
     );
     scannerRef.current = scanner;
-    scanner.start().catch((err) => {
+    scanner.start().then(() => {
+      // Quét mãi không thấy QR (CCCD cũ 9 số, thẻ mờ/xước) → tự chụp khung hình
+      // hiện tại và nhận diện bằng OCR thay vì bắt người dùng loay hoay.
+      if (camTriesRef.current >= CAM_OCR_MAX_TRIES) return;
+      camTimerRef.current = setTimeout(autoOcrFromCamera, CAM_OCR_DELAY_MS);
+    }).catch((err) => {
       setScanErr(`Không mở được camera: ${err?.message ?? err}. Hãy cấp quyền camera hoặc dùng tải ảnh.`);
     });
 
     return () => {
+      clearTimeout(camTimerRef.current);
+      camTimerRef.current = null;
       scanner.stop();
       scanner.destroy();
       scannerRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, stage]);
+
+  // Chụp khung hình đang quét → gửi OCR. Thất bại thì quay lại quét QR bình thường.
+  async function autoOcrFromCamera() {
+    if (handledRef.current || !videoRef.current) return;
+    const frame = await captureVideoFrame(videoRef.current);
+    if (!frame) return;
+
+    handledRef.current = true; // chặn QR bắn kết quả xen giữa
+    camTriesRef.current += 1;
+    setScanErr(null);
+    setBusyMsg('Chưa thấy mã QR — đang nhận diện thông tin trên ảnh...');
+    setStage('processing');   // effect cleanup sẽ tắt camera
+
+    // Giữ lại khung hình: người dùng cần nhìn ảnh gốc để đối chiếu kết quả OCR,
+    // và ảnh đã được backend upload sẵn trong lượt OCR này.
+    const ok = await applyOcrResult(frame, { keepImage: true });
+    if (!ok) {
+      handledRef.current = false;
+      setScanErr(
+        camTriesRef.current >= CAM_OCR_MAX_TRIES
+          ? 'Không nhận diện được CCCD từ camera. Hãy dùng "Tải ảnh CCCD" với ảnh chụp rõ nét, hoặc nhập tay.'
+          : 'Không nhận diện được CCCD trong khung hình. Đưa trọn thẻ vào khung, giữ máy yên và đủ sáng.',
+      );
+      setStage('scan');
+    }
+  }
+
+  // Gửi ảnh sang backend nhận diện (FPT.AI). Trả true nếu đã đổ được vào form.
+  // keepImage = true → hiển thị ảnh gốc ở bước review và lưu vào hồ sơ.
+  async function applyOcrResult(file, { keepImage }) {
+    try {
+      const { parsed, duongDanAnh } = await ocrCccdFromImage(file);
+      if (!parsed) return false;
+
+      setForm((cur) => ({ ...cur, ...parsed, cong_ty_id: cur.cong_ty_id || defaultCongTyId() }));
+      setSource('ocr');
+      setPendingFile(null);
+      if (keepImage) {
+        setPreview(URL.createObjectURL(file));
+        setAnhFile(file);
+      }
+      // Backend đã upload ảnh khi OCR → dùng lại URL, không upload lần hai.
+      setAnhUrl(keepImage ? duongDanAnh : null);
+      setStage('review');
+      return true;
+    } catch {
+      return false; // OCR lỗi (thiếu API key, mạng, quota...) — người gọi tự xử lý thông báo
+    }
+  }
 
   // ─── Đọc dữ liệu QR → đổ vào form ──────────────────────────────────────────
   function onDecoded(rawData) {
@@ -125,8 +210,10 @@ export default function ScanCCCD() {
       return;
     }
     handledRef.current = true;
+    clearTimeout(camTimerRef.current);
     scannerRef.current?.stop();
     setScanErr(null);
+    setSource('qr');
     setForm((cur) => ({
       ...cur,
       ...parsed,
@@ -143,12 +230,14 @@ export default function ScanCCCD() {
     setScanErr(null);
     setPendingFile(null);
     setDebugInfo(null);
+    setBusyMsg('Đang đọc mã QR trong ảnh...');
     setStage('processing');
     // Pipeline nhiều lượt tiền xử lý (xoay EXIF, tương phản, Otsu, phóng to...)
     // Bật debug để lấy ảnh đã xử lý + mã QR thô — hiển thị khi cần gỡ lỗi.
     const res = await decodeCccdQrFromImage(file, { debug: true }).catch(() => null);
     setDebugInfo(res?.debug ?? null);
     if (res?.parsed) {
+      setSource('qr');
       setForm((cur) => ({ ...cur, ...res.parsed, cong_ty_id: cur.cong_ty_id || defaultCongTyId() }));
       setPreview(URL.createObjectURL(file));
       setAnhFile(file);
@@ -157,12 +246,19 @@ export default function ScanCCCD() {
       uploadAnhBackground(file); // lưu ảnh nền, không chặn UI
       return;
     }
-    // Không đọc được — giữ ảnh lại để cho phép nhập tay, không bắt quét lại từ đầu.
+
+    // Không có QR (CCCD cũ 9 số) hoặc QR mờ → tự chuyển sang nhận diện chữ trên
+    // ảnh bằng FPT.AI. Backend upload ảnh trong cùng request nên không cần gọi
+    // /ocr/upload-anh nữa.
+    setBusyMsg('Không đọc được QR — đang nhận diện thông tin trên ảnh...');
+    if (await applyOcrResult(file, { keepImage: true })) return;
+
+    // Cả hai cách đều trượt — giữ ảnh lại để nhập tay, không bắt chọn lại từ đầu.
     setPendingFile(file);
     setScanErr(
       res?.rawText
-        ? 'Đọc được mã QR nhưng không phải QR CCCD gắn chip. Hãy quét đúng mã ở góc trên mặt trước.'
-        : 'Không đọc được QR trong ảnh. Ảnh cần rõ nét, đủ sáng, thấy trọn mã QR ở góc CCCD và chụp thẳng (không nghiêng, không loá).',
+        ? 'Đọc được mã QR nhưng không phải QR CCCD gắn chip, và cũng không nhận diện được chữ trên ảnh. Hãy chụp lại rõ nét hơn.'
+        : 'Không đọc được QR lẫn thông tin trên ảnh. Ảnh cần rõ nét, đủ sáng, chụp thẳng trọn mặt trước CCCD (không nghiêng, không loá).',
     );
     setStage('scan');
   }
@@ -171,6 +267,7 @@ export default function ScanCCCD() {
   function goManualFromPending() {
     const file = pendingFile;
     if (!file) return;
+    setSource('manual');
     setForm((cur) => ({ ...cur, cong_ty_id: cur.cong_ty_id || defaultCongTyId() }));
     setPreview(URL.createObjectURL(file));
     setAnhFile(file);
@@ -238,6 +335,7 @@ export default function ScanCCCD() {
         cccd:             cleanCccd(form.cccd),
         ngay_sinh:        ddmmyyyyToIso(form.ngay_sinh),
         gioi_tinh:        ['Nam','Nữ','Khác'].includes(form.gioi_tinh) ? form.gioi_tinh : null,
+        que_quan:         form.que_quan || null,
         dia_chi_hien_tai: form.dia_chi  || null,
         ngay_cap_cccd:    ddmmyyyyToIso(form.ngay_cap),
         ngay_vao_lam:     ddmmyyyyToIso(form.ngay_vao_lam),
@@ -273,7 +371,9 @@ export default function ScanCCCD() {
     setErrors({}); setSubmitErr(null); setScanErr(null);
     setPreview(null); setAnhFile(null); setAnhUrl(null);
     setPendingFile(null); setDebugInfo(null);
+    setSource('qr'); setBusyMsg('');
     handledRef.current = false;
+    camTriesRef.current = 0;
     setStage('scan');
   }
 
@@ -282,14 +382,15 @@ export default function ScanCCCD() {
     setScanErr(null);
     setPendingFile(null);
     setDebugInfo(null);
+    camTriesRef.current = 0;
     setMode(next);
   }
 
   return (
     <div style={s.root}>
       <div style={s.header}>
-        <h2 style={s.title}>Quét QR CCCD</h2>
-        <p style={s.sub}>Quét mã QR ở mặt trước CCCD gắn chip để lấy thông tin tự động</p>
+        <h2 style={s.title}>Quét CCCD</h2>
+        <p style={s.sub}>Quét mã QR mặt trước CCCD gắn chip — không có QR thì tự nhận diện chữ trên ảnh</p>
       </div>
 
       {(stage === 'scan' || stage === 'processing') && (
@@ -316,21 +417,24 @@ export default function ScanCCCD() {
 
           {debugInfo && stage === 'scan' && <DebugPanel debug={debugInfo} />}
 
-          {mode === 'camera' ? (
-            <div style={s.cameraWrap}>
-              <video ref={videoRef} style={s.video} muted playsInline />
-              <div style={s.scanHint}>Đưa mã QR ở mặt trước CCCD vào khung — hệ thống tự nhận diện</div>
-            </div>
-          ) : stage === 'processing' ? (
+          {stage === 'processing' ? (
             <div style={s.processing}>
               <div style={s.spinner} />
-              <div style={{ fontSize: 13, color: 'var(--text2)' }}>Đang đọc mã QR trong ảnh...</div>
+              <div style={{ fontSize: 13, color: 'var(--text2)' }}>{busyMsg || 'Đang xử lý ảnh...'}</div>
+            </div>
+          ) : mode === 'camera' ? (
+            <div style={s.cameraWrap}>
+              <video ref={videoRef} style={s.video} muted playsInline />
+              <div style={s.scanHint}>
+                Đưa mặt trước CCCD vào khung — hệ thống tự đọc mã QR,
+                nếu không thấy QR sẽ tự nhận diện chữ trên thẻ
+              </div>
             </div>
           ) : (
             <div style={s.dropzone} onClick={() => fileRef.current?.click()}>
               <div style={{ fontSize: 38 }}>🪪</div>
               <div style={s.dropTitle}>Tải ảnh mặt trước CCCD</div>
-              <div style={s.dropSub}>Ảnh sẽ được tự động dò mã QR và lưu vào hồ sơ công nhân</div>
+              <div style={s.dropSub}>Ảnh được dò mã QR trước, không có QR thì tự nhận diện chữ — rồi lưu vào hồ sơ</div>
               <button className="btn-primary" style={{ marginTop: 12, padding: '7px 16px', fontSize: 12 }}
                 onClick={(e) => { e.stopPropagation(); fileRef.current?.click(); }}>Chọn ảnh</button>
             </div>
@@ -342,7 +446,8 @@ export default function ScanCCCD() {
             {[
               'Chỉ CCCD gắn chip (12 số, cấp từ 2021) mới có mã QR',
               'Quét đúng mã QR ở góc trên mặt trước, không phải mã ở mặt sau',
-              'Quê quán không có trong QR — bổ sung tay nếu cần',
+              'Không đọc được QR → hệ thống tự nhận diện chữ trên ảnh (có cả quê quán)',
+              'Thông tin nhận diện từ ảnh cần đối chiếu lại trước khi lưu',
             ].map((t) => (
               <div key={t} style={s.tip}>✓ {t}</div>
             ))}
@@ -360,8 +465,8 @@ export default function ScanCCCD() {
                   <img src={preview} alt="Mặt trước CCCD" style={{ width: '100%', borderRadius: 8, border: '1px solid var(--border)' }} />
                   <div style={s.imgCaption}>Mặt trước</div>
                 </div>
-                <div style={s.ocrBadge}>
-                  {uploadingAnh ? '⏳ Đang lưu ảnh...' : '✓ QR đã đọc · ảnh sẽ lưu vào hồ sơ'}
+                <div style={source === 'ocr' ? s.ocrBadgeWarn : s.ocrBadge}>
+                  {uploadingAnh ? '⏳ Đang lưu ảnh...' : `${SOURCE_LABEL[source].badge} · ảnh sẽ lưu vào hồ sơ`}
                 </div>
               </>
             ) : (
@@ -369,14 +474,14 @@ export default function ScanCCCD() {
                 <div style={{ fontSize: 32, marginBottom: 8 }}>📷</div>
                 <div style={{ fontSize: 12, color: 'var(--text2)' }}>Quét bằng camera — không lưu ảnh.</div>
                 <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>Dùng "Tải ảnh CCCD" nếu muốn lưu ảnh vào hồ sơ.</div>
-                <div style={s.ocrBadge}>✓ QR đã đọc</div>
+                <div style={s.ocrBadge}>{SOURCE_LABEL[source].badge}</div>
               </div>
             )}
           </div>
 
           <div style={s.card}>
-            <div style={s.cardTitle}>Thông tin từ QR</div>
-            <div style={s.cardSub}>Kiểm tra & bổ sung trước khi thêm vào hệ thống</div>
+            <div style={s.cardTitle}>{SOURCE_LABEL[source].title}</div>
+            <div style={s.cardSub}>{SOURCE_LABEL[source].sub}</div>
             {submitErr && <div style={{ ...s.errorBox, marginBottom: 10 }}>{submitErr}</div>}
 
             <div className="cccd-fields-grid">
@@ -396,6 +501,10 @@ export default function ScanCCCD() {
                   <option value="Nữ">Nữ</option>
                   <option value="Khác">Khác</option>
                 </select>
+              </Field>
+              <Field label="Quê quán" error={errors.que_quan} span2>
+                <input className="form-input" value={form.que_quan} onChange={(e) => setField('que_quan', e.target.value)}
+                  placeholder={source === 'ocr' ? '' : 'Không có trong QR — nhập nếu cần'} />
               </Field>
               <Field label="Địa chỉ thường trú" error={errors.dia_chi} span2>
                 <input className="form-input" value={form.dia_chi} onChange={(e) => setField('dia_chi', e.target.value)} />
@@ -589,6 +698,7 @@ const s = {
   imgCaption: { fontSize: 10, color: 'var(--text3)', textAlign: 'center', marginTop: 3, textTransform: 'uppercase', letterSpacing: '0.06em' },
   noImg: { marginTop: 8, padding: '28px 14px', background: 'var(--bg2)', borderRadius: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' },
   ocrBadge: { display: 'inline-block', marginTop: 10, padding: '4px 10px', background: 'rgba(34,201,134,0.12)', color: 'var(--green)', borderRadius: 20, fontSize: 11, fontWeight: 600 },
+  ocrBadgeWarn: { display: 'inline-block', marginTop: 10, padding: '4px 10px', background: 'rgba(255,179,68,0.14)', color: 'var(--amber)', borderRadius: 20, fontSize: 11, fontWeight: 600 },
   divider: { gridColumn: 'span 2', height: 1, background: 'var(--border)', margin: '4px 0' },
   reviewActions: { display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--border)', flexWrap: 'wrap' },
   doneCard: { background: 'var(--bg1)', border: '1px solid var(--border)', borderRadius: 14, padding: '56px 24px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 8 },

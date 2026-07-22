@@ -62,6 +62,7 @@ const taoMoiSchema = z.object({
   cccd:             nullableRegex(cccdRegex, 'CCCD phải gồm đúng 12 chữ số', 12),
   ngay_sinh:        nullableDate('Ngày sinh không hợp lệ (YYYY-MM-DD)'),
   gioi_tinh:        nullableEnum(['Nam', 'Nữ', 'Khác']),
+  que_quan:         nullableStr(200),
   dia_chi_hien_tai: nullableStr(500),
   so_dien_thoai:    nullableRegex(sdtRegex, 'Số điện thoại không hợp lệ', 20),
   ngay_cap_cccd:    nullableDate('Ngày cấp CCCD không hợp lệ (YYYY-MM-DD)'),
