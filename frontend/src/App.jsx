@@ -16,6 +16,7 @@ const CongNhan       = lazy(() => import('./pages/CongNhan/index'));
 const CongNhanDetail = lazy(() => import('./pages/CongNhan/Detail'));
 const ImportExcel    = lazy(() => import('./pages/CongNhan/ImportExcel'));
 const DuyetQueue     = lazy(() => import('./pages/CongNhan/DuyetQueue'));
+const InHoSo         = lazy(() => import('./pages/CongNhan/InHoSo'));
 const ScanCCCD       = lazy(() => import('./pages/OCR/ScanCCCD'));
 const BulkReview     = lazy(() => import('./pages/OCR/BulkReview'));
 const ChamCong       = lazy(() => import('./pages/ChamCong/index'));
@@ -52,6 +53,14 @@ function RoleRoute({ children, allowedRoles, allowKtx }) {
   const okKtx  = allowKtx && user?.quyen_ktx;
   if (!okRole && !okKtx) return <Navigate to="/quan-ly" replace />;
   return <Layout>{children}</Layout>;
+}
+
+// Route cần đăng nhập nhưng KHÔNG bọc Layout — dùng cho trang in để bản in
+// không dính sidebar/topbar và nền tối của app.
+function BareRoute({ children }) {
+  const { isLoggedIn, isAuthReady } = useAuth();
+  if (!isAuthReady) return <div style={{ minHeight: '100vh', background: 'var(--bg0)' }} />;
+  return isLoggedIn ? children : <Navigate to="/login" replace />;
 }
 
 function LoginRoute() {
@@ -91,6 +100,8 @@ export default function App() {
             <Route path="/cong-nhan/duyet" element={
               <RoleRoute allowedRoles={['admin','quan_ly']}><DuyetQueue /></RoleRoute>
             } />
+            {/* Trang in hồ sơ (?ids=1,2,3) — ngoài Layout để bản in sạch */}
+            <Route path="/cong-nhan/in-ho-so" element={<BareRoute><InHoSo /></BareRoute>} />
             <Route path="/cong-nhan/:id" element={<PrivateRoute><CongNhanDetail /></PrivateRoute>} />
             <Route path="/cham-cong"     element={<PrivateRoute><ChamCong /></PrivateRoute>} />
             <Route path="/cham-cong/import-excel" element={

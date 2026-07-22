@@ -71,12 +71,20 @@ function LoaiCNBadge({ loai }) {
   return null;
 }
 
-function MobileCongNhanCard({ cn, canDelete, onOpen, onDelete }) {
+function MobileCongNhanCard({ cn, canDelete, daChon, onToggleChon, onOpen, onDelete }) {
   const pill = TRANG_THAI_PILL[cn.trang_thai] ?? TRANG_THAI_PILL.moi_vao;
 
   return (
     <div style={m.card} onClick={onOpen}>
       <div style={m.head}>
+        <input
+          type="checkbox"
+          checked={daChon}
+          title="Chọn để in hồ sơ"
+          onClick={(e) => e.stopPropagation()}
+          onChange={onToggleChon}
+          style={{ width: 16, height: 16, flexShrink: 0, accentColor: 'var(--accent)' }}
+        />
         <div style={m.avatar}>
           {cn.anh_chan_dung
             ? <img src={mediaUrl(cn.anh_chan_dung)} alt={cn.ho_ten} style={m.avatarImg} />
@@ -248,6 +256,27 @@ export default function CongNhan() {
   const [showFilterSheet, setShowFilterSheet] = useState(false);
   const [showGanCongTy, setShowGanCongTy] = useState(false);
 
+  // Chọn công nhân để in hồ sơ hàng loạt — giữ nguyên khi đổi trang/bộ lọc
+  const [chonIn, setChonIn] = useState(() => new Set());
+  function toggleChon(id) {
+    setChonIn((truoc) => {
+      const sau = new Set(truoc);
+      if (sau.has(id)) sau.delete(id); else sau.add(id);
+      return sau;
+    });
+  }
+  function toggleChonTrang(ids, dangChonHet) {
+    setChonIn((truoc) => {
+      const sau = new Set(truoc);
+      ids.forEach((id) => (dangChonHet ? sau.delete(id) : sau.add(id)));
+      return sau;
+    });
+  }
+  function inHoSoDaChon() {
+    if (!chonIn.size) return;
+    navigate(`/cong-nhan/in-ho-so?ids=${[...chonIn].join(',')}`);
+  }
+
   function toggleSort(field) {
     if (sortBy === field) {
       setSortOrder((o) => (o === 'asc' ? 'desc' : 'asc'));
@@ -295,6 +324,9 @@ export default function CongNhan() {
   const meta = data?.meta ?? { total: 0, total_pages: 1 };
   const isMobile = useIsMobile();
 
+  const idsTrang = rows.map((cn) => cn.id);
+  const chonHetTrang = idsTrang.length > 0 && idsTrang.every((id) => chonIn.has(id));
+
   // Trang khôi phục từ session có thể đã vượt quá số trang hiện có (CN bị xoá,
   // đổi công ty...) → BE trả về rỗng. Kéo về trang cuối cùng còn dữ liệu.
   // Chỉ chạy khi đã có meta thật, tránh nhảy về trang 1 trong lúc đang tải.
@@ -332,6 +364,25 @@ export default function CongNhan() {
               <span>🏢</span>
               Gán công ty
             </button>
+          )}
+          {chonIn.size > 0 && (
+            <>
+              <button
+                className="btn-primary"
+                style={{ fontSize: 12, padding: '6px 10px' }}
+                onClick={inHoSoDaChon}
+                title="In bộ hồ sơ giấy cho các công nhân đã chọn"
+              >
+                🖨 In hồ sơ ({chonIn.size})
+              </button>
+              <button
+                className="btn-ghost"
+                style={{ fontSize: 12, padding: '6px 10px' }}
+                onClick={() => setChonIn(new Set())}
+              >
+                Bỏ chọn
+              </button>
+            </>
           )}
           {(trangThai || trangThaiNoiO || venderId || congTyId || tinh || ngay) && (
             <button
@@ -390,6 +441,8 @@ export default function CongNhan() {
                 key={cn.id}
                 cn={cn}
                 canDelete={isAdmin || (isQuanLy && cn.trang_thai === 'doi_viec')}
+                daChon={chonIn.has(cn.id)}
+                onToggleChon={() => toggleChon(cn.id)}
                 onOpen={() => navigate(`/cong-nhan/${cn.id}`)}
                 onDelete={(e) => handleXoa(cn, e)}
               />
@@ -400,6 +453,15 @@ export default function CongNhan() {
           <table className="cn-table" style={s.table}>
             <thead>
               <tr>
+                <th style={{ ...s.th, width: 34, paddingRight: 0 }}>
+                  <input
+                    type="checkbox"
+                    checked={chonHetTrang}
+                    title="Chọn tất cả công nhân trong trang để in hồ sơ"
+                    onChange={() => toggleChonTrang(idsTrang, chonHetTrang)}
+                    style={{ width: 15, height: 15, accentColor: 'var(--accent)' }}
+                  />
+                </th>
                 {[
                   ['ho_ten',        'Họ tên'],
                   ['ten_cong_ty',   'Công ty'],
@@ -423,6 +485,15 @@ export default function CongNhan() {
                 const pill = TRANG_THAI_PILL[cn.trang_thai] ?? TRANG_THAI_PILL.moi_vao;
                 return (
                   <tr key={cn.id} style={s.tr} onClick={() => navigate(`/cong-nhan/${cn.id}`)}>
+                    <td style={{ ...s.td, paddingRight: 0 }} onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={chonIn.has(cn.id)}
+                        title="Chọn để in hồ sơ"
+                        onChange={() => toggleChon(cn.id)}
+                        style={{ width: 15, height: 15, accentColor: 'var(--accent)' }}
+                      />
+                    </td>
                     <td className="cn-name-cell" style={s.td}>
                       <div style={s.avatar}>
                         {cn.anh_chan_dung

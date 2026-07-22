@@ -818,6 +818,12 @@ export default function CongNhanDetail() {
             <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => setAnhModal(true)}>📷 Ảnh</button>
           )}
           <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => setChuyenKhoanModal(true)}>💳 Chuyển khoản</button>
+          <button
+            className="btn-ghost"
+            style={{ fontSize: 12 }}
+            title="In bộ hồ sơ giấy: thông tin ứng viên, kiểm tra độ tuổi, phiếu đồng ý (nếu dưới 18) và ảnh CCCD"
+            onClick={() => navigate(`/cong-nhan/in-ho-so?ids=${cn.id}`)}
+          >🖨 In hồ sơ</button>
           {canEdit && (
             <button className="btn-ghost" onClick={() => setEditModal(true)}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
