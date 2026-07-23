@@ -36,7 +36,7 @@ const s = {
     width: 46, height: 46, flex: 'none', display: 'inline-flex', alignItems: 'center',
     justifyContent: 'center', borderRadius: 10, fontSize: 15, fontWeight: 800, color: '#fff',
   },
-  title: { fontSize: 15, fontWeight: 700, lineHeight: 1.35, color: 'var(--sf-text)' },
+  title: { fontSize: 15, fontWeight: 700, lineHeight: 1.35, color: 'var(--sf-text)', overflowWrap: 'anywhere' },
   company: {
     fontSize: 13, color: 'var(--sf-muted)', marginTop: 3,
     whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',

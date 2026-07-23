@@ -66,6 +66,20 @@ export function mediaUrl(path) {
   return path || '';
 }
 
+/**
+ * Ảnh chân dung resize về cỡ ảnh thẻ 3x4 (tỉ lệ 3:4) trước khi gán vào hồ sơ in.
+ * Dùng transform Cloudinary ngay trên URL: cắt đầy khung 3:4, ưu tiên khuôn mặt.
+ * URL không phải Cloudinary → trả nguyên (khung CSS 3:4 vẫn giữ tỉ lệ khi in).
+ */
+export function anh3x4(path) {
+  const u = mediaUrl(path);
+  if (!u) return '';
+  if (u.includes('/image/upload/')) {
+    return u.replace('/image/upload/', '/image/upload/c_fill,ar_3:4,g_face,q_auto/');
+  }
+  return u;
+}
+
 /** Danh sách tờ sẽ in cho một công nhân — phiếu đồng ý chỉ áp dụng CN dưới 18. */
 export function cacToCanIn(cn) {
   const to = ['ung_vien', 'do_tuoi'];

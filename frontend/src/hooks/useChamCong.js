@@ -1,12 +1,13 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from './useApi';
 
-// Danh sách CN + chấm công tháng (admin/quản lý), có filter
-export function useChamCongThang(params) {
+// Danh sách CN + chấm công tháng (admin/quản lý), có filter.
+// options.enabled cho phép chặn tải (vd: admin chưa chọn công ty → không load tất cả).
+export function useChamCongThang(params, options = {}) {
   return useQuery({
     queryKey: ['cham-cong', 'thang', params],
     queryFn:  () => api.get('/cham-cong', { params }),
-    enabled:  !!params?.thang && !!params?.nam,
+    enabled:  !!params?.thang && !!params?.nam && (options.enabled ?? true),
     staleTime: 15_000,
   });
 }

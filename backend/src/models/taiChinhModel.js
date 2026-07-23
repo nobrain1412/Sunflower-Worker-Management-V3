@@ -114,6 +114,57 @@ async function findAll({
   return { rows: result.rows, total };
 }
 
+// ADMIN — giám sát khoản CHI của kế toán & nhân viên.
+// KHÔNG bao gồm khoản 'tieu' (chi tiêu cá nhân, riêng tư) và bỏ qua sổ của admin.
+// Có thể lọc theo user, loại, tháng/năm để dễ quan sát.
+async function findGiamSatChi({
+  page = 1,
+  limit = 50,
+  thang,
+  nam,
+  loai,
+  user_id,
+}) {
+  const offset = (page - 1) * limit;
+  // Luôn: loại trừ 'tieu' + chỉ lấy giao dịch do user KHÁC admin tạo (có tác giả).
+  const conditions = [`g.loai <> 'tieu'`, `u.vai_tro IS NOT NULL`, `u.vai_tro <> 'admin'`];
+  const params = [];
+
+  if (thang)   { params.push(thang);   conditions.push(`EXTRACT(MONTH FROM g.ngay) = $${params.length}`); }
+  if (nam)     { params.push(nam);     conditions.push(`EXTRACT(YEAR FROM g.ngay)  = $${params.length}`); }
+  if (loai)    { params.push(loai);    conditions.push(`g.loai = $${params.length}`); }
+  if (user_id) { params.push(user_id); conditions.push(`g.created_by = $${params.length}`); }
+
+  const where = `WHERE ${conditions.join(' AND ')}`;
+
+  const countResult = await db.query(
+    `SELECT COUNT(*)
+       FROM giao_dich_tai_chinh g
+       JOIN users u ON u.id = g.created_by
+     ${where}`,
+    params,
+  );
+  const total = parseInt(countResult.rows[0].count, 10);
+
+  params.push(limit, offset);
+  const result = await db.query(
+    `SELECT g.*,
+            cn.ho_ten AS cong_nhan_ten,
+            dm.ten    AS danh_muc_ten,
+            u.ho_ten  AS created_by_ten,
+            u.vai_tro AS created_by_vai_tro
+       FROM giao_dich_tai_chinh g
+       JOIN users u ON u.id = g.created_by
+       LEFT JOIN cong_nhan cn ON cn.id = g.cong_nhan_id
+       LEFT JOIN danh_muc_giao_dich dm ON dm.id = g.danh_muc_id
+     ${where}
+     ORDER BY g.ngay DESC, g.id DESC
+     LIMIT $${params.length - 1} OFFSET $${params.length}`,
+    params,
+  );
+  return { rows: result.rows, total };
+}
+
 async function findById(id) {
   const result = await db.query(
     `SELECT g.*,
@@ -272,7 +323,7 @@ async function deleteOne(id) {
 
 module.exports = {
   findAllDanhMuc, findDanhMucById, createDanhMuc, updateDanhMuc, deleteDanhMuc,
-  findAll, findById, create, createWithMirror, capNhatHoanTien, deleteOne,
+  findAll, findGiamSatChi, findById, create, createWithMirror, capNhatHoanTien, deleteOne,
   tinhTongThang, tongTheoThang, tinhTongDaUng,
   LOAI_CHI, LOAI_THU,
 };

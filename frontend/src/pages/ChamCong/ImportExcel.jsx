@@ -20,6 +20,8 @@ export default function ImportChamCongExcel() {
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
   const [downloading, setDownloading] = useState(false);
+  // Bảng chi tiết preview nặng (nhiều dòng) → ẩn mặc định, chỉ render khi bấm xem
+  const [showDetail, setShowDetail] = useState(false);
 
   const congTyArr = useCongTyList().data?.data ?? [];
 
@@ -61,6 +63,7 @@ export default function ImportChamCongExcel() {
     setPreview(null);
     setResult(null);
     setError('');
+    setShowDetail(false);
   }
 
   async function doPreview() {
@@ -76,6 +79,8 @@ export default function ImportChamCongExcel() {
       // KHÔNG tự set Content-Type — để trình duyệt tự thêm boundary cho multipart.
       const res = await api.post('/cham-cong/import-excel/preview', fd);
       setPreview(res.data);
+      setShowDetail(false); // giữ bảng chi tiết ẩn, tránh render nặng ngay
+
     } catch (err) {
       setError(err?.message || 'Parse Excel thất bại');
     } finally {
@@ -221,7 +226,18 @@ export default function ImportChamCongExcel() {
             <SummaryItem label="Có lỗi" value={preview.summary.errorRows} color="var(--red)" />
           </div>
 
-          <PreviewTable rows={preview.rows} />
+          {/* Bảng chi tiết ẩn mặc định — chỉ render khi bấm để tránh treo trình duyệt
+              với file vân tay nhiều dòng. */}
+          <button
+            type="button"
+            onClick={() => setShowDetail((v) => !v)}
+            style={s.detailToggle}
+          >
+            {showDetail
+              ? '▲ Ẩn chi tiết'
+              : `▼ Xem chi tiết ${preview.rows.length} dòng`}
+          </button>
+          {showDetail && <PreviewTable rows={preview.rows} />}
 
           <div style={s.commitRow}>
             <button onClick={reset} style={s.btnGhost}>Huỷ, chọn file khác</button>
@@ -401,6 +417,7 @@ const s = {
   summaryValue: { fontSize: 22, fontWeight: 700, fontFamily: "'JetBrains Mono', monospace" },
   summaryLabel: { fontSize: 11, color: 'var(--text3)', marginTop: 2 },
 
+  detailToggle: { alignSelf: 'flex-start', background: 'var(--bg2)', border: '1px solid var(--border)', color: 'var(--text2)', borderRadius: 8, padding: '7px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', marginBottom: 12 },
   tableWrap: { overflowX: 'auto', marginBottom: 16, border: '1px solid var(--border)', borderRadius: 8 },
   table: { width: '100%', borderCollapse: 'collapse', fontSize: 12 },
   th: {

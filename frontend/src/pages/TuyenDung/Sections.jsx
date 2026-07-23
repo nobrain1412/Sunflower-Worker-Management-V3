@@ -98,21 +98,21 @@ const s = {
     width: 44, height: 44, flex: 'none', display: 'inline-flex', alignItems: 'center',
     justifyContent: 'center', borderRadius: 12, fontSize: 14, fontWeight: 800, color: '#fff',
   },
-  catName: { display: 'block', fontSize: 14.5, fontWeight: 700, lineHeight: 1.3 },
-  catCount: { display: 'block', fontSize: 12.5, color: 'var(--sf-muted)', marginTop: 2 },
+  catName: { display: 'block', fontSize: 14.5, fontWeight: 700, lineHeight: 1.3, overflowWrap: 'anywhere' },
+  catCount: { display: 'block', fontSize: 12.5, color: 'var(--sf-muted)', marginTop: 2, overflowWrap: 'anywhere' },
 
   coCard: {
     background: 'var(--sf-surface)', border: '1px solid var(--sf-brd)', borderRadius: 12,
     padding: '20px 14px', display: 'flex', flexDirection: 'column', alignItems: 'center',
     gap: 10, textAlign: 'center', textDecoration: 'none', color: 'var(--sf-text)',
-    boxShadow: 'var(--sf-shadow)', cursor: 'pointer',
+    boxShadow: 'var(--sf-shadow)', cursor: 'pointer', minWidth: 0,
   },
   coAvatar: {
     width: 54, height: 54, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
     borderRadius: 14, fontSize: 17, fontWeight: 800, color: '#fff',
   },
-  coName: { fontSize: 14, fontWeight: 700, lineHeight: 1.3 },
-  coSub: { fontSize: 12.5, color: 'var(--sf-navy)', fontWeight: 600 },
+  coName: { fontSize: 14, fontWeight: 700, lineHeight: 1.3, width: '100%', overflowWrap: 'anywhere' },
+  coSub: { fontSize: 12.5, color: 'var(--sf-navy)', fontWeight: 600, width: '100%', overflowWrap: 'anywhere' },
 
   cta: {
     borderRadius: 16, background: 'linear-gradient(120deg,var(--sf-navy) 0%,#3a5ea6 100%)',

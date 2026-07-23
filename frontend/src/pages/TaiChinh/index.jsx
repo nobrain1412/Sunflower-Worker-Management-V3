@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import { useGiaoDichList, useTongThang, useTaoGiaoDich, useXoaGiaoDich, useDanhMuc, useTaoDanhMuc, useCapNhatDanhMuc, useCapNhatHoanTien } from '../../hooks/useTaiChinh';
+import { useGiaoDichList, useTongThang, useTaoGiaoDich, useXoaGiaoDich, useDanhMuc, useTaoDanhMuc, useCapNhatDanhMuc, useCapNhatHoanTien, useGiamSatChi } from '../../hooks/useTaiChinh';
 import { useTongTheoThang } from '../../hooks/useDashboard';
 import { useAuth } from '../../context/AuthContext';
 import { useAssignableUsers } from '../../hooks/useUsers';
@@ -272,11 +272,83 @@ function DanhMucModal({ onClose }) {
   );
 }
 
+const VAI_TRO_LABEL = {
+  quan_ly: 'Quản lý', ke_toan: 'Kế toán', vender: 'Vender',
+  cong_tac_vien: 'CTV', xem: 'Xem',
+};
+
+// Admin — bảng giám sát khoản chi của kế toán & nhân viên (không gồm 'tieu').
+function GiamSatChiPanel({ list, loading, thang, nam }) {
+  const tong = list.reduce((sum, g) => sum + Number(g.so_tien || 0), 0);
+
+  if (loading) return <div style={{ padding: 24, textAlign: 'center', color: 'var(--text2)', fontSize: 13 }}>Đang tải...</div>;
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, fontSize: 12, color: 'var(--text2)', flexWrap: 'wrap' }}>
+        <span>Khoản chi của nhân viên tháng {thang}/{nam} (không gồm khoản tiêu cá nhân)</span>
+        <span style={{ marginLeft: 'auto' }}>Tổng: <b style={{ color: 'var(--red)' }}>{fmt(tong)}</b> · {list.length} khoản</span>
+      </div>
+      {list.length === 0 ? (
+        <div style={{ padding: 32, textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>
+          Không có khoản chi nào phù hợp bộ lọc
+        </div>
+      ) : (
+        <div className="table-scroll" style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+            <thead>
+              <tr>
+                {['Ngày', 'Nhân viên', 'Loại', 'Danh mục', 'Công nhân', 'Số tiền', 'Ghi chú'].map((h) => (
+                  <th key={h} style={{ textAlign: h === 'Số tiền' ? 'right' : 'left', padding: '8px 10px', color: 'var(--text3)', fontWeight: 600, fontSize: 11, borderBottom: '1px solid var(--border2)', whiteSpace: 'nowrap' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {list.map((g) => {
+                const loai = LOAI_LABEL[g.loai];
+                return (
+                  <tr key={g.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                    <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', fontFamily: "'JetBrains Mono', monospace", color: 'var(--text2)' }}>
+                      {g.ngay ? new Date(g.ngay).toLocaleDateString('vi-VN') : '—'}
+                    </td>
+                    <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>
+                      <span style={{ color: 'var(--text1)', fontWeight: 600 }}>{g.created_by_ten ?? '—'}</span>
+                      {g.created_by_vai_tro && (
+                        <span style={{ marginLeft: 6, fontSize: 10, color: 'var(--text3)' }}>
+                          {VAI_TRO_LABEL[g.created_by_vai_tro] ?? g.created_by_vai_tro}
+                        </span>
+                      )}
+                    </td>
+                    <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>
+                      <span className="pill" style={{ background: (loai?.color ?? 'var(--text3)') + '1a', color: loai?.color }}>
+                        {loai?.label ?? g.loai}
+                      </span>
+                    </td>
+                    <td style={{ padding: '8px 10px', color: 'var(--text2)' }}>{g.danh_muc_ten ?? '—'}</td>
+                    <td style={{ padding: '8px 10px', color: 'var(--text2)' }}>{g.cong_nhan_ten ?? '—'}</td>
+                    <td style={{ padding: '8px 10px', textAlign: 'right', fontFamily: "'JetBrains Mono', monospace", fontWeight: 600, color: 'var(--red)', whiteSpace: 'nowrap' }}>
+                      {fmt(g.so_tien)}
+                    </td>
+                    <td style={{ padding: '8px 10px', color: 'var(--text3)', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.ghi_chu ?? '—'}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function TaiChinh() {
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   const isVender = user?.vai_tro === 'vender';
   const now = new Date();
   const [tab,           setTab]           = useState('giao-dich');
+  // Bộ lọc cho tab "Chi nhân viên" (admin giám sát khoản chi của kế toán & nhân viên)
+  const [gsUserId,      setGsUserId]      = useState('');
+  const [gsLoai,        setGsLoai]        = useState('');
   const [addModal,      setAddModal]      = useState(false);
   const [danhMucModal,  setDanhMucModal]  = useState(false);
   const [detailGd,      setDetailGd]      = useState(null);
@@ -292,6 +364,16 @@ export default function TaiChinh() {
 
   const { data: gdRes }      = useGiaoDichList({ thang, nam, loai: filterLoai || undefined });
   const { data: tongRes }    = useTongThang(thang, nam);
+
+  // Admin — giám sát khoản chi của nhân viên (không gồm 'tieu')
+  const { data: gsRes, isLoading: gsLoading } = useGiamSatChi(
+    { thang, nam, loai: gsLoai || undefined, user_id: gsUserId || undefined },
+    { enabled: isAdmin && tab === 'giam-sat' },
+  );
+  const gsList = gsRes?.data ?? [];
+  const gsUsers = useAssignableUsers(isAdmin).data ?? [];
+  const gsStaff = gsUsers.filter((u) => u.vai_tro && u.vai_tro !== 'admin');
+
   const { data: monthlyRes } = useTongTheoThang(5);
   const xoaGd                = useXoaGiaoDich();
 
@@ -382,10 +464,38 @@ export default function TaiChinh() {
         {/* Tabs */}
         <div style={{ ...s.card, flex: 1, minWidth: 0 }}>
           <div className="tc-tabs" style={s.tabs}>
-            {[['giao-dich','Giao dịch'], ...(!isVender ? [['danh-muc','Danh mục']] : [])].map(([v, label]) => (
+            {[
+              ['giao-dich','Giao dịch'],
+              ...(!isVender ? [['danh-muc','Danh mục']] : []),
+              ...(isAdmin ? [['giam-sat','Chi nhân viên']] : []),
+            ].map(([v, label]) => (
               <button key={v} style={{ ...s.tab, ...(tab === v ? s.tabActive : {}) }} onClick={() => setTab(v)}>{label}</button>
             ))}
             <div className="tc-filter-group" style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center' }}>
+              {tab === 'giam-sat' && (
+                <>
+                  <select style={s.filterSelect} value={thang} onChange={(e) => setThang(Number(e.target.value))}>
+                    {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => <option key={m} value={m}>T{m}</option>)}
+                  </select>
+                  <select style={s.filterSelect} value={nam} onChange={(e) => setNam(Number(e.target.value))}>
+                    {[2024,2025,2026,2027].map((y) => <option key={y} value={y}>{y}</option>)}
+                  </select>
+                  <select style={s.filterSelect} value={gsUserId} onChange={(e) => setGsUserId(e.target.value)}>
+                    <option value="">Tất cả nhân viên</option>
+                    {gsStaff.map((u) => <option key={u.id} value={u.id}>{u.ho_ten}</option>)}
+                  </select>
+                  <select style={s.filterSelect} value={gsLoai} onChange={(e) => setGsLoai(e.target.value)}>
+                    <option value="">Tất cả loại chi</option>
+                    <option value="chi">Chi</option>
+                    <option value="tam_ung">Tạm ứng</option>
+                    <option value="khau_tru">Khấu trừ</option>
+                    <option value="tien_phong_ktx">Tiền phòng KTX</option>
+                    <option value="bao_hiem">Bảo hiểm</option>
+                    <option value="phat_nghi">Phạt nghỉ</option>
+                    <option value="khac">Khác</option>
+                  </select>
+                </>
+              )}
               {tab === 'giao-dich' && !isMobile && (
                 <>
                   {/* Bộ lọc tháng/năm */}
@@ -410,7 +520,9 @@ export default function TaiChinh() {
                   )}
                 </>
               )}
-              <button className="btn-primary" style={{ padding: '6px 12px', fontSize: 12 }} onClick={() => setAddModal(true)}>+ Thêm</button>
+              {tab !== 'giam-sat' && (
+                <button className="btn-primary" style={{ padding: '6px 12px', fontSize: 12 }} onClick={() => setAddModal(true)}>+ Thêm</button>
+              )}
             </div>
           </div>
 
@@ -565,6 +677,10 @@ export default function TaiChinh() {
               </div>
               <DanhMucInline />
             </div>
+          )}
+
+          {tab === 'giam-sat' && isAdmin && (
+            <GiamSatChiPanel list={gsList} loading={gsLoading} thang={thang} nam={nam} />
           )}
         </div>
       </div>

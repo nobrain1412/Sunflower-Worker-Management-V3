@@ -14,7 +14,7 @@
 const { Router } = require('express');
 const { z } = require('zod');
 const validate       = require('../middleware/validate');
-const { authenticate } = require('../middleware/auth');
+const { authenticate, requireRole } = require('../middleware/auth');
 const asyncWrapper   = require('../utils/asyncWrapper');
 const { sendSuccess, sendCreated, sendForbidden } = require('../utils/response');
 const model = require('../models/taiChinhModel');
@@ -113,6 +113,23 @@ router.get('/', asyncWrapper(async (req, res) => {
     loai:        req.query.loai,
     cong_nhan_id: req.query.cong_nhan_id ? toPositiveInt(req.query.cong_nhan_id, 'ID công nhân') : undefined,
     created_by: req.user.id,
+  });
+  sendSuccess(res, rows, 'Thành công', 200, {
+    page, limit, total, total_pages: Math.ceil(total / limit),
+  });
+}));
+
+// ADMIN — giám sát khoản CHI của kế toán & nhân viên (không gồm khoản 'tieu').
+// Lọc theo user / loại / tháng-năm để dễ quan sát.
+router.get('/giam-sat-chi', requireRole('admin'), asyncWrapper(async (req, res) => {
+  const page  = Math.max(1, toPositiveInt(req.query.page || '1', 'Trang'));
+  const limit = Math.min(100, Math.max(1, toPositiveInt(req.query.limit || '50', 'Giới hạn')));
+  const { rows, total } = await model.findGiamSatChi({
+    page, limit,
+    thang:   req.query.thang ? toPositiveInt(req.query.thang, 'Tháng') : undefined,
+    nam:     req.query.nam   ? toPositiveInt(req.query.nam, 'Năm')     : undefined,
+    loai:    req.query.loai || undefined,
+    user_id: req.query.user_id ? toPositiveInt(req.query.user_id, 'ID người dùng') : undefined,
   });
   sendSuccess(res, rows, 'Thành công', 200, {
     page, limit, total, total_pages: Math.ceil(total / limit),

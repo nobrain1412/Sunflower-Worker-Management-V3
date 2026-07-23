@@ -11,11 +11,10 @@ import { useNavigate } from 'react-router-dom';
 import { useChamCongThang, useUpsertChamCong } from '../../hooks/useChamCong';
 import { useCongTyList, useVenders } from '../../hooks/useCongNhan';
 import { useAuth } from '../../context/AuthContext';
-import DiemDanhNgay from './DiemDanhNgay';
 import BangThang from './BangThang';
 import {
-  MONTH_NAMES, daysInMonth, ymd, todayYMD,
-  cellFromServer, emptyCell, equalCell, isEmptyCell, toEntry,
+  MONTH_NAMES, daysInMonth, ymd,
+  cellFromServer, emptyCell, equalCell, toEntry,
 } from './chamCongShared';
 
 export default function ChamCong() {
@@ -24,8 +23,6 @@ export default function ChamCong() {
   const canEdit = isAdmin || isQuanLy;  // admin/quản lý sửa được; người tuyển chỉ xem
   const canImport = canEdit;
 
-  const [mode, setMode]   = useState('ngay');         // 'ngay' | 'thang'
-  const [ngay, setNgay]   = useState(todayYMD());     // cho chế độ ngày
   const now = new Date();
   const [thang, setThang] = useState(now.getMonth() + 1);
   const [nam, setNam]     = useState(now.getFullYear());
@@ -33,16 +30,18 @@ export default function ChamCong() {
   const [nguoiTuyenId, setNguoiTuyenId] = useState('');
   const [search, setSearch] = useState('');
 
-  // Tháng/năm đang xem phụ thuộc chế độ
-  const qThang = mode === 'ngay' ? Number(ngay.slice(5, 7)) : thang;
-  const qNam   = mode === 'ngay' ? Number(ngay.slice(0, 4)) : nam;
-  const day    = Number(ngay.slice(8, 10));
+  const qThang = thang;
+  const qNam   = nam;
 
   const params = { thang: qThang, nam: qNam };
   if (congTyId) params.cong_ty_id = congTyId;
   if (nguoiTuyenId) params.nguoi_tuyen_id = nguoiTuyenId;
 
-  const { data: res, isLoading } = useChamCongThang(params);
+  // Admin: KHÔNG tải bảng công cho tới khi chọn công ty (tránh load toàn bộ).
+  // Nhân viên (quản lý/…): BE tự giới hạn theo công ty mình quản lý → tải mặc định.
+  const adminChuaChonCty = isAdmin && !congTyId;
+
+  const { data: res, isLoading } = useChamCongThang(params, { enabled: !adminChuaChonCty });
   const rows = res?.data ?? [];
   const congTyArr = useCongTyList().data?.data ?? [];
   const venderArr = useVenders().data?.data ?? [];
@@ -137,17 +136,11 @@ export default function ChamCong() {
     }
   }
 
-  function shiftDay(delta) {
-    const d = new Date(`${ngay}T00:00:00`);
-    d.setDate(d.getDate() + delta);
-    setNgay(ymd(d.getMonth() + 1, d.getFullYear(), d.getDate()));
-  }
-
   return (
     <div style={s.root}>
       <div style={s.header}>
         <div>
-          <div style={s.title}>Chấm công</div>
+          <div style={s.title}>Chấm công — Bảng công tháng</div>
           <div style={s.subtitle}>
             Nhập 4 loại giờ: HC ngày, TC ngày, HC đêm, TC đêm. Nghỉ phép = P, nghỉ việc = V.
           </div>
@@ -166,36 +159,16 @@ export default function ChamCong() {
         </div>
       </div>
 
-      {/* Chuyển chế độ */}
-      <div style={s.segment}>
-        {[['ngay', '⚡ Điểm danh nhanh'], ['thang', '📅 Bảng tháng']].map(([v, l]) => (
-          <button key={v} onClick={() => setMode(v)}
-            style={{ ...s.segBtn, ...(mode === v ? s.segBtnActive : {}) }}>{l}</button>
-        ))}
-      </div>
-
       {/* Bộ lọc */}
       <div style={s.toolbar}>
-        {mode === 'ngay' ? (
-          <div style={s.dateNav}>
-            <button className="btn-ghost" style={s.navBtn} onClick={() => shiftDay(-1)}>‹</button>
-            <input type="date" className="form-input" style={{ ...s.select, minWidth: 150 }}
-              value={ngay} onChange={(e) => e.target.value && setNgay(e.target.value)} />
-            <button className="btn-ghost" style={s.navBtn} onClick={() => shiftDay(1)}>›</button>
-            <button className="btn-ghost" style={{ fontSize: 12, padding: '6px 10px' }} onClick={() => setNgay(todayYMD())}>Hôm nay</button>
-          </div>
-        ) : (
-          <>
-            <select className="form-input" style={s.select} value={thang} onChange={(e) => setThang(Number(e.target.value))}>
-              {MONTH_NAMES.map((mo, i) => <option key={i} value={i + 1}>{mo}</option>)}
-            </select>
-            <select className="form-input" style={s.select} value={nam} onChange={(e) => setNam(Number(e.target.value))}>
-              {[nam - 1, nam, nam + 1].map((y) => <option key={y} value={y}>{y}</option>)}
-            </select>
-          </>
-        )}
+        <select className="form-input" style={s.select} value={thang} onChange={(e) => setThang(Number(e.target.value))}>
+          {MONTH_NAMES.map((mo, i) => <option key={i} value={i + 1}>{mo}</option>)}
+        </select>
+        <select className="form-input" style={s.select} value={nam} onChange={(e) => setNam(Number(e.target.value))}>
+          {[nam - 1, nam, nam + 1].map((y) => <option key={y} value={y}>{y}</option>)}
+        </select>
         <select className="form-input" style={s.select} value={congTyId} onChange={(e) => setCongTyId(e.target.value)}>
-          <option value="">— Mọi công ty —</option>
+          <option value="">{isAdmin ? '— Chọn công ty để xem —' : '— Mọi công ty —'}</option>
           {congTyArr.map((c) => <option key={c.id} value={c.id}>{c.ten_cong_ty}</option>)}
         </select>
         {isAdmin && (
@@ -208,10 +181,12 @@ export default function ChamCong() {
           value={search} onChange={(e) => setSearch(e.target.value)} />
       </div>
 
-      {isLoading ? (
+      {adminChuaChonCty ? (
+        <div style={s.card}><div style={s.empty}>
+          Chọn một công ty ở trên để xem bảng công tháng.
+        </div></div>
+      ) : isLoading ? (
         <div style={s.card}><div style={s.empty}>Đang tải...</div></div>
-      ) : mode === 'ngay' ? (
-        <DiemDanhNgay rows={filtered} day={day} getCell={getCell} setCell={setCell} isDirtyCell={isDirtyCell} readOnly={!canEdit} />
       ) : (
         <BangThang rows={filtered} dayList={dayList} thang={qThang} nam={qNam}
           getCell={getCell} setCell={setCell} isDirtyCell={isDirtyCell} readOnly={!canEdit} />

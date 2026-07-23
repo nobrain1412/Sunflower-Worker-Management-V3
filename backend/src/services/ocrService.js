@@ -8,9 +8,10 @@ const FPT_AI_ENDPOINT = 'https://api.fpt.ai/vision/idr/vnm';
 
 function mapFptSex(sex) {
   if (!sex) return '';
-  const s = String(sex).toLowerCase();
-  if (s.includes('nam')) return 'Nam';
-  if (s.includes('n')) return 'Nữ';
+  const s = String(sex).toLowerCase().trim();
+  // FPT trả "NAM" / "NỮ"; đề phòng cả "male"/"female" và "nu" không dấu.
+  if (s.includes('nam') || s === 'male' || s === 'm') return 'Nam';
+  if (s.includes('nữ') || s.includes('nu') || s.includes('female') || s === 'f') return 'Nữ';
   return '';
 }
 
@@ -188,10 +189,60 @@ async function scanCCCD(imageBuffer) {
   return { ...parseCCCD(data.text ?? ''), _provider: 'tesseract' };
 }
 
+// Các trường CCCD dùng để gộp kết quả 2 mặt.
+const CCCD_FIELDS = ['ho_ten', 'cccd', 'ngay_sinh', 'gioi_tinh', 'que_quan', 'dia_chi', 'ngay_cap'];
+
+// Gộp kết quả nhận diện từ nhiều mặt CCCD: mặt trước cho thông tin định danh
+// (họ tên, số, ngày sinh, quê quán, thường trú), mặt sau cho ngày cấp.
+// Với mỗi trường lấy giá trị KHÔNG rỗng đầu tiên nên thứ tự trước/sau không quan trọng.
+function mergeCccdSides(results) {
+  const valid = results.filter(Boolean);
+  const out = { _provider: valid[0]?._provider ?? '', _type: '' };
+  const types = [];
+  for (const f of CCCD_FIELDS) {
+    out[f] = '';
+    for (const r of valid) {
+      if (!out[f] && typeof r[f] === 'string' && r[f].trim()) out[f] = r[f].trim();
+    }
+  }
+  for (const r of valid) if (r._type) types.push(r._type);
+  out._type = types.join('+');
+  return out;
+}
+
+async function scanCCCD(imageBuffer) {
+  const apiKey = process.env.FPT_AI_API_KEY;
+  if (apiKey) {
+    try {
+      return await recognizeCCCDViaFPT(imageBuffer, apiKey);
+    } catch (err) {
+      // FPT.AI fail → log và fallback sang Tesseract để không vỡ luồng demo.
+      logger.warn({ err: err.message }, 'FPT.AI CCCD failed, fallback to Tesseract');
+    }
+  }
+  const data = await recognize(imageBuffer);
+  return { ...parseCCCD(data.text ?? ''), _provider: 'tesseract' };
+}
+
+// Quét đủ 2 mặt CCCD rồi gộp lại → dữ liệu đầy đủ & chính xác hơn quét 1 mặt.
+// Mỗi mặt quét độc lập: một mặt lỗi vẫn dùng được kết quả mặt kia (chỉ lỗi khi cả hai fail).
+async function scanCCCDSides(imageBuffers) {
+  const buffers = (imageBuffers || []).filter(Boolean);
+  if (buffers.length <= 1) return scanCCCD(buffers[0]);
+
+  const settled = await Promise.allSettled(buffers.map((b) => scanCCCD(b)));
+  const ok = settled.filter((s) => s.status === 'fulfilled').map((s) => s.value);
+  if (ok.length === 0) {
+    const firstErr = settled.find((s) => s.status === 'rejected');
+    throw firstErr?.reason ?? new Error('Không nhận diện được CCCD từ ảnh đã tải lên');
+  }
+  return mergeCccdSides(ok);
+}
+
 async function scanDanhSach(imageBuffer) {
   const data = await recognize(imageBuffer);
   const lines = (data.lines ?? []).map((l) => l.text.trim()).filter(Boolean);
   return parseDanhSach(lines);
 }
 
-module.exports = { scanCCCD, scanDanhSach };
+module.exports = { scanCCCD, scanCCCDSides, scanDanhSach };

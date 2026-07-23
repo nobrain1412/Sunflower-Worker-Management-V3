@@ -35,6 +35,36 @@ export async function ocrCccdFromImage(file) {
   };
 }
 
+/**
+ * Nhận diện CCCD từ ĐỦ 2 MẶT — gửi cả mặt trước & sau, backend gộp lại cho dữ liệu
+ * đầy đủ (mặt trước: định danh; mặt sau: ngày cấp). Trả URL đã upload của cả 2 ảnh.
+ * @param {File|Blob} front ảnh mặt trước
+ * @param {File|Blob} back  ảnh mặt sau
+ */
+export async function ocrCccdBothSides(front, back) {
+  const fd = new FormData();
+  fd.append('loai', 'cccd');
+  fd.append('anh_truoc', front, front.name || 'cccd-truoc.jpg');
+  fd.append('anh_sau', back, back.name || 'cccd-sau.jpg');
+
+  const res = await api.post('/ocr/scan', fd, { headers: { 'Content-Type': undefined } });
+  const ketQua = res?.data?.ket_qua ?? {};
+
+  const parsed = {};
+  for (const k of FIELDS) {
+    const v = ketQua[k];
+    if (typeof v === 'string' && v.trim()) parsed[k] = v.trim();
+  }
+  const usable = parsed.ho_ten || parsed.cccd;
+
+  return {
+    parsed: usable ? parsed : null,
+    duongDanAnh:    res?.data?.duong_dan_anh ?? null,
+    duongDanAnhSau: res?.data?.duong_dan_anh_sau ?? null,
+    provider: ketQua._provider ?? '',
+  };
+}
+
 /** Chụp khung hình hiện tại của <video> thành File JPEG để gửi đi OCR. */
 export function captureVideoFrame(video) {
   return new Promise((resolve) => {

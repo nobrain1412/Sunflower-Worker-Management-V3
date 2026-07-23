@@ -5,7 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useCongTyList, useVenders } from '../../hooks/useCongNhan';
 import { parseCccdQr } from '../../utils/parseCccdQr';
 import { decodeCccdQrFromImage } from '../../utils/decodeCccdImage';
-import { ocrCccdFromImage, captureVideoFrame } from '../../utils/ocrCccdImage';
+import { ocrCccdFromImage, ocrCccdBothSides, captureVideoFrame } from '../../utils/ocrCccdImage';
 
 // Camera quét bao lâu mà không thấy QR thì tự chuyển sang nhận diện ảnh (ms)
 const CAM_OCR_DELAY_MS = 12000;
@@ -82,7 +82,15 @@ export default function ScanCCCD() {
   const [preview, setPreview] = useState(null);
   const [anhFile, setAnhFile] = useState(null);
   const [anhUrl, setAnhUrl]   = useState(null);
+  const [anhUrlSau, setAnhUrlSau] = useState(null);   // URL ảnh mặt sau (quét 2 mặt)
   const [uploadingAnh, setUploadingAnh] = useState(false);
+
+  // Quét CCCD từ ảnh tải lên: bắt buộc đủ 2 mặt trước khi quét
+  const [frontFile, setFrontFile]       = useState(null);
+  const [frontPreview, setFrontPreview] = useState(null);
+  const [backFile, setBackFile]         = useState(null);
+  const [backPreview, setBackPreview]   = useState(null);
+  const [previewSau, setPreviewSau]     = useState(null); // ảnh mặt sau ở bước review
   const [pendingFile, setPendingFile] = useState(null); // ảnh đọc QR trượt — cho nhập tay
   const [debugInfo, setDebugInfo] = useState(null);      // ảnh đã tiền xử lý (gỡ lỗi)
   const [source, setSource]   = useState('qr');          // 'qr' | 'ocr' — nguồn dữ liệu đang review
@@ -90,7 +98,8 @@ export default function ScanCCCD() {
 
   const videoRef   = useRef(null);
   const scannerRef = useRef(null);
-  const fileRef    = useRef(null);
+  const frontRef   = useRef(null);
+  const backRef    = useRef(null);
   const handledRef = useRef(false); // chặn xử lý 1 mã QR nhiều lần
   const camTimerRef = useRef(null); // hẹn giờ tự chuyển sang OCR khi quét camera
   const camTriesRef = useRef(0);    // số lần đã tự OCR từ camera trong phiên này
@@ -222,45 +231,51 @@ export default function ScanCCCD() {
     setStage('review');
   }
 
-  // ─── Upload ảnh → detect QR + lưu ảnh ───────────────────────────────────────
-  async function handleUpload(e) {
+  // ─── Upload ĐỦ 2 MẶT → quét gộp ─────────────────────────────────────────────
+  // Chọn 1 mặt (trước/sau) — chỉ lưu file & preview, chưa quét vội.
+  function pickSide(which, e) {
     const file = e.target.files?.[0];
-    e.target.value = ''; // cho phép chọn lại cùng 1 file
+    e.target.value = '';
     if (!file) return;
     setScanErr(null);
-    setPendingFile(null);
-    setDebugInfo(null);
-    setBusyMsg('Đang đọc mã QR trong ảnh...');
-    setStage('processing');
-    // Pipeline nhiều lượt tiền xử lý (xoay EXIF, tương phản, Otsu, phóng to...)
-    // Bật debug để lấy ảnh đã xử lý + mã QR thô — hiển thị khi cần gỡ lỗi.
-    const res = await decodeCccdQrFromImage(file, { debug: true }).catch(() => null);
-    setDebugInfo(res?.debug ?? null);
-    if (res?.parsed) {
-      setSource('qr');
-      setForm((cur) => ({ ...cur, ...res.parsed, cong_ty_id: cur.cong_ty_id || defaultCongTyId() }));
-      setPreview(URL.createObjectURL(file));
-      setAnhFile(file);
-      setAnhUrl(null);
-      setStage('review');
-      uploadAnhBackground(file); // lưu ảnh nền, không chặn UI
+    if (which === 'front') { setFrontFile(file); setFrontPreview(URL.createObjectURL(file)); }
+    else                   { setBackFile(file);  setBackPreview(URL.createObjectURL(file)); }
+  }
+
+  // Chỉ quét khi đã đủ cả 2 mặt. QR mặt trước (nếu có) cho định danh chính xác nhất,
+  // FPT.AI đọc cả 2 mặt để bổ sung ngày cấp + các trường còn thiếu.
+  async function handleScanBothSides() {
+    if (!frontFile || !backFile) {
+      setScanErr('Vui lòng tải lên đủ cả 2 mặt CCCD (mặt trước và mặt sau) trước khi quét.');
       return;
     }
+    setScanErr(null);
+    setDebugInfo(null);
+    setBusyMsg('Đang nhận diện thông tin trên 2 mặt CCCD...');
+    setStage('processing');
 
-    // Không có QR (CCCD cũ 9 số) hoặc QR mờ → tự chuyển sang nhận diện chữ trên
-    // ảnh bằng FPT.AI. Backend upload ảnh trong cùng request nên không cần gọi
-    // /ocr/upload-anh nữa.
-    setBusyMsg('Không đọc được QR — đang nhận diện thông tin trên ảnh...');
-    if (await applyOcrResult(file, { keepImage: true })) return;
+    let qr = null;
+    try {
+      const r = await decodeCccdQrFromImage(frontFile).catch(() => null);
+      qr = r?.parsed ?? null;
+    } catch { qr = null; }
 
-    // Cả hai cách đều trượt — giữ ảnh lại để nhập tay, không bắt chọn lại từ đầu.
-    setPendingFile(file);
-    setScanErr(
-      res?.rawText
-        ? 'Đọc được mã QR nhưng không phải QR CCCD gắn chip, và cũng không nhận diện được chữ trên ảnh. Hãy chụp lại rõ nét hơn.'
-        : 'Không đọc được QR lẫn thông tin trên ảnh. Ảnh cần rõ nét, đủ sáng, chụp thẳng trọn mặt trước CCCD (không nghiêng, không loá).',
-    );
-    setStage('scan');
+    try {
+      const { parsed, duongDanAnh, duongDanAnhSau } = await ocrCccdBothSides(frontFile, backFile);
+      // Gộp: OCR làm nền, QR định danh đè lên (QR chính xác hơn), giữ ngày cấp từ OCR mặt sau.
+      const data = { ...(parsed ?? {}), ...(qr ?? {}) };
+      setSource((data.ho_ten || data.cccd) ? (qr ? 'qr' : 'ocr') : 'manual');
+      setForm((cur) => ({ ...cur, ...data, cong_ty_id: cur.cong_ty_id || defaultCongTyId() }));
+      setPreview(frontPreview);
+      setPreviewSau(backPreview);
+      setAnhFile(frontFile);
+      setAnhUrl(duongDanAnh);
+      setAnhUrlSau(duongDanAnhSau);
+      setStage('review');
+    } catch (err) {
+      setScanErr(err?.message ?? 'Không nhận diện được CCCD. Hãy chụp lại rõ nét, đủ sáng, chụp thẳng.');
+      setStage('scan');
+    }
   }
 
   // Nhập tay từ ảnh vừa chọn khi QR không đọc được — vẫn lưu ảnh vào hồ sơ.
@@ -341,6 +356,7 @@ export default function ScanCCCD() {
         ngay_vao_lam:     ddmmyyyyToIso(form.ngay_vao_lam),
         ma_van_tay:       form.ma_van_tay || null,
         anh_cccd_truoc:   finalAnhUrl || null,
+        anh_cccd_sau:     anhUrlSau || null,
         trang_thai:       trangThai,
       };
       if (congTyId) payload.cong_ty_id = parseInt(congTyId, 10);
@@ -369,7 +385,9 @@ export default function ScanCCCD() {
   function resetAll() {
     setForm(EMPTY_FORM);
     setErrors({}); setSubmitErr(null); setScanErr(null);
-    setPreview(null); setAnhFile(null); setAnhUrl(null);
+    setPreview(null); setAnhFile(null); setAnhUrl(null); setAnhUrlSau(null);
+    setPreviewSau(null);
+    setFrontFile(null); setFrontPreview(null); setBackFile(null); setBackPreview(null);
     setPendingFile(null); setDebugInfo(null);
     setSource('qr'); setBusyMsg('');
     handledRef.current = false;
@@ -431,23 +449,38 @@ export default function ScanCCCD() {
               </div>
             </div>
           ) : (
-            <div style={s.dropzone} onClick={() => fileRef.current?.click()}>
-              <div style={{ fontSize: 38 }}>🪪</div>
-              <div style={s.dropTitle}>Tải ảnh mặt trước CCCD</div>
-              <div style={s.dropSub}>Ảnh được dò mã QR trước, không có QR thì tự nhận diện chữ — rồi lưu vào hồ sơ</div>
-              <button className="btn-primary" style={{ marginTop: 12, padding: '7px 16px', fontSize: 12 }}
-                onClick={(e) => { e.stopPropagation(); fileRef.current?.click(); }}>Chọn ảnh</button>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={s.dropSub}>Tải lên <b>đủ 2 mặt</b> CCCD — hệ thống quét khi có đủ cả hai để lấy thông tin chính xác nhất.</div>
+              <div className="cccd-upload-grid">
+                <SideDrop label="Mặt trước" hint="Ảnh chân dung + họ tên + số CCCD"
+                  preview={frontPreview} onPick={() => frontRef.current?.click()} />
+                <SideDrop label="Mặt sau" hint="Ngày cấp + đặc điểm nhận dạng"
+                  preview={backPreview} onPick={() => backRef.current?.click()} />
+              </div>
+              <button
+                className="btn-primary"
+                disabled={!frontFile || !backFile}
+                style={{
+                  padding: '10px 16px', fontSize: 13,
+                  opacity: (frontFile && backFile) ? 1 : 0.55,
+                  cursor: (frontFile && backFile) ? 'pointer' : 'not-allowed',
+                }}
+                onClick={handleScanBothSides}
+              >
+                {frontFile && backFile ? '🔍 Quét thông tin từ 2 mặt CCCD' : 'Tải đủ 2 mặt để bắt đầu quét'}
+              </button>
             </div>
           )}
-          <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleUpload} />
+          <input ref={frontRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => pickSide('front', e)} />
+          <input ref={backRef}  type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => pickSide('back', e)} />
 
           <div style={s.tips}>
             <div style={s.tipTitle}>Lưu ý:</div>
             {[
-              'Chỉ CCCD gắn chip (12 số, cấp từ 2021) mới có mã QR',
-              'Quét đúng mã QR ở góc trên mặt trước, không phải mã ở mặt sau',
-              'Không đọc được QR → hệ thống tự nhận diện chữ trên ảnh (có cả quê quán)',
-              'Thông tin nhận diện từ ảnh cần đối chiếu lại trước khi lưu',
+              'Tải đủ 2 mặt CCCD — thiếu 1 mặt sẽ không quét được',
+              'Mặt trước có mã QR (CCCD gắn chip) sẽ cho thông tin chính xác nhất',
+              'Mặt sau cung cấp ngày cấp và đặc điểm nhận dạng',
+              'Thông tin nhận diện cần đối chiếu lại với thẻ trước khi lưu',
             ].map((t) => (
               <div key={t} style={s.tip}>✓ {t}</div>
             ))}
@@ -465,6 +498,12 @@ export default function ScanCCCD() {
                   <img src={preview} alt="Mặt trước CCCD" style={{ width: '100%', borderRadius: 8, border: '1px solid var(--border)' }} />
                   <div style={s.imgCaption}>Mặt trước</div>
                 </div>
+                {previewSau && (
+                  <div style={{ marginTop: 10 }}>
+                    <img src={previewSau} alt="Mặt sau CCCD" style={{ width: '100%', borderRadius: 8, border: '1px solid var(--border)' }} />
+                    <div style={s.imgCaption}>Mặt sau</div>
+                  </div>
+                )}
                 <div style={source === 'ocr' ? s.ocrBadgeWarn : s.ocrBadge}>
                   {uploadingAnh ? '⏳ Đang lưu ảnh...' : `${SOURCE_LABEL[source].badge} · ảnh sẽ lưu vào hồ sơ`}
                 </div>
@@ -643,6 +682,25 @@ function DebugPanel({ debug }) {
   );
 }
 
+// Ô tải 1 mặt CCCD (trước/sau) — hiện thumbnail khi đã chọn.
+function SideDrop({ label, hint, preview, onPick }) {
+  return (
+    <div style={s.sideDrop} onClick={onPick}>
+      {preview ? (
+        <img src={preview} alt={label} style={s.sideThumb} />
+      ) : (
+        <div style={{ fontSize: 30 }}>🪪</div>
+      )}
+      <div style={s.dropTitle}>{label}{preview ? ' ✓' : ''}</div>
+      <div style={s.dropSub}>{hint}</div>
+      <button className="btn-ghost" style={{ marginTop: 6, color: 'var(--accent)', fontSize: 12, padding: '5px 12px' }}
+        onClick={(e) => { e.stopPropagation(); onPick(); }}>
+        {preview ? 'Chọn lại' : 'Chọn ảnh'}
+      </button>
+    </div>
+  );
+}
+
 function Field({ label, error, span2, children }) {
   return (
     <div style={{ ...f.field, ...(span2 ? { gridColumn: 'span 2' } : {}) }} className={span2 ? 'cccd-field-span2' : ''}>
@@ -688,6 +746,8 @@ const s = {
   dropzone: { background: 'var(--bg1)', border: '2px dashed var(--border2)', borderRadius: 14, padding: '40px 18px', display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: 'pointer', textAlign: 'center', gap: 4 },
   dropTitle: { fontSize: 14, fontWeight: 600, color: 'var(--text1)', marginTop: 4 },
   dropSub: { fontSize: 12, color: 'var(--text3)' },
+  sideDrop: { background: 'var(--bg1)', border: '2px dashed var(--border2)', borderRadius: 14, padding: '18px 14px', display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: 'pointer', textAlign: 'center', gap: 4 },
+  sideThumb: { width: '100%', maxHeight: 140, objectFit: 'contain', borderRadius: 8, border: '1px solid var(--border)', background: '#000' },
   tips: { background: 'var(--bg1)', border: '1px solid var(--border)', borderRadius: 12, padding: '14px 18px' },
   tipTitle: { fontSize: 12, fontWeight: 700, color: 'var(--text2)', marginBottom: 8 },
   tip: { fontSize: 12, color: 'var(--text2)', padding: '3px 0', display: 'flex', alignItems: 'center', gap: 8 },

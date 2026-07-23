@@ -10,7 +10,12 @@ router.use(authenticate);
 
 router.post('/scan',
   requireRole('admin', 'quan_ly', 'vender'),
-  uploadOcr.single('anh'),
+  // `anh` = 1 ảnh (camera/QR); `anh_truoc` + `anh_sau` = quét đủ 2 mặt CCCD.
+  uploadOcr.fields([
+    { name: 'anh',       maxCount: 1 },
+    { name: 'anh_truoc', maxCount: 1 },
+    { name: 'anh_sau',   maxCount: 1 },
+  ]),
   asyncWrapper(ctrl.postScan),
 );
 

@@ -68,7 +68,7 @@ const s = {
     background: 'rgba(255,255,255,.18)', border: '1.5px solid rgba(255,255,255,.35)',
   },
   kind: { fontSize: 12, fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', opacity: .8 },
-  title: { margin: '4px 0 0', fontSize: 'clamp(22px,3.4vw,36px)', fontWeight: 800, lineHeight: 1.2 },
+  title: { margin: '4px 0 0', fontSize: 'clamp(22px,3.4vw,36px)', fontWeight: 800, lineHeight: 1.2, overflowWrap: 'anywhere' },
   meta: { marginTop: 6, fontSize: 14.5, opacity: .9 },
   desc: { margin: '18px 0 0', maxWidth: 640, fontSize: 14.5, lineHeight: 1.65, opacity: .9, whiteSpace: 'pre-line' },
   tags: { marginTop: 16, display: 'flex', flexWrap: 'wrap', gap: 8 },

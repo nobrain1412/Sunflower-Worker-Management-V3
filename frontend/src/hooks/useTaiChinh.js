@@ -35,6 +35,16 @@ export function useGiaoDichList(params = {}) {
   });
 }
 
+// ADMIN — giám sát khoản chi của kế toán & nhân viên (không gồm 'tieu').
+export function useGiamSatChi(params = {}, options = {}) {
+  return useQuery({
+    queryKey: ['tai-chinh', 'giam-sat-chi', params],
+    queryFn:  () => api.get('/tai-chinh/giam-sat-chi', { params }),
+    staleTime: 15_000,
+    ...options,
+  });
+}
+
 export function useTongThang(thang, nam) {
   return useQuery({
     queryKey: ['tai-chinh', 'tong', thang, nam],

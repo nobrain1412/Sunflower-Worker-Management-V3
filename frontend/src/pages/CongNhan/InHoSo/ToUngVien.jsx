@@ -1,4 +1,4 @@
-import { fmtDate, mediaUrl } from './utils';
+import { fmtDate, anh3x4 } from './utils';
 import logoDream from './logo-dream.png';
 
 // Tờ 1 — THÔNG TIN ỨNG VIÊN (biểu mẫu F-HC-02 của JY Plasteel Vina).
@@ -84,7 +84,7 @@ function MucDo() {
 }
 
 export default function ToUngVien({ cn, ngayIn }) {
-  const anh = mediaUrl(cn.anh_chan_dung);
+  const anh = anh3x4(cn.anh_chan_dung);
   const d = ngayIn ?? new Date();
   const ngayKy = `Hà Nam, ngày ${String(d.getDate()).padStart(2, '0')} `
     + `tháng ${String(d.getMonth() + 1).padStart(2, '0')} năm ${d.getFullYear()}`;
@@ -119,7 +119,7 @@ export default function ToUngVien({ cn, ngayIn }) {
           <tr style={{ height: `${H.r3}mm` }}>
             <td colSpan={3} rowSpan={5} style={{ ...o, padding: '1mm' }}>
               {anh
-                ? <img src={anh} alt="" style={{ width: '100%', height: '34mm', objectFit: 'contain' }} />
+                ? <img src={anh} alt="" style={{ display: 'block', margin: '0 auto', width: '25.5mm', height: '34mm', objectFit: 'cover', objectPosition: 'center top' }} />
                 : <N lines={['Ảnh', '|Photo']} sz={11} />}
             </td>
             <L span={3} xam lines={['Họ tên/', '|Name / 姓名']} />
