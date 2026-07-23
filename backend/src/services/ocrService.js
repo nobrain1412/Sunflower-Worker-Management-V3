@@ -207,5 +207,3 @@ async function scanDanhSach(imageBuffer) {
 }
 
 module.exports = { scanCCCD, scanCCCDSides, scanDanhSach };
-// Export thêm các hàm thuần để viết test (không dùng trong controller).
-module.exports._internal = { sanitizeCccdResult, mergeCccdSides };
