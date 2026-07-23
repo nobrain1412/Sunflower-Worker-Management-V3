@@ -1070,7 +1070,7 @@ export default function CongNhanDetail() {
         )}
 
         {/* Lịch sử tài chính */}
-        <div className="cn-detail-card cn-history-card" style={{ ...s.card, gridColumn: 'span 2' }}>
+        <div className="cn-detail-card cn-history-card" style={{ ...s.card, gridColumn: '1 / -1' }}>
           <div style={s.cardTitle}>Lịch sử thu/chi ({gdList.length})</div>
           {gdList.length === 0 ? (
             <div style={{ fontSize: 13, color: 'var(--text3)', fontStyle: 'italic' }}>Chưa có giao dịch nào</div>
@@ -1138,7 +1138,7 @@ export default function CongNhanDetail() {
         </div>
 
         {/* Bảng chấm công — 1 section per phan_cong nếu CN từng chuyển công ty */}
-        <div className="cn-detail-card" style={{ ...s.card, gridColumn: 'span 2' }}>
+        <div className="cn-detail-card" style={{ ...s.card, gridColumn: '1 / -1' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, borderBottom: '1px solid var(--border)', paddingBottom: 12 }}>
             <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text1)' }}>
               Bảng chấm công {ccThang}/{ccNam}
@@ -1222,7 +1222,7 @@ export default function CongNhanDetail() {
         </div>
 
         {/* Hệ thống — timeline + audit */}
-        <div className="cn-detail-card" style={{ ...s.card, gridColumn: 'span 2' }}>
+        <div className="cn-detail-card" style={{ ...s.card, gridColumn: '1 / -1' }}>
           <div style={s.cardTitle}>Hệ thống</div>
           <div className="cn-detail-fields" style={{ ...s.fields, marginBottom: 14 }}>
             <Field label="Ngày tạo" value={new Date(cn.created_at).toLocaleString('vi-VN')} />
