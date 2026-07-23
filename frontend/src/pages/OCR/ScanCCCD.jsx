@@ -94,6 +94,7 @@ export default function ScanCCCD() {
   const [pendingFile, setPendingFile] = useState(null); // ảnh đọc QR trượt — cho nhập tay
   const [debugInfo, setDebugInfo] = useState(null);      // ảnh đã tiền xử lý (gỡ lỗi)
   const [source, setSource]   = useState('qr');          // 'qr' | 'ocr' — nguồn dữ liệu đang review
+  const [degraded, setDegraded] = useState(false);       // true = OCR chạy engine dự phòng (Tesseract) kém chính xác
   const [busyMsg, setBusyMsg] = useState('');            // mô tả việc đang chạy ở stage processing
 
   const videoRef   = useRef(null);
@@ -191,11 +192,12 @@ export default function ScanCCCD() {
   // keepImage = true → hiển thị ảnh gốc ở bước review và lưu vào hồ sơ.
   async function applyOcrResult(file, { keepImage }) {
     try {
-      const { parsed, duongDanAnh } = await ocrCccdFromImage(file);
+      const { parsed, duongDanAnh, degraded: isDegraded } = await ocrCccdFromImage(file);
       if (!parsed) return false;
 
       setForm((cur) => ({ ...cur, ...parsed, cong_ty_id: cur.cong_ty_id || defaultCongTyId() }));
       setSource('ocr');
+      setDegraded(!!isDegraded);
       setPendingFile(null);
       if (keepImage) {
         setPreview(URL.createObjectURL(file));
@@ -261,10 +263,12 @@ export default function ScanCCCD() {
     } catch { qr = null; }
 
     try {
-      const { parsed, duongDanAnh, duongDanAnhSau } = await ocrCccdBothSides(frontFile, backFile);
+      const { parsed, duongDanAnh, duongDanAnhSau, degraded: isDegraded } = await ocrCccdBothSides(frontFile, backFile);
       // Gộp: OCR làm nền, QR định danh đè lên (QR chính xác hơn), giữ ngày cấp từ OCR mặt sau.
       const data = { ...(parsed ?? {}), ...(qr ?? {}) };
       setSource((data.ho_ten || data.cccd) ? (qr ? 'qr' : 'ocr') : 'manual');
+      // QR chính xác tuyệt đối → không cảnh báo dù OCR nền có degraded; chỉ cảnh báo khi dữ liệu thật sự đến từ OCR dự phòng.
+      setDegraded(!qr && !!isDegraded);
       setForm((cur) => ({ ...cur, ...data, cong_ty_id: cur.cong_ty_id || defaultCongTyId() }));
       setPreview(frontPreview);
       setPreviewSau(backPreview);
@@ -389,7 +393,7 @@ export default function ScanCCCD() {
     setPreviewSau(null);
     setFrontFile(null); setFrontPreview(null); setBackFile(null); setBackPreview(null);
     setPendingFile(null); setDebugInfo(null);
-    setSource('qr'); setBusyMsg('');
+    setSource('qr'); setDegraded(false); setBusyMsg('');
     handledRef.current = false;
     camTriesRef.current = 0;
     setStage('scan');
@@ -521,6 +525,12 @@ export default function ScanCCCD() {
           <div style={s.card}>
             <div style={s.cardTitle}>{SOURCE_LABEL[source].title}</div>
             <div style={s.cardSub}>{SOURCE_LABEL[source].sub}</div>
+            {degraded && (
+              <div style={s.degradedBox}>
+                ⚠ Dịch vụ nhận diện chính (FPT.AI) không phản hồi — đang dùng OCR dự phòng <b>độ chính xác thấp</b>.
+                Hãy kiểm tra kỹ TỪNG trường với ảnh thẻ, hoặc thử quét lại sau.
+              </div>
+            )}
             {submitErr && <div style={{ ...s.errorBox, marginBottom: 10 }}>{submitErr}</div>}
 
             <div className="cccd-fields-grid">
@@ -737,6 +747,7 @@ const s = {
   title: { fontSize: 15, fontWeight: 700, color: 'var(--text1)' },
   sub:   { fontSize: 12, color: 'var(--text2)', marginTop: 3 },
   errorBox: { background: 'rgba(255,95,114,0.12)', border: '1px solid var(--red)', borderRadius: 10, padding: '10px 14px', fontSize: 12, color: 'var(--red)' },
+  degradedBox: { background: 'rgba(255,179,68,0.12)', border: '1px solid var(--amber)', borderRadius: 10, padding: '10px 14px', fontSize: 12, color: 'var(--amber)', marginBottom: 12, lineHeight: 1.5 },
   scanCard: { display: 'flex', flexDirection: 'column', gap: 16 },
   modeTabs: { display: 'flex', gap: 10 },
   cameraWrap: { display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'center' },

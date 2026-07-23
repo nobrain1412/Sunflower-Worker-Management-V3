@@ -32,6 +32,7 @@ export async function ocrCccdFromImage(file) {
     parsed: usable ? parsed : null,
     duongDanAnh: res?.data?.duong_dan_anh ?? null,
     provider: ketQua._provider ?? '',
+    degraded: !!ketQua._degraded,   // true = đang chạy engine dự phòng (Tesseract) độ chính xác thấp
   };
 }
 
@@ -62,6 +63,7 @@ export async function ocrCccdBothSides(front, back) {
     duongDanAnh:    res?.data?.duong_dan_anh ?? null,
     duongDanAnhSau: res?.data?.duong_dan_anh_sau ?? null,
     provider: ketQua._provider ?? '',
+    degraded: !!ketQua._degraded,   // true = đang chạy engine dự phòng (Tesseract) độ chính xác thấp
   };
 }
 
