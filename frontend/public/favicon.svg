@@ -1,0 +1,14 @@
+<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="sfFlame" x1="32" y1="6" x2="32" y2="60" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#f7c948"/>
+      <stop offset=".55" stop-color="#f0a63a"/>
+      <stop offset="1" stop-color="#e58fb0"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="#0d0f14"/>
+  <g transform="translate(15 12) scale(0.97)">
+    <path d="M19 1 C 17 9, 9 13, 9 23 C 9 31, 15 37, 20 39 C 17 33, 22 30, 22 24 C 26 27, 27 32, 25 37 C 30 33, 32 26, 29 19 C 27 14, 21 12, 19 1 Z" fill="url(#sfFlame)"/>
+    <path d="M12 20 C 10 26, 12 32, 17 36 C 13 30, 15 25, 12 20 Z" fill="#e58fb0" opacity=".65"/>
+  </g>
+</svg>

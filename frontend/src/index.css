@@ -200,7 +200,9 @@ body {
   grid-template-columns: 1fr;
   gap: 16px;
 }
-@media (min-width: 900px) {
+/* 2 cột chỉ bật ở desktop thật (≥1100px). Điện thoại bật "desktop site"
+   thường report ~980px — giữ 1 cột để mỗi card/field nằm trọn 1 dòng, tránh cột trống. */
+@media (min-width: 1100px) {
   .cn-detail-grid {
     grid-template-columns: 1fr 1fr;
   }
@@ -289,14 +291,19 @@ body {
   .fab-mobile { display: flex !important; }
 
   /* ---- Dashboard ---- */
-  /* Mobile: mọi grid thông tin xếp 1 cột/ dòng cho dễ đọc, tránh vỡ layout */
+  /* Mobile: KPI xếp lưới 2x2 cho gọn, thấy được cả 4 chỉ số không cần cuộn nhiều */
   .kpi-grid {
-    grid-template-columns: 1fr !important;
+    grid-template-columns: repeat(2, 1fr) !important;
     gap: 10px !important;
   }
 
   .dash-row {
     flex-direction: column !important;
+  }
+
+  /* Ẩn note mô tả nhỏ trong trang Báo cáo trên điện thoại — bị bóp hẹp, chiếm nhiều chiều cao */
+  .report-desc {
+    display: none !important;
   }
 
   .dash-stat-filters {

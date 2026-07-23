@@ -305,6 +305,57 @@ async function findForExport({ scope, congTyId, chuaNghi, loaiCongNhan }) {
   return result.rows;
 }
 
+// Danh sách CN có ảnh CCCD để xuất Excel kèm ảnh — lọc theo công ty + tháng vào làm.
+// Chỉ lấy CN có ít nhất 1 mặt CCCD, tránh dòng trống trong file ảnh.
+async function findCccdImagesForExport({ scope, congTyId, thang, nam }) {
+  const conditions = [
+    'cn.deleted_at IS NULL',
+    '(cn.anh_cccd_truoc IS NOT NULL OR cn.anh_cccd_sau IS NOT NULL)',
+  ];
+  const params = [];
+
+  if (scope?.type === 'cong_ty') {
+    if (scope.ids?.length > 0) {
+      params.push(scope.ids);
+      conditions.push(`cn.cong_ty_id = ANY($${params.length}::int[])`);
+    } else {
+      conditions.push('1 = 0');
+    }
+  } else if (scope && scope.type !== 'all') {
+    conditions.push('1 = 0');
+  }
+
+  if (congTyId) {
+    params.push(congTyId);
+    conditions.push(`cn.cong_ty_id = $${params.length}`);
+  }
+  // Lọc theo tháng vào làm (kỳ báo cáo). Bỏ qua nếu không truyền tháng/năm.
+  if (Number.isInteger(thang) && Number.isInteger(nam)) {
+    params.push(thang);
+    const iThang = params.length;
+    params.push(nam);
+    const iNam = params.length;
+    conditions.push(
+      `cn.ngay_vao_lam IS NOT NULL
+       AND EXTRACT(MONTH FROM cn.ngay_vao_lam) = $${iThang}
+       AND EXTRACT(YEAR  FROM cn.ngay_vao_lam) = $${iNam}`,
+    );
+  }
+
+  const where = conditions.join(' AND ');
+  const result = await db.query(
+    `SELECT cn.id, cn.ho_ten, cn.cccd, cn.ngay_vao_lam,
+            cn.anh_cccd_truoc, cn.anh_cccd_sau,
+            ct.ten_cong_ty
+     FROM cong_nhan cn
+     LEFT JOIN cong_ty ct ON ct.id = cn.cong_ty_id
+     WHERE ${where}
+     ORDER BY ct.ten_cong_ty ASC NULLS LAST, cn.ho_ten ASC`,
+    params,
+  );
+  return result.rows;
+}
+
 // Lấy danh sách CN theo cong_ty_id (dùng cho scope quan_ly)
 async function findByCongTy(congTyIds) {
   if (!congTyIds?.length) return [];
@@ -341,4 +392,4 @@ async function softDelete(id) {
   return result.rows[0] || null;
 }
 
-module.exports = { findAll, findForExport, findById, findByCccd, create, update, updateAnh, findByCongTy, softDelete, autoUpdateTrangThai };
+module.exports = { findAll, findForExport, findCccdImagesForExport, findById, findByCccd, create, update, updateAnh, findByCongTy, softDelete, autoUpdateTrangThai };

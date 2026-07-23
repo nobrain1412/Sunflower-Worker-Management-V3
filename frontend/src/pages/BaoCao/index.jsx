@@ -35,6 +35,10 @@ export default function BaoCao() {
   const [dsLoai, setDsLoai]         = useState('ca_hai'); // 'ca_hai' | 'chinh_thuc' | 'thoi_vu'
   const [dsErr, setDsErr]           = useState('');
 
+  // ── Bộ lọc cho báo cáo "Ảnh CCCD" (theo công ty + tháng vào làm) ──
+  const [cccdCty, setCccdCty] = useState('all');
+  const [cccdErr, setCccdErr] = useState('');
+
   function handleExport(id) {
     setLoading(id);
     setTimeout(() => setLoading(null), 2000);
@@ -64,6 +68,30 @@ export default function BaoCao() {
       URL.revokeObjectURL(url);
     } catch (err) {
       setDsErr(err?.message || 'Không xuất được file. Vui lòng thử lại.');
+    } finally {
+      setLoading(null);
+    }
+  }
+
+  async function exportAnhCccd() {
+    setCccdErr('');
+    setLoading('anh-cccd');
+    try {
+      const res = await api.get('/bao-cao/anh-cccd', {
+        params: { cong_ty_id: cccdCty, thang, nam },
+        responseType: 'blob',
+      });
+      const blob = res instanceof Blob ? res : new Blob([res]);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `anh-cccd_T${thang}-${nam}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setCccdErr(err?.message || 'Không xuất được file. Vui lòng thử lại.');
     } finally {
       setLoading(null);
     }
@@ -125,7 +153,7 @@ export default function BaoCao() {
           <div style={{ ...s.reportIcon, background: 'var(--accent2)1a', color: 'var(--accent2)' }}>👥</div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={s.reportTitle}>Danh sách công nhân</div>
-            <div style={s.reportDesc}>Hồ sơ công nhân theo công ty — lọc theo trạng thái nghỉ việc & loại hợp đồng</div>
+            <div className="report-desc" style={s.reportDesc}>Hồ sơ công nhân theo công ty — lọc theo trạng thái nghỉ việc & loại hợp đồng</div>
           </div>
           <span style={{ ...s.formatBadge, background: 'var(--accent2)15', color: 'var(--accent2)' }}>.xlsx</span>
         </div>
@@ -174,6 +202,54 @@ export default function BaoCao() {
         {dsErr && <div style={s.errBox}>⚠ {dsErr}</div>}
       </div>
 
+      {/* ── Ảnh CCCD — xuất Excel nhúng ảnh 2 mặt, lọc công ty + tháng vào làm ── */}
+      <div style={s.dsCard}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4 }}>
+          <div style={{ ...s.reportIcon, background: 'var(--teal)1a', color: 'var(--teal)' }}>🪪</div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={s.reportTitle}>Ảnh CCCD</div>
+            <div className="report-desc" style={s.reportDesc}>
+              Xuất Excel nhúng ảnh CCCD mặt trước & mặt sau — lọc theo công ty và tháng vào làm (kỳ ở bộ lọc trên).
+            </div>
+          </div>
+          <span style={{ ...s.formatBadge, background: 'var(--teal)15', color: 'var(--teal)' }}>.xlsx</span>
+        </div>
+
+        <div style={s.dsFilterRow}>
+          <div style={s.filterField}>
+            <label className="form-label">Công ty</label>
+            <select className="form-input" style={{ width: 240 }} value={cccdCty} onChange={(e) => setCccdCty(e.target.value)}>
+              <option value="all">{isQuanLy ? 'Tất cả công ty tôi quản lý' : 'Tất cả công ty'}</option>
+              {congTyOptions.map((ct) => <option key={ct.id} value={ct.id}>{ct.ten_cong_ty}</option>)}
+            </select>
+          </div>
+          <div style={s.filterField}>
+            <label className="form-label">Kỳ (tháng vào làm)</label>
+            <div className="form-input" style={{ width: 160, display: 'flex', alignItems: 'center', color: 'var(--text2)' }}>
+              Tháng <span style={{ fontFamily: "'JetBrains Mono', monospace", color: 'var(--accent)', marginLeft: 4 }}>{thang}/{nam}</span>
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+            <button
+              className="btn-primary"
+              style={{ padding: '9px 16px', fontSize: 12 }}
+              onClick={exportAnhCccd}
+              disabled={loading === 'anh-cccd'}
+            >
+              {loading === 'anh-cccd' ? (
+                <><span style={s.spinner} />Đang xuất...</>
+              ) : (
+                <>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="#fff" strokeWidth="2" strokeLinecap="round"/><polyline points="7 10 12 15 17 10" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><line x1="12" y1="15" x2="12" y2="3" stroke="#fff" strokeWidth="2" strokeLinecap="round"/></svg>
+                  Xuất .xlsx
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+        {cccdErr && <div style={s.errBox}>⚠ {cccdErr}</div>}
+      </div>
+
       {/* ── Hóa đơn KTX — tính từ ngày đầu tháng, chốt ngày cuối tháng ── */}
       {canKtx && (
         <div style={s.dsCard}>
@@ -181,7 +257,7 @@ export default function BaoCao() {
             <div style={{ ...s.reportIcon, background: 'var(--amber)1a', color: 'var(--amber)' }}>🏠</div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={s.reportTitle}>Hóa đơn KTX</div>
-              <div style={s.reportDesc}>
+              <div className="report-desc" style={s.reportDesc}>
                 Điện, nước, tiền phòng tháng <b>{thang}/{nam}</b> — chia cho từng công nhân theo số ngày ở
                 (tính từ ngày đầu tháng, chốt ngày cuối tháng). Mỗi khu KTX một sheet riêng,
                 kèm chỉ số điện/nước cũ–mới; phòng chưa nhập hoá đơn được tô vàng.
@@ -215,7 +291,7 @@ export default function BaoCao() {
             <div style={{ ...s.reportIcon, background: r.color + '1a', color: r.color }}>{r.icon}</div>
             <div style={s.reportInfo}>
               <div style={s.reportTitle}>{r.title}</div>
-              <div style={s.reportDesc}>{r.desc}</div>
+              <div className="report-desc" style={s.reportDesc}>{r.desc}</div>
               <div style={s.reportMeta}>
                 <span style={{ ...s.formatBadge, background: r.color + '15', color: r.color }}>{r.format}</span>
                 <span style={s.periodBadge}>T{thang}/{nam}</span>
@@ -246,6 +322,7 @@ export default function BaoCao() {
         <ul style={s.helpList}>
           <li><b>Danh sách công nhân</b>: chọn công ty (hoặc tất cả), lọc chỉ người chưa nghỉ việc và loại hợp đồng, rồi bấm Xuất .xlsx</li>
           <li>Quản lý chỉ xuất được công nhân thuộc công ty mình quản lý</li>
+          <li><b>Ảnh CCCD</b>: chọn công ty và kỳ (tháng/năm ở bộ lọc trên) — file Excel nhúng sẵn ảnh CCCD 2 mặt của công nhân vào làm trong tháng đó. Chỉ gồm CN đã có ảnh CCCD; tải nhiều ảnh nên có thể mất vài giây</li>
           <li><b>Hóa đơn KTX</b>: chọn tháng/năm ở bộ lọc trên; tiền được tính từ ngày đầu tháng và chốt tới ngày cuối tháng, chia theo số ngày mỗi công nhân ở</li>
           <li>Phòng <b>tô vàng</b> trong file là phòng chưa nhập hoá đơn tháng đó — điện/nước để trống, tiền phòng chỉ là tạm tính. Vào trang KTX → nút "💡 Hóa đơn" để nhập</li>
           <li>Chọn tháng và năm cần xuất cho các báo cáo theo kỳ ở bộ lọc phía trên</li>

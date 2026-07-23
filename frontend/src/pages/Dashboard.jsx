@@ -172,6 +172,7 @@ function AdminDashboard() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [expandedCty, setExpandedCty] = useState(null);
   const [statRange,   setStatRange]   = useState('hom_nay');
+  const [venderPage,  setVenderPage]  = useState(1);
   const isMobile = useIsMobile();
 
   const { data: dashRes, isLoading } = useDashboard();
@@ -250,6 +251,15 @@ function AdminDashboard() {
     return [...cnTheoVender, { id: null, ho_ten: 'Chưa rõ người tuyển', ...khongNguoiTuyen }];
   }, [cnTheoVender, khongNguoiTuyen]);
 
+  // Phân trang bảng vender — 10 người/trang
+  const VENDER_PER_PAGE = 10;
+  const venderTotalPages = Math.max(1, Math.ceil(venderRows.length / VENDER_PER_PAGE));
+  const venderPageSafe = Math.min(venderPage, venderTotalPages);
+  const venderRowsPaged = useMemo(
+    () => venderRows.slice((venderPageSafe - 1) * VENDER_PER_PAGE, venderPageSafe * VENDER_PER_PAGE),
+    [venderRows, venderPageSafe],
+  );
+
   // Group CN vào hôm nay theo công ty. Danh sách do BE lọc sẵn theo ngày vào làm —
   // trước đây lọc client-side từ "10 CN mới nhất" nên tối đa chỉ ra 10 người.
   const groupedByCty = cnVaoHomNay.reduce((acc, cn) => {
@@ -269,7 +279,7 @@ function AdminDashboard() {
 
       {/* Row 2: Donut phân bổ + Thống kê theo công ty */}
       <div className="dash-row">
-        <div style={{ ...s.card, flex: 1, minWidth: 220 }}>
+        <div style={{ ...s.card, flex: 1, minWidth: 0, overflow: 'hidden' }}>
           <div style={s.cardHeader}>
             <div style={s.cardTitle}>Phân bổ công ty</div>
           </div>
@@ -293,7 +303,7 @@ function AdminDashboard() {
         </div>
 
         {/* Thống kê công nhân theo công ty (Admin) */}
-        <div style={{ ...s.card, flex: 2, minWidth: 320 }}>
+        <div style={{ ...s.card, flex: 2, minWidth: 0 }}>
           <div style={s.cardHeader}>
             <div>
               <div style={s.cardTitle}>Thống kê công nhân</div>
@@ -439,7 +449,7 @@ function AdminDashboard() {
             <div style={md.venderList}>
               {venderRows.length === 0 ? (
                 <div style={{ padding: 14, fontSize: 12, color: 'var(--text3)' }}>Chưa có dữ liệu</div>
-              ) : venderRows.map((v) => (
+              ) : venderRowsPaged.map((v) => (
                 <div key={v.id ?? 'khong-nguoi-tuyen'} style={md.venderCard}
                   onClick={() => v.id && navigate(`/nhan-vien/${v.id}`)}>
                   <div style={md.cnTitle}>{tenVenderHienThi(v)}</div>
@@ -462,7 +472,7 @@ function AdminDashboard() {
               <tbody>
                 {venderRows.length === 0 ? (
                   <tr><td colSpan={3} style={{ ...s.td, color: 'var(--text3)', textAlign: 'center', padding: 20 }}>Chưa có dữ liệu</td></tr>
-                ) : venderRows.map((v) => (
+                ) : venderRowsPaged.map((v) => (
                   <tr key={v.id ?? 'khong-nguoi-tuyen'} style={s.tr}
                     onClick={() => v.id && navigate(`/nhan-vien/${v.id}`)}>
                     <td style={s.td}>
@@ -478,6 +488,21 @@ function AdminDashboard() {
                 ))}
               </tbody>
             </table>
+          )}
+          {venderRows.length > VENDER_PER_PAGE && (
+            <div style={s.venderPager}>
+              <button
+                style={{ ...s.pagerBtn, ...(venderPageSafe <= 1 ? s.pagerBtnDisabled : {}) }}
+                disabled={venderPageSafe <= 1}
+                onClick={() => setVenderPage((p) => Math.max(1, p - 1))}
+              >‹ Trước</button>
+              <span style={s.pagerInfo}>Trang {venderPageSafe}/{venderTotalPages}</span>
+              <button
+                style={{ ...s.pagerBtn, ...(venderPageSafe >= venderTotalPages ? s.pagerBtnDisabled : {}) }}
+                disabled={venderPageSafe >= venderTotalPages}
+                onClick={() => setVenderPage((p) => Math.min(venderTotalPages, p + 1))}
+              >Sau ›</button>
+            </div>
           )}
         </div>
       </div>
@@ -968,7 +993,7 @@ const s = {
   dot:        { display: 'inline-block', width: 8, height: 8, borderRadius: '50%', flexShrink: 0 },
   donutLegend:{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 12 },
   donutItem:  { display: 'flex', alignItems: 'center', gap: 8 },
-  donutLabel: { fontSize: 11, color: 'var(--text2)', flex: 1 },
+  donutLabel: { fontSize: 11, color: 'var(--text2)', flex: 1, minWidth: 0, overflowWrap: 'anywhere' },
   donutVal:   { fontSize: 12, fontWeight: 700, color: 'var(--text1)', fontFamily: "'JetBrains Mono', monospace" },
   table:      { width: '100%', borderCollapse: 'collapse' },
   th: { fontSize: 10, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', textAlign: 'left', padding: '0 12px 10px 0', borderBottom: '1px solid var(--border)' },
@@ -976,6 +1001,10 @@ const s = {
   td: { padding: '10px 12px 10px 0', verticalAlign: 'middle' },
   cnName: { fontSize: 13, fontWeight: 600, color: 'var(--text1)' },
   tdSub:  { fontSize: 12, color: 'var(--text2)' },
+  venderPager: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, paddingTop: 14, marginTop: 4, borderTop: '1px solid var(--border)' },
+  pagerBtn: { padding: '6px 14px', fontSize: 12, fontWeight: 600, color: 'var(--text1)', background: 'var(--bg3)', border: '1px solid var(--border2)', borderRadius: 8, cursor: 'pointer' },
+  pagerBtnDisabled: { opacity: 0.4, cursor: 'not-allowed' },
+  pagerInfo: { fontSize: 12, color: 'var(--text2)', fontFamily: "'JetBrains Mono', monospace", minWidth: 78, textAlign: 'center' },
   activityList: { display: 'flex', flexDirection: 'column', gap: 0 },
   actItem: { display: 'flex', gap: 12, padding: '10px 0', borderBottom: '1px solid var(--border)' },
   actDot:  { width: 8, height: 8, borderRadius: '50%', marginTop: 4, flexShrink: 0 },

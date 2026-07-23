@@ -20,6 +20,7 @@ const congNhanModel = require('../models/congNhanModel');
 const ktxModel = require('../models/ktxModel');
 const baoCaoSvc = require('../services/baoCaoService');
 const baoCaoKtxSvc = require('../services/baoCaoKtxService');
+const baoCaoAnhCccdSvc = require('../services/baoCaoAnhCccdService');
 const db = require('../utils/db');
 
 function toThangNam(req) {
@@ -73,6 +74,38 @@ router.get('/danh-sach-cong-nhan',
 
     const ts = new Date().toISOString().slice(0, 10).replace(/-/g, '');
     const fileName = `danh-sach-cong-nhan_${slugify(tenCongTy)}_${ts}.xlsx`;
+    res.set('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.set('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.send(Buffer.from(buffer));
+  }),
+);
+
+// Xuất Excel ẢNH CCCD — nhúng ảnh 2 mặt, lọc theo công ty + tháng vào làm.
+router.get('/anh-cccd',
+  requireRole('admin', 'ke_toan', 'quan_ly'),
+  scopeByRole,
+  asyncWrapper(async (req, res) => {
+    const { cong_ty_id } = req.query;
+    const congTyId = cong_ty_id && cong_ty_id !== 'all' ? parseInt(cong_ty_id, 10) : null;
+    if (cong_ty_id && cong_ty_id !== 'all' && (!Number.isInteger(congTyId) || congTyId <= 0)) {
+      const e = new Error('cong_ty_id không hợp lệ');
+      e.statusCode = 400; e.code = 'VALIDATION_ERROR'; throw e;
+    }
+    const { thang, nam } = toThangNam(req);
+
+    const rows = await congNhanModel.findCccdImagesForExport({
+      scope: req.scope, congTyId, thang, nam,
+    });
+
+    let tenCongTy = null;
+    if (congTyId) {
+      const ct = await db.query('SELECT ten_cong_ty FROM cong_ty WHERE id = $1', [congTyId]);
+      tenCongTy = ct.rows[0]?.ten_cong_ty ?? null;
+    }
+
+    const buffer = await baoCaoAnhCccdSvc.buildAnhCccd(rows, { tenCongTy, thang, nam });
+
+    const fileName = `anh-cccd_${slugify(tenCongTy)}_T${thang}-${nam}_${new Date().toISOString().slice(0, 10).replace(/-/g, '')}.xlsx`;
     res.set('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.set('Content-Disposition', `attachment; filename="${fileName}"`);
     res.send(Buffer.from(buffer));
