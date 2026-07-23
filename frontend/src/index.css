@@ -189,7 +189,8 @@ body {
   white-space: nowrap;
 }
 
-/* CongNhan detail — mobile-first grid (1 col mặc định, 2 col từ tablet trở lên) */
+/* CongNhan detail — LUÔN 1 cột: mỗi card 1 dòng, mỗi field 1 dòng, ở mọi độ rộng.
+   (Trước đây bật 2 cột ở desktop gây khó chịu khi xem trên điện thoại/desktop hẹp.) */
 .cn-detail-grid {
   display: grid;
   grid-template-columns: 1fr;
@@ -199,16 +200,6 @@ body {
   display: grid;
   grid-template-columns: 1fr;
   gap: 16px;
-}
-/* 2 cột chỉ bật ở desktop thật (≥1100px). Điện thoại bật "desktop site"
-   thường report ~980px — giữ 1 cột để mỗi card/field nằm trọn 1 dòng, tránh cột trống. */
-@media (min-width: 1100px) {
-  .cn-detail-grid {
-    grid-template-columns: 1fr 1fr;
-  }
-  .cn-detail-fields {
-    grid-template-columns: 1fr 1fr;
-  }
 }
 
 /* OCR ScanCCCD — mobile-first grids */
@@ -306,6 +297,12 @@ body {
     display: none !important;
   }
 
+  /* Header card thống kê: xếp dọc để tiêu đề nằm trọn 1 dòng, ô lọc xuống dưới, không tràn */
+  .dash-stat-header {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 12px;
+  }
   .dash-stat-filters {
     width: 100%;
     flex-wrap: wrap;

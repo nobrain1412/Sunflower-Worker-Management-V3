@@ -304,8 +304,8 @@ function AdminDashboard() {
 
         {/* Thống kê công nhân theo công ty (Admin) */}
         <div style={{ ...s.card, flex: 2, minWidth: 0 }}>
-          <div style={s.cardHeader}>
-            <div>
+          <div className="dash-stat-header" style={s.cardHeader}>
+            <div style={{ minWidth: 0 }}>
               <div style={s.cardTitle}>Thống kê công nhân</div>
               <div style={s.cardSub}>Tổng theo ngày & tháng — toàn hệ thống</div>
             </div>
