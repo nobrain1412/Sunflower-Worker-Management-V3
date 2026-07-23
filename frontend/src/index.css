@@ -198,7 +198,9 @@ body {
 }
 .cn-detail-fields {
   display: grid;
-  grid-template-columns: 1fr;
+  /* Field tự trải ngang lấp đầy card (desktop nhiều cột, mobile về 1 cột),
+     tránh khoảng trống lớn khi card chiếm trọn chiều rộng. */
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 16px;
 }
 

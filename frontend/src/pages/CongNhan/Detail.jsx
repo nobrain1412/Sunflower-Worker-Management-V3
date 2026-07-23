@@ -885,20 +885,12 @@ export default function CongNhanDetail() {
           <div className="cn-detail-fields" style={s.fields}>
             <Field label="Họ và tên" value={cn.ho_ten} />
             <Field label="CCCD" value={cn.cccd} />
+            <Field label="Ngày cấp CCCD" value={cn.ngay_cap_cccd ? new Date(cn.ngay_cap_cccd).toLocaleDateString('vi-VN') : null} />
             <Field label="Ngày sinh" value={cn.ngay_sinh ? new Date(cn.ngay_sinh).toLocaleDateString('vi-VN') : null} />
             <Field label="Giới tính" value={cn.gioi_tinh} />
             <Field label="Số điện thoại" value={cn.so_dien_thoai} />
             <Field label="Quê quán" value={cn.que_quan} />
             <Field label="Địa chỉ thường trú" value={cn.dia_chi_hien_tai} />
-          </div>
-        </div>
-
-        {/* Thông tin CCCD */}
-        <div className="cn-detail-card" style={s.card}>
-          <div style={s.cardTitle}>Thông tin CCCD</div>
-          <div className="cn-detail-fields" style={s.fields}>
-            <Field label="Số CCCD" value={cn.cccd} />
-            <Field label="Ngày cấp" value={cn.ngay_cap_cccd ? new Date(cn.ngay_cap_cccd).toLocaleDateString('vi-VN') : null} />
           </div>
         </div>
 
