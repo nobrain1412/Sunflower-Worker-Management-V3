@@ -713,7 +713,7 @@ function SideDrop({ label, hint, preview, onPick }) {
 
 function Field({ label, error, span2, children }) {
   return (
-    <div style={{ ...f.field, ...(span2 ? { gridColumn: 'span 2' } : {}) }} className={span2 ? 'cccd-field-span2' : ''}>
+    <div style={{ ...f.field, ...(span2 ? { gridColumn: '1 / -1' } : {}) }} className={span2 ? 'cccd-field-span2' : ''}>
       <label className="form-label">{label}</label>
       {children}
       {error && <div style={f.err}>{error}</div>}
@@ -770,7 +770,7 @@ const s = {
   noImg: { marginTop: 8, padding: '28px 14px', background: 'var(--bg2)', borderRadius: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' },
   ocrBadge: { display: 'inline-block', marginTop: 10, padding: '4px 10px', background: 'rgba(34,201,134,0.12)', color: 'var(--green)', borderRadius: 20, fontSize: 11, fontWeight: 600 },
   ocrBadgeWarn: { display: 'inline-block', marginTop: 10, padding: '4px 10px', background: 'rgba(255,179,68,0.14)', color: 'var(--amber)', borderRadius: 20, fontSize: 11, fontWeight: 600 },
-  divider: { gridColumn: 'span 2', height: 1, background: 'var(--border)', margin: '4px 0' },
+  divider: { gridColumn: '1 / -1', height: 1, background: 'var(--border)', margin: '4px 0' },
   reviewActions: { display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--border)', flexWrap: 'wrap' },
   doneCard: { background: 'var(--bg1)', border: '1px solid var(--border)', borderRadius: 14, padding: '56px 24px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 8 },
   doneIcon:    { fontSize: 52 },

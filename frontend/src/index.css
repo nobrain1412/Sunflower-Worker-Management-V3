@@ -234,9 +234,7 @@ body {
   .cccd-upload-grid {
     grid-template-columns: 1fr 1fr;
   }
-  .cccd-fields-grid {
-    grid-template-columns: 1fr 1fr;
-  }
+  /* .cccd-fields-grid giữ 1 cột ở mọi độ rộng — mỗi field 1 dòng (khớp trang chi tiết) */
 }
 @media (min-width: 900px) {
   .cccd-review-grid {
