@@ -28,7 +28,10 @@ const XAM = '#F2F2F2';
 const BD = '0.5pt solid #000';
 const o    = { border: BD, padding: '0.3mm 0.8mm', verticalAlign: 'middle', textAlign: 'center', overflow: 'hidden', lineHeight: 1.05 };
 const oXam = { ...o, background: XAM };
-const val  = { ...o, fontSize: pt(11), fontWeight: 700 };
+// Cỡ chữ ô điền lấy lớn nhất mà không phình dòng / tràn ngang theo lưới in gốc.
+// Dòng thấp nhất có ô điền là r34 (6.74mm) → vùng chữ ~16.4pt, line-height 1.05
+// ⇒ cỡ render tối đa ~15.6pt ⇒ pt(22) (≈15.1pt render, còn dư mọi chiều).
+const val  = { ...o, fontSize: pt(22), fontWeight: 700 };
 const tran = { border: 'none', padding: 0 };
 
 /**
@@ -136,11 +139,11 @@ export default function ToUngVien({ cn, ngayIn }) {
           {/* Quê quán chỉ có khi quét ảnh CCCD (OCR) — chưa có thì để trống viết tay */}
           <tr style={{ height: `${H.r3}mm` }}>
             <L span={3} xam lines={['Quê quán/', 'Hometown /|老家']} />
-            <V span={10} style={{ fontSize: pt(9) }}>{cn.que_quan}</V>
+            <V span={10} style={{ fontSize: pt(16) }}>{cn.que_quan}</V>
           </tr>
           <tr style={{ height: `${H.r3}mm` }}>
             <L span={3} xam lines={['Địa chỉ/', 'Address/ |地址']} />
-            <V span={10} style={{ fontSize: pt(9) }}>{cn.dia_chi_hien_tai}</V>
+            <V span={10} style={{ fontSize: pt(16) }}>{cn.dia_chi_hien_tai}</V>
           </tr>
           <tr style={{ height: `${H.r3}mm` }}>
             <L span={3} xam lines={['Điện thoại/', 'Phone/ |电话']} />
