@@ -31,6 +31,7 @@ const todoRoutes           = require('./routes/todo');
 const baoCaoRoutes         = require('./routes/baoCao');
 const tuyenDungRoutes      = require('./routes/tuyenDung');
 const traCuuCongRoutes     = require('./routes/traCuuCong');
+const xuatBangCongRoutes   = require('./routes/xuatBangCong');
 
 const app = express();
 
@@ -110,6 +111,7 @@ app.use('/api/cham-cong', chamCongRoutes);
 app.use('/api/bang-van-tay', bangVanTayRoutes);
 app.use('/api/hoat-dong', hoatDongRoutes);
 app.use('/api/todo',      todoRoutes);
+app.use('/api/bao-cao/xuat-bang-cong', xuatBangCongRoutes);
 app.use('/api/bao-cao',   baoCaoRoutes);
 
 // Health check

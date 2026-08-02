@@ -12,11 +12,26 @@
 export const MONTH_NAMES = ['T1','T2','T3','T4','T5','T6','T7','T8','T9','T10','T11','T12'];
 export const WEEKDAYS = ['CN','T2','T3','T4','T5','T6','T7'];
 
+// Màu chữ SỐ theo GIÁ TRỊ giờ:
+//   - 8h (đủ công chuẩn) → trung tính (trắng ở dark, đen ở light) qua var(--text1).
+//   - Giá trị khác → hue dịch đều theo số giờ, tương phản cao để nổi bật ngày lệch giờ.
+// Base hue tách theo ca: ngày = tông ấm, đêm = tông lạnh.
+export function hourColor(gio, night = false) {
+  const v = Number(gio) || 0;
+  if (v <= 0) return null;
+  if (v === 8) return 'var(--text1)';            // mốc chuẩn → theo theme
+  const base = night ? 205 : 30;                 // đêm: lam→tím · ngày: cam→vàng→lục
+  const hue = Math.round((base + v * 14) % 360);  // +14°/giờ, tương phản cao
+  return `hsl(${hue} 90% 60%)`;
+}
+
+// 4 khung giờ. `color` = màu NHẬN DIỆN DÒNG (nhóm theo ca: ngày ấm, đêm lạnh);
+// màu chữ số trong ô lấy theo hourColor(giá trị).
 export const BUCKETS = [
-  { key: 'gio_hc_ngay', label: 'HC ngày',  short: 'HC ngày',  color: 'var(--accent)' },
-  { key: 'gio_tc_ngay', label: 'TC ngày',  short: 'TC ngày',  color: 'var(--accent2)' },
-  { key: 'gio_hc_dem',  label: 'HC đêm',   short: 'HC đêm',   color: 'var(--teal)' },
-  { key: 'gio_tc_dem',  label: 'TC đêm',   short: 'TC đêm',   color: 'var(--amber)' },
+  { key: 'gio_hc_ngay', label: 'HC ngày', short: 'HCN', full: 'Hành chính ngày', night: false, color: 'hsl(38 88% 62%)' },
+  { key: 'gio_tc_ngay', label: 'TC ngày', short: 'TCN', full: 'Tăng ca ngày',    night: false, color: 'hsl(18 88% 63%)' },
+  { key: 'gio_hc_dem',  label: 'HC đêm',  short: 'HCD', full: 'Hành chính đêm',   night: true,  color: 'hsl(212 84% 66%)' },
+  { key: 'gio_tc_dem',  label: 'TC đêm',  short: 'TCD', full: 'Tăng ca đêm',     night: true,  color: 'hsl(258 72% 70%)' },
 ];
 
 export function daysInMonth(thang, nam) {

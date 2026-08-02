@@ -151,6 +151,12 @@ export default function ChamCong() {
             🔍 Tra cứu vân tay
           </button>
           {canImport && (
+            <button className="btn-ghost" onClick={() => navigate('/cham-cong/xuat-bang-cong')}
+              style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              📤 Xuất bảng công
+            </button>
+          )}
+          {canImport && (
             <button className="btn-primary" onClick={() => navigate('/cham-cong/import-excel')}
               style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               📊 Import vân tay

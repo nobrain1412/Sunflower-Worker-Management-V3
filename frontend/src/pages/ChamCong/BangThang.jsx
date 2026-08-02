@@ -2,13 +2,14 @@
  * Bảng tháng — lưới nhập trực tiếp.
  * CHIA THEO CÔNG TY: mỗi công ty 1 khối bảng riêng.
  *
- * Mỗi công nhân có 2 DÒNG: "HC" (giờ hành chính) và "TC" (tăng ca).
- * Bấm thẳng vào ô rồi gõ số từ bàn phím — KHÔNG còn popup chọn giờ.
- * Dòng HC nhận thêm 'P' (nghỉ phép) / 'V' (nghỉ việc).
- * Tạm thời KHÔNG phân biệt ca ngày / ca đêm — mọi giờ gộp vào 1 bucket.
+ * Mỗi công nhân có 4 DÒNG theo BUCKETS: HCN / TCN / HCD / TCD.
+ * Bấm thẳng vào ô rồi gõ số. Dòng đầu (HCN) nhận thêm 'P' (nghỉ phép) / 'V' (nghỉ việc).
+ * Màu chữ số mỗi dòng lấy từ bucketColor() — cách đều trên dải hue, thêm bucket vẫn phân biệt.
  */
 import { useMemo, useState, useEffect, useRef, Fragment } from 'react';
-import { WEEKDAYS, totalGio, isNghi } from './chamCongShared';
+import { WEEKDAYS, BUCKETS, hourColor, totalGio, isNghi } from './chamCongShared';
+
+const PV_COLOR = { P: 'var(--teal)', V: 'var(--red)' };
 
 function fmtNum(n) {
   const x = Number(n || 0);
@@ -16,47 +17,26 @@ function fmtNum(n) {
   return Number.isInteger(x) ? String(x) : String(x).replace(/\.0$/, '');
 }
 
-// Gộp ca ngày + ca đêm (không phân biệt) để hiển thị 1 con số.
-const hcHours = (c) => Number(c?.gio_hc_ngay || 0) + Number(c?.gio_hc_dem || 0);
-const tcHours = (c) => Number(c?.gio_tc_ngay || 0) + Number(c?.gio_tc_dem || 0);
-
-// Chuẩn hoá cell về day-only khi ghi (ca đêm = 0).
-function normalize(cell, { hc, tc, ca_lam }) {
-  return {
-    ...cell,
-    gio_hc_ngay: hc, gio_hc_dem: 0,
-    gio_tc_ngay: tc, gio_tc_dem: 0,
-    ca_lam,
-  };
-}
-
-// Dòng HC: cho phép 'P'/'V' hoặc số giờ.
-function parseHc(raw, cell) {
+// Ghi vào 1 bucket, giữ nguyên các bucket khác. Dòng đầu cho P/V (zero mọi giờ).
+function parseBucket(raw, cell, key, allowPV) {
   const v = String(raw).trim();
-  if (/^p$/i.test(v)) return normalize(cell, { hc: 0, tc: 0, ca_lam: 'nghi_phep' });
-  if (/^v$/i.test(v)) return normalize(cell, { hc: 0, tc: 0, ca_lam: 'nghi_viec' });
+  const base = cell || {};
+  if (allowPV && /^p$/i.test(v)) return { ...base, gio_hc_ngay: 0, gio_tc_ngay: 0, gio_hc_dem: 0, gio_tc_dem: 0, ca_lam: 'nghi_phep' };
+  if (allowPV && /^v$/i.test(v)) return { ...base, gio_hc_ngay: 0, gio_tc_ngay: 0, gio_hc_dem: 0, gio_tc_dem: 0, ca_lam: 'nghi_viec' };
   const n = v === '' ? 0 : Number(v);
-  const hc = Number.isFinite(n) && n >= 0 ? n : hcHours(cell);
-  return normalize(cell, { hc, tc: tcHours(cell), ca_lam: null });
+  const val = Number.isFinite(n) && n >= 0 ? n : Number(base[key] || 0);
+  return { ...base, [key]: val, ca_lam: null };
 }
 
-// Dòng TC: chỉ nhận số.
-function parseTc(raw, cell) {
-  const v = String(raw).trim();
-  const n = v === '' ? 0 : Number(v);
-  const tc = Number.isFinite(n) && n >= 0 ? n : tcHours(cell);
-  return normalize(cell, { hc: hcHours(cell), tc, ca_lam: cell?.ca_lam || null });
+function bucketDisplay(cell, key, isFirst) {
+  if (cell?.ca_lam === 'nghi_phep') return isFirst ? 'P' : '';
+  if (cell?.ca_lam === 'nghi_viec') return isFirst ? 'V' : '';
+  return fmtNum(Number(cell?.[key] || 0));
 }
 
-function hcDisplay(cell) {
-  if (cell?.ca_lam === 'nghi_phep') return 'P';
-  if (cell?.ca_lam === 'nghi_viec') return 'V';
-  return fmtNum(hcHours(cell));
-}
-const tcDisplay = (cell) => fmtNum(tcHours(cell));
-
-// Ô nhập giờ: giữ text cục bộ khi đang gõ (cho phép gõ "1.5"), đồng bộ lại khi mất focus.
-function HourInput({ display, disabled, dirty, placeholder, isHc, onCommit }) {
+// Ô nhập giờ: giữ text cục bộ khi đang gõ, đồng bộ lại khi mất focus.
+// Không dùng placeholder chữ — ô trống để trống hẳn.
+function HourInput({ display, disabled, dirty, color, allowText, onCommit }) {
   const [text, setText] = useState(display);
   const focused = useRef(false);
   useEffect(() => { if (!focused.current) setText(display); }, [display]);
@@ -65,17 +45,16 @@ function HourInput({ display, disabled, dirty, placeholder, isHc, onCommit }) {
     <input
       value={text}
       disabled={disabled}
-      placeholder={placeholder}
-      inputMode={isHc ? 'text' : 'decimal'}
+      inputMode={allowText ? 'text' : 'decimal'}
       onFocus={() => { focused.current = true; }}
       onBlur={() => { focused.current = false; setText(display); }}
       onChange={(e) => { setText(e.target.value); onCommit(e.target.value); }}
       style={{
         width: 42, height: 22, textAlign: 'center',
         background: disabled ? 'transparent' : 'var(--bg3)',
-        color: 'var(--text1)',
+        color: color || 'var(--text1)',
         border: `1px solid ${dirty ? 'var(--amber)' : 'var(--border)'}`,
-        borderRadius: 4, fontSize: 11, fontWeight: 600,
+        borderRadius: 4, fontSize: 11, fontWeight: 700,
         fontFamily: "'JetBrains Mono', monospace", padding: 0,
       }}
     />
@@ -103,7 +82,14 @@ export default function BangThang({ rows, dayList, thang, nam, getCell, setCell,
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={s.legend}>
-        <b>HC</b> = giờ hành chính · <b>TC</b> = tăng ca · gõ <b>P</b> = nghỉ phép, <b>V</b> = nghỉ việc (ở dòng HC)
+        {BUCKETS.map((b) => (
+          <span key={b.key} style={{ marginRight: 14 }}>
+            <b style={{ color: b.color }}>{b.short}</b> = {b.full.toLowerCase()}
+          </span>
+        ))}
+        · gõ <b style={{ color: PV_COLOR.P }}>P</b> = nghỉ phép,
+        {' '}<b style={{ color: PV_COLOR.V }}>V</b> = nghỉ việc (ở dòng {BUCKETS[0].short})
+        <div style={{ color: 'var(--text3)', marginTop: 2 }}>8h (đủ công) để màu trắng; ngày lệch giờ (4h/6h/10h…) tô màu nổi bật để dễ soi.</div>
       </div>
       {groups.map((g) => (
         <div key={g.cong_ty_id ?? 'none'} style={s.card}>
@@ -136,51 +122,51 @@ export default function BangThang({ rows, dayList, thang, nam, getCell, setCell,
                   for (const d of dayList) tong += totalGio(getCell(pcId, d));
                   return (
                     <Fragment key={pcId}>
-                      {/* Dòng HC */}
-                      <tr>
-                        <td rowSpan={2} style={{ ...s.tdName, ...s.stickyName }}>
-                          <div style={s.cnName}>{r.cong_nhan_ten}</div>
-                          {r.bo_phan && <div style={s.cnSub}>🔧 {r.bo_phan}</div>}
-                          {(r.ngay_ket_thuc || r.ngay_nghi_viec) && (
-                            <div style={{ fontSize: 10, color: 'var(--red)' }}>
-                              {r.ngay_ket_thuc ? `Kết thúc: ${r.ngay_ket_thuc.slice(0, 10)}` : ''}
-                              {r.ngay_nghi_viec ? ` · Nghỉ việc: ${r.ngay_nghi_viec.slice(0, 10)}` : ''}
-                            </div>
-                          )}
-                        </td>
-                        <td style={{ ...s.tdLabel, ...s.stickyLabel, color: 'var(--accent)' }}>HC</td>
-                        {dayList.map((d) => {
-                          const cell = getCell(pcId, d);
-                          return (
-                            <td key={d} style={s.tdDay}>
-                              <HourInput
-                                isHc display={hcDisplay(cell)} placeholder="HC"
-                                disabled={readOnly} dirty={isDirtyCell(pcId, d)}
-                                onCommit={(raw) => setCell(pcId, d, parseHc(raw, cell))}
-                              />
+                      {BUCKETS.map((b, bi) => {
+                        const isFirst = bi === 0;
+                        const isLast = bi === BUCKETS.length - 1;
+                        const rowBorder = isLast ? '1px solid var(--border2)' : undefined;
+                        return (
+                          <tr key={b.key}>
+                            {isFirst && (
+                              <td rowSpan={BUCKETS.length} style={{ ...s.tdName, ...s.stickyName }}>
+                                <div style={s.cnName}>{r.cong_nhan_ten}</div>
+                                {r.bo_phan && <div style={s.cnSub}>🔧 {r.bo_phan}</div>}
+                                {(r.ngay_ket_thuc || r.ngay_nghi_viec) && (
+                                  <div style={{ fontSize: 10, color: 'var(--red)' }}>
+                                    {r.ngay_ket_thuc ? `Kết thúc: ${r.ngay_ket_thuc.slice(0, 10)}` : ''}
+                                    {r.ngay_nghi_viec ? ` · Nghỉ việc: ${r.ngay_nghi_viec.slice(0, 10)}` : ''}
+                                  </div>
+                                )}
+                              </td>
+                            )}
+                            <td style={{ ...s.tdLabel, ...s.stickyLabel, color: b.color, borderBottom: rowBorder }}>
+                              {b.short}
                             </td>
-                          );
-                        })}
-                        <td rowSpan={2} style={{ ...s.td, fontFamily: "'JetBrains Mono', monospace", fontWeight: 700, color: 'var(--text1)', textAlign: 'center' }}>
-                          {tong.toFixed(1)}h
-                        </td>
-                      </tr>
-                      {/* Dòng TC */}
-                      <tr>
-                        <td style={{ ...s.tdLabel, ...s.stickyLabel, color: 'var(--accent2)', borderBottom: '1px solid var(--border2)' }}>TC</td>
-                        {dayList.map((d) => {
-                          const cell = getCell(pcId, d);
-                          return (
-                            <td key={d} style={{ ...s.tdDay, borderBottom: '1px solid var(--border2)' }}>
-                              <HourInput
-                                display={tcDisplay(cell)} placeholder="TC"
-                                disabled={readOnly || isNghi(cell)} dirty={isDirtyCell(pcId, d)}
-                                onCommit={(raw) => setCell(pcId, d, parseTc(raw, cell))}
-                              />
-                            </td>
-                          );
-                        })}
-                      </tr>
+                            {dayList.map((d) => {
+                              const cell = getCell(pcId, d);
+                              const disp = bucketDisplay(cell, b.key, isFirst);
+                              // Màu số THEO GIÁ TRỊ giờ (ngày 4h khác ngày 8h); P/V dùng màu riêng.
+                              const color = PV_COLOR[disp] || hourColor(Number(cell?.[b.key] || 0), b.night) || 'var(--text3)';
+                              const disabled = readOnly || (!isFirst && isNghi(cell));
+                              return (
+                                <td key={d} style={{ ...s.tdDay, borderBottom: rowBorder }}>
+                                  <HourInput
+                                    display={disp} color={color} allowText={isFirst}
+                                    disabled={disabled} dirty={isDirtyCell(pcId, d)}
+                                    onCommit={(raw) => setCell(pcId, d, parseBucket(raw, cell, b.key, isFirst))}
+                                  />
+                                </td>
+                              );
+                            })}
+                            {isFirst && (
+                              <td rowSpan={BUCKETS.length} style={{ ...s.td, fontFamily: "'JetBrains Mono', monospace", fontWeight: 700, color: 'var(--text1)', textAlign: 'center' }}>
+                                {tong.toFixed(1)}h
+                              </td>
+                            )}
+                          </tr>
+                        );
+                      })}
                     </Fragment>
                   );
                 })}
@@ -194,12 +180,12 @@ export default function BangThang({ rows, dayList, thang, nam, getCell, setCell,
 }
 
 const NAME_W = 150;
-const LABEL_W = 34;
+const LABEL_W = 40;
 
 const s = {
   card: { background: 'var(--bg1)', border: '1px solid var(--border)', borderRadius: 14, padding: 14 },
   empty: { padding: 60, textAlign: 'center', color: 'var(--text3)' },
-  legend: { fontSize: 11, color: 'var(--text2)' },
+  legend: { fontSize: 11, color: 'var(--text2)', lineHeight: 1.8 },
   groupHeader: { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 },
   groupTitle: { fontSize: 14, fontWeight: 700, color: 'var(--text1)' },
   groupCount: { fontSize: 11, color: 'var(--text3)' },

@@ -392,4 +392,19 @@ async function softDelete(id) {
   return result.rows[0] || null;
 }
 
-module.exports = { findAll, findForExport, findCccdImagesForExport, findById, findByCccd, create, update, updateAnh, findByCongTy, softDelete, autoUpdateTrangThai };
+// Chuyển nhiều CN sang trạng thái nghỉ việc cùng lúc (bỏ qua CN đã nghỉ).
+// @returns id[] các CN thực sự được cập nhật
+async function nghiViecHangLoat(ids, ngayNghiViec = null) {
+  if (!Array.isArray(ids) || ids.length === 0) return [];
+  const result = await db.query(
+    `UPDATE cong_nhan
+        SET trang_thai = 'nghi_viec',
+            ngay_nghi_viec = COALESCE($2::date, ngay_nghi_viec, CURRENT_DATE)
+      WHERE id = ANY($1::int[]) AND deleted_at IS NULL AND trang_thai <> 'nghi_viec'
+      RETURNING id`,
+    [ids, ngayNghiViec],
+  );
+  return result.rows.map((r) => r.id);
+}
+
+module.exports = { findAll, findForExport, findCccdImagesForExport, findById, findByCccd, create, update, updateAnh, findByCongTy, softDelete, autoUpdateTrangThai, nghiViecHangLoat };
