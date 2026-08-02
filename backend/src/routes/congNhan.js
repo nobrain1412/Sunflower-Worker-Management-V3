@@ -94,6 +94,7 @@ const taoMoiSchema = z.object({
   anh_cccd_truoc:   nullableStr(500),
   anh_cccd_sau:     nullableStr(500),
   anh_chan_dung:    nullableStr(500),
+  anh_vneid:        nullableStr(500),
   // Loại công nhân và thông tin lợi nhuận (chính thức)
   loai_cong_nhan:           z.enum(['thoi_vu', 'chinh_thuc']).default('thoi_vu').optional(),
   loi_nhuan_thang:          nullableNum(z.number().positive().nullable().optional()),
@@ -184,7 +185,7 @@ router.delete('/:id',
 
 // ─── Upload ảnh CCCD + chân dung ─────────────────────────────────────────────
 // POST /api/cong-nhan/:id/upload-anh
-// Form-data fields: cccd_mat_truoc, cccd_mat_sau, anh_chan_dung, anh_xe (optional)
+// Form-data fields: cccd_mat_truoc, cccd_mat_sau, anh_chan_dung, anh_xe, anh_vneid (optional)
 router.post('/:id/upload-anh',
   requireRole('admin', 'quan_ly'),
   uploadAnhCongNhan,
@@ -197,6 +198,7 @@ router.post('/:id/upload-anh',
       { field: 'cccd_mat_sau',   key: 'anh_cccd_sau' },
       { field: 'anh_chan_dung',  key: 'anh_chan_dung' },
       { field: 'anh_xe',         key: 'anh_xe' },
+      { field: 'anh_vneid',      key: 'anh_vneid' },
     ].filter(({ field }) => files[field]?.[0]);
 
     if (!toUpload.length) {

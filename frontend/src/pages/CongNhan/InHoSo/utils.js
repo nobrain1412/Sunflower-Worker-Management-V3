@@ -82,7 +82,7 @@ export function anh3x4(path) {
 
 /** Danh sách tờ sẽ in cho một công nhân — phiếu đồng ý chỉ áp dụng CN dưới 18. */
 export function cacToCanIn(cn) {
-  const to = ['ung_vien', 'do_tuoi'];
+  const to = ['ung_vien', 'dang_ky'];
   if (chuaDu18(cn)) to.push('dong_y');
   to.push('anh_cccd');
   return to;

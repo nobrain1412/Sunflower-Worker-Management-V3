@@ -1,8 +1,8 @@
 import { mediaUrl } from './utils';
 
-// Tờ 4 — Ảnh CCCD hai mặt in đúng khổ thẻ thật (85.6 × 54 mm) trên A4 dọc.
-
-const THE = { width: '85.6mm', height: '54mm' };
+// Tờ 4 — Ảnh CCCD hai mặt trên A4 dọc.
+// Phóng to 50% so với khổ thẻ thật (85.6 × 54 mm) cho dễ đọc khi in.
+const THE = { width: '128.4mm', height: '81mm' };
 
 const s = {
   page: {

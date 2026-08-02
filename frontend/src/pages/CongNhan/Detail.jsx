@@ -96,7 +96,7 @@ const fs = {
 // ─── Modal upload ảnh ─────────────────────────────────────
 function UploadAnhModal({ cn, onClose }) {
   const qc = useQueryClient();
-  const [files, setFiles] = useState({ cccd_mat_truoc: null, cccd_mat_sau: null, anh_chan_dung: null, anh_xe: null });
+  const [files, setFiles] = useState({ cccd_mat_truoc: null, cccd_mat_sau: null, anh_chan_dung: null, anh_vneid: null, anh_xe: null });
   const [previews, setPreviews] = useState({});
   const [uploading, setUploading] = useState(false);
   const [err, setErr] = useState('');
@@ -105,6 +105,7 @@ function UploadAnhModal({ cn, onClose }) {
     { uploadField: 'cccd_mat_truoc', dataField: 'anh_cccd_truoc', label: 'CCCD mặt trước' },
     { uploadField: 'cccd_mat_sau', dataField: 'anh_cccd_sau', label: 'CCCD mặt sau' },
     { uploadField: 'anh_chan_dung', dataField: 'anh_chan_dung', label: 'Ảnh chân dung' },
+    { uploadField: 'anh_vneid', dataField: 'anh_vneid', label: 'Ảnh VNeID' },
     // Chỉ cho upload ảnh xe khi công nhân thật sự có mượn xe
     ...(cn.muon_xe ? [{ uploadField: 'anh_xe', dataField: 'anh_xe', label: 'Ảnh xe mượn' }] : []),
   ];
@@ -857,11 +858,11 @@ export default function CongNhanDetail() {
       </div>
 
       {/* Ảnh CCCD */}
-      {(cn.anh_cccd_truoc || cn.anh_cccd_sau || cn.anh_chan_dung || cn.anh_xe) && (
+      {(cn.anh_cccd_truoc || cn.anh_cccd_sau || cn.anh_chan_dung || cn.anh_vneid || cn.anh_xe) && (
         <div style={s.card}>
           <div style={s.cardTitle}>Ảnh đính kèm</div>
           <div className="cn-attachment-grid" style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-            {[['anh_cccd_truoc','CCCD mặt trước'],['anh_cccd_sau','CCCD mặt sau'],['anh_chan_dung','Ảnh chân dung'],['anh_xe','Ảnh xe mượn']].map(([field, label]) =>
+            {[['anh_cccd_truoc','CCCD mặt trước'],['anh_cccd_sau','CCCD mặt sau'],['anh_chan_dung','Ảnh chân dung'],['anh_vneid','Ảnh VNeID'],['anh_xe','Ảnh xe mượn']].map(([field, label]) =>
               cn[field] ? (
                 <div key={field} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   <img

@@ -18,6 +18,7 @@ const ImportExcel    = lazy(() => import('./pages/CongNhan/ImportExcel'));
 const DuyetQueue     = lazy(() => import('./pages/CongNhan/DuyetQueue'));
 const InHoSo         = lazy(() => import('./pages/CongNhan/InHoSo'));
 const ScanCCCD       = lazy(() => import('./pages/OCR/ScanCCCD'));
+const ScanVNeID      = lazy(() => import('./pages/OCR/ScanVNeID'));
 const BulkReview     = lazy(() => import('./pages/OCR/BulkReview'));
 const ChamCong       = lazy(() => import('./pages/ChamCong/index'));
 const ImportChamCong = lazy(() => import('./pages/ChamCong/ImportExcel'));
@@ -118,6 +119,9 @@ export default function App() {
             {/* OCR: vender/quản lý/admin (ke_toan không tham gia tuyển) */}
             <Route path="/ocr/cccd" element={
               <RoleRoute allowedRoles={['admin','quan_ly','vender']}><ScanCCCD /></RoleRoute>
+            } />
+            <Route path="/ocr/vneid" element={
+              <RoleRoute allowedRoles={['admin','quan_ly','vender']}><ScanVNeID /></RoleRoute>
             } />
             <Route path="/ocr/danh-sach" element={
               <RoleRoute allowedRoles={['admin','quan_ly','vender']}><BulkReview /></RoleRoute>

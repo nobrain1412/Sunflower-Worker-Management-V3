@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQueries } from '@tanstack/react-query';
 import api from '../../../hooks/useApi';
 import ToUngVien from './ToUngVien';
-import ToDoTuoi from './ToDoTuoi';
+import ToDangKy from './ToDangKy';
 import ToDongY from './ToDongY';
 import ToAnhCccd from './ToAnhCccd';
 import { cacToCanIn } from './utils';
@@ -14,7 +14,7 @@ import './print.css';
 
 const TO = {
   ung_vien:  ToUngVien,
-  do_tuoi:   ToDoTuoi,
+  dang_ky:   ToDangKy,
   dong_y:    ToDongY,
   anh_cccd:  ToAnhCccd,
 };

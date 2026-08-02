@@ -11,7 +11,8 @@
  *   - Mã vân tay               → ma_van_tay
  *   - Vender / Người tuyển     → resolve theo ho_ten của users
  *   - Công ty                  → resolve theo ten_cong_ty
- *   - Bộ phận / Ghi chú        → ghi_chu
+ *   - Bộ phận / Phòng ban      → bo_phan
+ *   - Ghi chú                  → ghi_chu
  */
 const ExcelJS = require('exceljs');
 const db = require('../utils/db');
@@ -43,7 +44,8 @@ const HEADER_MAP = {
   'ma vender':               '__vender_name',
   'ma vd':                   '__vender_name',
   'cong ty':                 '__cong_ty_name',
-  'bo phan':                 'ghi_chu',
+  'bo phan':                 'bo_phan',
+  'phong ban':               'bo_phan',
   'ghi chu':                 'ghi_chu',
 };
 
@@ -62,7 +64,8 @@ const HEADER_FUZZY = [
   { field: 'dia_chi_hien_tai',       keywords: ['que quan', 'dia chi', 'noi o', 'thuong tru', 'address', 'que'] },
   { field: 'ma_van_tay',     keywords: ['ma van tay', 'van tay', 'ma vt', 'ma cham cong', 'fingerprint'] },
   { field: '__cong_ty_name', keywords: ['cong ty', 'doanh nghiep', 'cty', 'company'] },
-  { field: 'ghi_chu',        keywords: ['ghi chu', 'bo phan', 'note', 'remark', 'chu thich'] },
+  { field: 'bo_phan',        keywords: ['bo phan', 'phong ban', 'department', 'dept', 'to san xuat'] },
+  { field: 'ghi_chu',        keywords: ['ghi chu', 'note', 'remark', 'chu thich'] },
 ];
 
 const CCCD_REGEX = /^\d{12}$/;
@@ -633,14 +636,14 @@ async function insertCongNhan(d, trangThai, exec = db) {
   const ins = await exec.query(
     `INSERT INTO cong_nhan
        (ho_ten, cccd, ngay_sinh, dia_chi_hien_tai, so_dien_thoai,
-        ngay_vao_lam, ma_van_tay, ghi_chu,
+        ngay_vao_lam, ma_van_tay, ghi_chu, bo_phan,
         nguoi_tuyen_id, cong_ty_id, trang_thai)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
      RETURNING id`,
     [
       d.ho_ten, d.cccd ?? null, d.ngay_sinh ?? null, d.dia_chi_hien_tai ?? null,
       d.so_dien_thoai ?? null, d.ngay_vao_lam ?? null, d.ma_van_tay ?? null,
-      d.ghi_chu ?? null, d.nguoi_tuyen_id ?? null, d.cong_ty_id ?? null, trangThai,
+      d.ghi_chu ?? null, d.bo_phan ?? null, d.nguoi_tuyen_id ?? null, d.cong_ty_id ?? null, trangThai,
     ],
   );
   return ins.rows[0].id;
@@ -658,12 +661,13 @@ async function updateFillEmpty(id, d, exec = db) {
         ngay_vao_lam   = COALESCE(ngay_vao_lam, $5),
         ma_van_tay     = COALESCE(ma_van_tay, $6),
         ghi_chu        = COALESCE(ghi_chu, $7),
-        nguoi_tuyen_id = COALESCE(nguoi_tuyen_id, $8)
+        nguoi_tuyen_id = COALESCE(nguoi_tuyen_id, $8),
+        bo_phan        = COALESCE(bo_phan, $9)
       WHERE id = $1`,
     [
       id, d.ngay_sinh ?? null, d.dia_chi_hien_tai ?? null, d.so_dien_thoai ?? null,
       d.ngay_vao_lam ?? null, d.ma_van_tay ?? null, d.ghi_chu ?? null,
-      d.nguoi_tuyen_id ?? null,
+      d.nguoi_tuyen_id ?? null, d.bo_phan ?? null,
     ],
   );
 }
@@ -784,6 +788,7 @@ async function buildTemplate() {
     { header: 'SĐT',         key: 'sdt',        width: 14 },
     { header: 'Vender',      key: 'vender',     width: 16 },
     { header: 'Công ty',     key: 'cong_ty',    width: 24 },
+    { header: 'Bộ phận',     key: 'bo_phan',    width: 20 },
     { header: 'Ghi chú',     key: 'ghi_chu',    width: 24 },
   ];
   // Style header
@@ -824,7 +829,8 @@ async function buildTemplate() {
     ['Mã vân tay', 'Không',  'Mã máy chấm công, nếu có.', '3002645'],
     ['Vender',     'Không',  'Người tuyển — nhập HỌ TÊN hoặc MÃ VENDER (khớp với danh sách users, không phân biệt hoa/thường).', 'Thuý VT'],
     ['Công ty',    'Có',     'BẮT BUỘC khi thêm mới. Tên công ty — phải KHỚP với tên đã có trong hệ thống (không phân biệt hoa/thường).', 'Tên công ty (phải khớp DB)'],
-    ['Ghi chú',    'Không',  'Bộ phận / ghi chú tự do.', 'Tổ 2'],
+    ['Bộ phận',    'Không',  'Bộ phận / tổ / phòng ban của công nhân.', 'Tổ 2 / Đóng gói'],
+    ['Ghi chú',    'Không',  'Ghi chú tự do.', 'Ưu tiên ca ngày'],
   ];
   for (const r of rows) guide.addRow({ cot: r[0], bb: r[1], mota: r[2], vd: r[3] });
   guide.eachRow((row) => { row.alignment = { vertical: 'top', wrapText: true }; });

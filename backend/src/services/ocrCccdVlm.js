@@ -11,8 +11,9 @@ const SYSTEM_PROMPT =
   'Bạn là hệ thống trích xuất thông tin từ ảnh thẻ Căn cước công dân / Căn cước của Việt Nam. ' +
   'Chỉ trả về DUY NHẤT một object JSON hợp lệ, không markdown, không lời giải thích.';
 
-// Prompt xử lý được CẢ 2 mẫu (cũ "Căn cước công dân" + mới "Căn cước") và cả 2 mặt.
-const USER_PROMPT = `Đọc ảnh thẻ này (có thể là mặt trước hoặc mặt sau) và trích xuất vào đúng schema JSON sau:
+// Prompt xử lý được CẢ 2 mẫu (cũ "Căn cước công dân" + mới "Căn cước"), cả 2 mặt,
+// và ảnh chụp màn hình thông tin CCCD trong app (VNeID / Zalo) — cùng bộ trường.
+const USER_PROMPT = `Đọc ảnh này (thẻ CCCD mặt trước/mặt sau, hoặc ảnh chụp màn hình thông tin CCCD trong app VNeID/Zalo) và trích xuất vào đúng schema JSON sau:
 {
   "ho_ten":   "Họ và tên CHỦ THẺ (dòng chữ lớn dưới ảnh chân dung ở mặt trước)",
   "cccd":     "Số định danh cá nhân / Số CCCD — đúng 12 chữ số",

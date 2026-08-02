@@ -516,6 +516,14 @@ export default function CongNhan() {
                 window.location.href = '/ocr/cccd';
               },
             },
+            {
+              icon: '📱',
+              label: 'Quét ảnh VNeID',
+              sub: 'Đọc dữ liệu từ ảnh chụp CCCD trong app VNeID/Zalo',
+              action: () => {
+                window.location.href = '/ocr/vneid';
+              },
+            },
             ...(canFilterAll ? [{
               icon: '📊',
               label: 'Import từ Excel',

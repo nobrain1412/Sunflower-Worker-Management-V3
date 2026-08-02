@@ -45,7 +45,7 @@ const EMPTY_FORM = {
   ho_ten: '', cccd: '', ngay_sinh: '', gioi_tinh: '',
   que_quan: '', dia_chi: '', ngay_cap: '',
   ngay_vao_lam: isoToDdmmyyyy(todayIso()),
-  cong_ty_id: '', nguoi_tuyen_id: '', ma_van_tay: '',
+  cong_ty_id: '', nguoi_tuyen_id: '', ma_van_tay: '', bo_phan: '',
   trang_thai: '', // '' → suy ra mặc định theo vai trò (defaultTrangThai)
 };
 
@@ -359,6 +359,7 @@ export default function ScanCCCD() {
         ngay_cap_cccd:    ddmmyyyyToIso(form.ngay_cap),
         ngay_vao_lam:     ddmmyyyyToIso(form.ngay_vao_lam),
         ma_van_tay:       form.ma_van_tay || null,
+        bo_phan:          form.bo_phan || null,
         anh_cccd_truoc:   finalAnhUrl || null,
         anh_cccd_sau:     anhUrlSau || null,
         trang_thai:       trangThai,
@@ -597,6 +598,9 @@ export default function ScanCCCD() {
               </Field>
               <Field label="Mã vân tay (máy chấm công)" error={errors.ma_van_tay}>
                 <input className="form-input" value={form.ma_van_tay} onChange={(e) => setField('ma_van_tay', e.target.value)} placeholder="VD: 1024" maxLength={50} />
+              </Field>
+              <Field label="Bộ phận" error={errors.bo_phan}>
+                <input className="form-input" value={form.bo_phan} onChange={(e) => setField('bo_phan', e.target.value)} placeholder="VD: Tổ 1 / Đóng gói" maxLength={100} />
               </Field>
             </div>
 

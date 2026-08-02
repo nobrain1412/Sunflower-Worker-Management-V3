@@ -360,6 +360,7 @@ function PreviewTable({ rows, onEdit, onRemove }) {
             <th style={s.th}>Địa chỉ (tỉnh ở cuối)</th>
             <th style={s.th}>Vender (tên/mã)</th>
             <th style={s.th}>Công ty</th>
+            <th style={s.th}>Bộ phận</th>
             <th style={s.th}>Ngày vào</th>
             <th style={s.th}>Vấn đề</th>
           </tr>
@@ -427,6 +428,9 @@ function PreviewTable({ rows, onEdit, onRemove }) {
                 <td style={s.td}>
                   <EditCell value={r.cong_ty_name} onChange={(v) => onEdit(r.rowNumber, 'cong_ty_name', v)} />
                   {congTyNotFound && <span style={{ color: 'var(--red)', fontSize: 10 }}>không tìm thấy</span>}
+                </td>
+                <td style={s.td}>
+                  <EditCell value={r.data.bo_phan} onChange={(v) => onEdit(r.rowNumber, 'bo_phan', v)} placeholder="Tổ / phòng ban" />
                 </td>
                 <td style={s.td}>
                   <EditCell value={isoToDmy(r.data.ngay_vao_lam)} mono
