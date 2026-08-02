@@ -13,7 +13,7 @@ import { useCongTyList, useVenders } from '../../hooks/useCongNhan';
 import { useAuth } from '../../context/AuthContext';
 import BangThang from './BangThang';
 import {
-  MONTH_NAMES, daysInMonth, ymd,
+  MONTH_NAMES, kyChotCong,
   cellFromServer, emptyCell, equalCell, toEntry,
 } from './chamCongShared';
 
@@ -33,7 +33,16 @@ export default function ChamCong() {
   const qThang = thang;
   const qNam   = nam;
 
-  const params = { thang: qThang, nam: qNam };
+  const congTyArr = useCongTyList().data?.data ?? [];
+  const venderArr = useVenders().data?.data ?? [];
+
+  // Kỳ công theo NGÀY CHỐT của công ty đang chọn (mặc định 25 nếu chưa chọn/không có).
+  const cutoff = Number(
+    congTyArr.find((c) => String(c.id) === String(congTyId))?.ngay_chot_cong,
+  ) || 25;
+  const period = useMemo(() => kyChotCong(qThang, qNam, cutoff), [qThang, qNam, cutoff]);
+
+  const params = { thang: qThang, nam: qNam, tu: period.tu, den: period.den };
   if (congTyId) params.cong_ty_id = congTyId;
   if (nguoiTuyenId) params.nguoi_tuyen_id = nguoiTuyenId;
 
@@ -43,8 +52,6 @@ export default function ChamCong() {
 
   const { data: res, isLoading } = useChamCongThang(params, { enabled: !adminChuaChonCty });
   const rows = res?.data ?? [];
-  const congTyArr = useCongTyList().data?.data ?? [];
-  const venderArr = useVenders().data?.data ?? [];
 
   // edits[phan_cong_id][day] = cell
   const [edits, setEdits] = useState({});
@@ -54,10 +61,7 @@ export default function ChamCong() {
   // Đổi tháng/filter → bỏ edits chưa lưu
   useEffect(() => { setEdits({}); }, [qThang, qNam, congTyId, nguoiTuyenId]);
 
-  const dayList = useMemo(
-    () => Array.from({ length: daysInMonth(qThang, qNam) }, (_, i) => i + 1),
-    [qThang, qNam],
-  );
+  const dayList = period.days; // [{ y, m, d, dow, iso }] theo kỳ chốt công
 
   const filtered = useMemo(() => {
     if (!search) return rows;
@@ -67,13 +71,13 @@ export default function ChamCong() {
       || (r.ten_cong_ty || '').toLowerCase().includes(q));
   }, [rows, search]);
 
-  // pcId → day → server cc
+  // pcId → 'YYYY-MM-DD' → server cc (key theo ngày ISO vì kỳ vắt qua 2 tháng)
   const ccMap = useMemo(() => {
     const out = {};
     for (const r of rows) {
       out[r.phan_cong_id] = {};
       for (const cc of (r.cham_cong || [])) {
-        out[r.phan_cong_id][Number((cc.ngay || '').slice(-2))] = cc;
+        if (cc.ngay) out[r.phan_cong_id][cc.ngay] = cc;
       }
     }
     return out;
@@ -116,8 +120,8 @@ export default function ChamCong() {
 
     setSaving(true);
     const results = await Promise.allSettled(pcIds.map((pcId) => {
-      const entries = Object.entries(edits[pcId]).map(([d, cell]) => ({
-        ngay: ymd(qThang, qNam, Number(d)),
+      const entries = Object.entries(edits[pcId]).map(([dayKey, cell]) => ({
+        ngay: dayKey, // dayKey đã là 'YYYY-MM-DD'
         ...toEntry(cell),
       }));
       return upsert.mutateAsync({ phan_cong_id: Number(pcId), entries }).then(() => pcId);

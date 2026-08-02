@@ -202,8 +202,18 @@ async function upsertBatch(phanCongId, entries) {
 //   { type: 'cong_ty', ids: [...], userId }  → quản lý: CN thuộc công ty mình
 //   { type: 'vender'|'nguoi_tuyen', userId } → người tuyển: CHỈ CN do mình tuyển (read-only)
 // Trả về list CN + tổng giờ + chi tiết theo ngày
-async function findThangByScope({ thang, nam, scope, cong_ty_id, nguoi_tuyen_id }) {
-  const params = [thang, nam];
+async function findThangByScope({ thang, nam, tuNgay, denNgay, scope, cong_ty_id, nguoi_tuyen_id }) {
+  // Kỳ theo NGÀY CHỐT: nếu có tuNgay/denNgay thì lọc theo khoảng ngày (vắt qua 2 tháng),
+  // ngược lại giữ theo tháng dương lịch (tương thích ngược). Cả 2 nhánh dùng $1,$2.
+  const useRange = !!(tuNgay && denNgay);
+  const params = useRange ? [tuNgay, denNgay] : [thang, nam];
+  const ccDateFilter = useRange
+    ? 'cc.ngay BETWEEN $1::date AND $2::date'
+    : 'EXTRACT(MONTH FROM cc.ngay) = $1 AND EXTRACT(YEAR FROM cc.ngay) = $2';
+  const pcOverlap = useRange
+    ? `pc.ngay_bat_dau <= $2::date AND (pc.ngay_ket_thuc IS NULL OR pc.ngay_ket_thuc >= $1::date)`
+    : `pc.ngay_bat_dau <= make_date($2::int, $1::int, 1) + INTERVAL '1 month' - INTERVAL '1 day'
+       AND (pc.ngay_ket_thuc IS NULL OR pc.ngay_ket_thuc >= make_date($2::int, $1::int, 1))`;
   const conditions = ['cn.deleted_at IS NULL'];
 
   // Lọc theo công ty PHẢI bám vào phan_cong (pc.cong_ty_id), KHÔNG bám cong_nhan.cong_ty_id.
@@ -261,11 +271,9 @@ async function findThangByScope({ thang, nam, scope, cong_ty_id, nguoi_tuyen_id 
      JOIN cong_nhan cn ON cn.id = pc.cong_nhan_id
      LEFT JOIN cong_ty ct ON ct.id = pc.cong_ty_id
      LEFT JOIN cham_cong cc ON cc.phan_cong_id = pc.id
-       AND EXTRACT(MONTH FROM cc.ngay) = $1
-       AND EXTRACT(YEAR  FROM cc.ngay) = $2
+       AND ${ccDateFilter}
      WHERE ${where}
-       AND pc.ngay_bat_dau <= make_date($2::int, $1::int, 1) + INTERVAL '1 month' - INTERVAL '1 day'
-       AND (pc.ngay_ket_thuc IS NULL OR pc.ngay_ket_thuc >= make_date($2::int, $1::int, 1))
+       AND ${pcOverlap}
      GROUP BY pc.id, cn.id, ct.id
      ORDER BY cn.ho_ten ASC, pc.ngay_bat_dau ASC`,
     params,

@@ -38,6 +38,28 @@ export function daysInMonth(thang, nam) {
   return new Date(nam, thang, 0).getDate();
 }
 
+function isoOf(dt) {
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+}
+
+// Kỳ công theo NGÀY CHỐT: kết thúc ngày `ngayChot` của (thang/nam),
+// bắt đầu từ hôm sau ngày chốt của tháng trước. Vd chốt 25, tháng 6/2026 → 26/5 → 25/6.
+// Trả { tu, den (ISO), days: [{ y, m, d, dow, iso }] } theo đúng thứ tự ngày.
+export function kyChotCong(thang, nam, ngayChot = 25) {
+  const chot = Math.min(Math.max(Number(ngayChot) || 25, 1), 28); // kẹp 1..28 cho an toàn cuối tháng
+  const den = new Date(nam, thang - 1, chot);
+  const tu = new Date(nam, thang - 1, chot);
+  tu.setDate(tu.getDate() + 1);   // hôm sau ngày chốt
+  tu.setMonth(tu.getMonth() - 1); // của tháng trước
+  const days = [];
+  const cur = new Date(tu);
+  while (cur <= den) {
+    days.push({ y: cur.getFullYear(), m: cur.getMonth() + 1, d: cur.getDate(), dow: cur.getDay(), iso: isoOf(cur) });
+    cur.setDate(cur.getDate() + 1);
+  }
+  return { tu: isoOf(tu), den: isoOf(den), days };
+}
+
 export function ymd(thang, nam, day) {
   return `${nam}-${String(thang).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }

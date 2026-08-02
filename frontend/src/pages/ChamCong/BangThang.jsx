@@ -103,12 +103,13 @@ export default function BangThang({ rows, dayList, thang, nam, getCell, setCell,
                 <tr>
                   <th style={{ ...s.th, ...s.stickyName }}>Công nhân</th>
                   <th style={{ ...s.th, ...s.stickyLabel }}></th>
-                  {dayList.map((d) => {
-                    const dow = new Date(nam, thang - 1, d).getDay();
+                  {dayList.map((day, idx) => {
+                    const boundary = idx === 0 || day.d === 1; // đầu kỳ hoặc sang tháng mới
                     return (
-                      <th key={d} style={{ ...s.thDay, color: dow === 0 ? 'var(--red)' : 'var(--text3)' }}>
-                        <div style={{ fontSize: 9 }}>{WEEKDAYS[dow]}</div>
-                        <div>{d}</div>
+                      <th key={day.iso} style={{ ...s.thDay, color: day.dow === 0 ? 'var(--red)' : 'var(--text3)' }}>
+                        <div style={{ fontSize: 9 }}>{WEEKDAYS[day.dow]}</div>
+                        <div>{day.d}</div>
+                        <div style={{ fontSize: 8, color: 'var(--text3)', height: 10 }}>{boundary ? `Th${day.m}` : ''}</div>
                       </th>
                     );
                   })}
@@ -119,7 +120,7 @@ export default function BangThang({ rows, dayList, thang, nam, getCell, setCell,
                 {g.rows.map((r) => {
                   const pcId = r.phan_cong_id;
                   let tong = 0;
-                  for (const d of dayList) tong += totalGio(getCell(pcId, d));
+                  for (const day of dayList) tong += totalGio(getCell(pcId, day.iso));
                   return (
                     <Fragment key={pcId}>
                       {BUCKETS.map((b, bi) => {
@@ -143,18 +144,18 @@ export default function BangThang({ rows, dayList, thang, nam, getCell, setCell,
                             <td style={{ ...s.tdLabel, ...s.stickyLabel, color: b.color, borderBottom: rowBorder }}>
                               {b.short}
                             </td>
-                            {dayList.map((d) => {
-                              const cell = getCell(pcId, d);
+                            {dayList.map((day) => {
+                              const cell = getCell(pcId, day.iso);
                               const disp = bucketDisplay(cell, b.key, isFirst);
                               // Màu số THEO GIÁ TRỊ giờ (ngày 4h khác ngày 8h); P/V dùng màu riêng.
                               const color = PV_COLOR[disp] || hourColor(Number(cell?.[b.key] || 0), b.night) || 'var(--text3)';
                               const disabled = readOnly || (!isFirst && isNghi(cell));
                               return (
-                                <td key={d} style={{ ...s.tdDay, borderBottom: rowBorder }}>
+                                <td key={day.iso} style={{ ...s.tdDay, borderBottom: rowBorder }}>
                                   <HourInput
                                     display={disp} color={color} allowText={isFirst}
-                                    disabled={disabled} dirty={isDirtyCell(pcId, d)}
-                                    onCommit={(raw) => setCell(pcId, d, parseBucket(raw, cell, b.key, isFirst))}
+                                    disabled={disabled} dirty={isDirtyCell(pcId, day.iso)}
+                                    onCommit={(raw) => setCell(pcId, day.iso, parseBucket(raw, cell, b.key, isFirst))}
                                   />
                                 </td>
                               );

@@ -42,8 +42,13 @@ router.get('/', requireRole('admin', 'quan_ly', 'ke_toan', 'vender', 'cong_tac_v
     const congTyId    = req.query.cong_ty_id    ? toPositiveInt(req.query.cong_ty_id, 'Công ty') : null;
     const nguoiTuyen  = req.query.nguoi_tuyen_id ? toPositiveInt(req.query.nguoi_tuyen_id, 'Người tuyển') : null;
 
+    // Kỳ theo ngày chốt công (FE gửi tu/den = 'YYYY-MM-DD'). Chỉ nhận đúng định dạng ngày.
+    const isDate = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
+    const tuNgay  = isDate(req.query.tu)  ? req.query.tu  : null;
+    const denNgay = isDate(req.query.den) ? req.query.den : null;
+
     const rows = await chamCongModel.findThangByScope({
-      thang, nam, scope: req.scope, cong_ty_id: congTyId, nguoi_tuyen_id: nguoiTuyen,
+      thang, nam, tuNgay, denNgay, scope: req.scope, cong_ty_id: congTyId, nguoi_tuyen_id: nguoiTuyen,
     });
     sendSuccess(res, rows);
   }),

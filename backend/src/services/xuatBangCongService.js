@@ -47,18 +47,32 @@ function cellText(cell) {
   return String(v);
 }
 
-// Ô có phải NGÀY không (kể cả khi là công thức DATE(...) → dùng .result).
+// Parse chuỗi ngày dạng text → Date (UTC) hoặc null. Hỗ trợ yyyy-mm-dd và dd/mm/yyyy (hoặc -).
+function parseDateText(s) {
+  if (typeof s !== 'string') return null;
+  const t = s.trim();
+  let m = t.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+  if (m) return new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
+  m = t.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/); // dd/mm/yyyy
+  if (m) return new Date(Date.UTC(+m[3], +m[2] - 1, +m[1]));
+  return null;
+}
+
+// Ô có phải NGÀY không: Date thật, công thức DATE(...) (dùng .result), hoặc TEXT ngày.
 function asDate(cell) {
   const v = cell.value;
   if (v instanceof Date) return v;
-  if (v && typeof v === 'object' && v.result != null) {
-    const r = v.result;
-    if (r instanceof Date) return r;
-    if (typeof r === 'string' && /^\d{4}-\d{2}-\d{2}/.test(r)) {
-      const d = new Date(r);
-      if (!Number.isNaN(d.getTime())) return d;
+  if (v && typeof v === 'object') {
+    if (v.result != null) {
+      const r = v.result;
+      if (r instanceof Date) return r;
+      if (typeof r === 'string') { const d = parseDateText(r) || (/^\d{4}-\d{2}-\d{2}/.test(r) ? new Date(r) : null); if (d && !Number.isNaN(d.getTime())) return d; }
     }
+    if (v.text != null) return parseDateText(String(v.text));
+    if (Array.isArray(v.richText)) return parseDateText(v.richText.map((x) => x.text).join(''));
+    return null;
   }
+  if (typeof v === 'string') return parseDateText(v);
   return null;
 }
 
