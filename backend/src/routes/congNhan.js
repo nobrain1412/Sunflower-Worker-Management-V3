@@ -134,6 +134,8 @@ router.get('/noi-o/truy-cap', asyncWrapper(async (req, res) => {
   const phongTro = await phongTroModel.findAll({ active: true });
   sendSuccess(res, { ktx, phong_tro: phongTro });
 }));
+// Danh sách bộ phận (distinct) cho dropdown lọc — đặt trước '/:id' để không bị nuốt.
+router.get('/bo-phan/danh-sach', ctrl.getBoPhanList);
 router.get('/:id', ctrl.getChiTiet);
 
 // Tuyển CN: tất cả role đều được (nguoi_tuyen_id tự động = người đăng nhập)

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useCongNhanList, useVenders, useCongTyList, useXoaCongNhan, useDuyetCongNhan } from '../../hooks/useCongNhan';
+import { useCongNhanList, useVenders, useCongTyList, useBoPhanList, useXoaCongNhan, useDuyetCongNhan } from '../../hooks/useCongNhan';
 import { useTinhList } from '../../hooks/useProvinces';
 import { useAuth } from '../../context/AuthContext';
 import AddCongNhanModal from './AddModal';
@@ -241,6 +241,7 @@ export default function CongNhan() {
   const [congTyId, setCongTyId]       = useState(saved.congTyId ?? '');
   const [tinh,     setTinh]           = useState(saved.tinh ?? '');
   const [ngay,     setNgay]           = useState(saved.ngay ?? '');
+  const [boPhan,   setBoPhan]         = useState(saved.boPhan ?? '');
   const [sortBy,   setSortBy]         = useState(saved.sortBy ?? 'ho_ten');
   const [sortOrder,setSortOrder]      = useState(saved.sortOrder ?? 'asc');
   const [page, setPage]               = useState(saved.page ?? 1);
@@ -277,9 +278,9 @@ export default function CongNhan() {
   useEffect(() => {
     sessionStorage.setItem(FILTER_KEY, JSON.stringify({
       search: searchInput, trangThai, trangThaiNoiO, venderId, congTyId,
-      tinh, ngay, sortBy, sortOrder, page,
+      tinh, ngay, boPhan, sortBy, sortOrder, page,
     }));
-  }, [searchInput, trangThai, trangThaiNoiO, venderId, congTyId, tinh, ngay, sortBy, sortOrder, page]);
+  }, [searchInput, trangThai, trangThaiNoiO, venderId, congTyId, tinh, ngay, boPhan, sortBy, sortOrder, page]);
 
   const { data, isLoading, isError } = useCongNhanList({
     page, limit: 20, search, trang_thai: trangThai,
@@ -288,11 +289,13 @@ export default function CongNhan() {
     cong_ty_id: congTyId || undefined,
     tinh: tinh || undefined,
     ngay: ngay || undefined,
+    bo_phan: boPhan || undefined,
     sort: sortBy, order: sortOrder,
   });
 
   const venders   = useVenders().data?.data ?? [];
   const congTyArr = useCongTyList().data?.data ?? [];
+  const boPhanArr = useBoPhanList().data?.data ?? [];
   const { data: tinhList = [] } = useTinhList();
 
   const rows = data?.data ?? [];
@@ -346,7 +349,7 @@ export default function CongNhan() {
             <span>🖨</span>
             In hồ sơ
           </button>
-          {(trangThai || trangThaiNoiO || venderId || congTyId || tinh || ngay) && (
+          {(trangThai || trangThaiNoiO || venderId || congTyId || tinh || ngay || boPhan) && (
             <button
               className="btn-ghost"
               style={{ fontSize: 12, padding: '6px 10px' }}
@@ -357,6 +360,7 @@ export default function CongNhan() {
                 setCongTyId('');
                 setTinh('');
                 setNgay('');
+                setBoPhan('');
                 setPage(1);
               }}
             >
@@ -379,7 +383,7 @@ export default function CongNhan() {
           <b style={{ color: 'var(--text1)', fontFamily: "'JetBrains Mono', monospace" }}>{meta.total}</b> công nhân
           {trangThai && ` · ${STATUS_OPTIONS.find(o => o.value === trangThai)?.label}`}
         </span>
-        {(trangThaiNoiO || venderId || congTyId || tinh || ngay) && (
+        {(trangThaiNoiO || venderId || congTyId || tinh || ngay || boPhan) && (
           <span style={s.filterHint}>Đang áp dụng bộ lọc nâng cao</span>
         )}
       </div>
@@ -596,6 +600,17 @@ export default function CongNhan() {
               {tinhList.map((t) => <option key={t.code} value={t.name}>{t.name}</option>)}
             </select>
           </div>
+
+          {boPhanArr.length > 0 && (
+            <div style={bs.field}>
+              <label className="form-label">Bộ phận</label>
+              <select className="form-input" value={boPhan} onChange={(e) => { setBoPhan(e.target.value); setPage(1); }}>
+                <option value="">Tất cả bộ phận</option>
+                <option value={EMPTY}>— Chưa có bộ phận —</option>
+                {boPhanArr.map((bp) => <option key={bp} value={bp}>{bp}</option>)}
+              </select>
+            </div>
+          )}
 
           <div style={bs.field}>
             <label className="form-label">Ngày vào làm</label>

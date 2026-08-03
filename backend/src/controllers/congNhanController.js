@@ -21,6 +21,12 @@ const getDanhSach = asyncWrapper(async (req, res) => {
   sendSuccess(res, data, 'Thành công', 200, meta);
 });
 
+// Danh sách bộ phận (distinct) để đổ vào dropdown lọc ở màn danh sách CN
+const getBoPhanList = asyncWrapper(async (req, res) => {
+  const data = await congNhanService.danhSachBoPhan(req.scope);
+  sendSuccess(res, data);
+});
+
 const getChiTiet = asyncWrapper(async (req, res) => {
   const congNhan = await congNhanService.chiTiet(
     toPositiveInt(req.params.id, 'ID công nhân'),
@@ -94,4 +100,4 @@ const postGanCongTy = asyncWrapper(async (req, res) => {
   sendSuccess(res, result, `Đã gán công ty cho ${result.assigned} công nhân`);
 });
 
-module.exports = { getDanhSach, getChiTiet, postTaoMoi, putCapNhat, postDuyet, postTuChoi, deleteXoa, postGanCongTy };
+module.exports = { getDanhSach, getBoPhanList, getChiTiet, postTaoMoi, putCapNhat, postDuyet, postTuChoi, deleteXoa, postGanCongTy };

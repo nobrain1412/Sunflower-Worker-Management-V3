@@ -7,7 +7,7 @@ const db = require('../utils/db');
 
 // scope: { type: 'all' } | { type: 'vender', userId } | { type: 'cong_ty', ids: [] }
 // Scope 'cong_ty' yêu cầu bảng phan_cong (sẽ implement ở migration tiếp theo)
-async function findAll({ page = 1, limit = 20, sort = 'ho_ten', order = 'asc', trang_thai, trang_thai_noi_o, search, vender_id, cong_ty_id, tinh, ngay, scope }) {
+async function findAll({ page = 1, limit = 20, sort = 'ho_ten', order = 'asc', trang_thai, trang_thai_noi_o, search, vender_id, cong_ty_id, tinh, ngay, bo_phan, scope }) {
   const offset = (page - 1) * limit;
   // Map field FE gửi → biểu thức ORDER BY thật (gồm cả cột join công ty/vender).
   // Field lạ → fallback ho_ten. Tránh SQL injection (whitelist) + không hardcode prefix cn.
@@ -93,6 +93,14 @@ async function findAll({ page = 1, limit = 20, sort = 'ho_ten', order = 'asc', t
     conditions.push(`cn.ngay_vao_lam = $${params.length}`);
   }
 
+  // Lọc theo bộ phận (khớp chính xác). EMPTY = các CN chưa gán bộ phận.
+  if (bo_phan === EMPTY) {
+    conditions.push(`(cn.bo_phan IS NULL OR cn.bo_phan = '')`);
+  } else if (bo_phan) {
+    params.push(bo_phan);
+    conditions.push(`cn.bo_phan = $${params.length}`);
+  }
+
   const where = conditions.join(' AND ');
 
   const countResult = await db.query(
@@ -122,6 +130,39 @@ async function findAll({ page = 1, limit = 20, sort = 'ho_ten', order = 'asc', t
   );
 
   return { rows: rows.rows, total };
+}
+
+// Danh sách bộ phận (distinct) có trong hệ thống — phục vụ dropdown lọc.
+// Tôn trọng scope theo vai trò giống findAll để mỗi role chỉ thấy bộ phận
+// thuộc phạm vi CN mình được xem.
+async function distinctBoPhan(scope) {
+  const conditions = ["cn.deleted_at IS NULL", "cn.bo_phan IS NOT NULL", "cn.bo_phan <> ''"];
+  const params = [];
+
+  if (scope?.type === 'vender') {
+    params.push(scope.userId);
+    conditions.push(`cn.nguoi_tuyen_id = $${params.length}`);
+  } else if (scope?.type === 'cong_ty') {
+    const ors = [];
+    if (scope.ids?.length > 0) {
+      params.push(scope.ids);
+      ors.push(`cn.cong_ty_id = ANY($${params.length}::int[])`);
+    }
+    if (scope.userId) {
+      params.push(scope.userId);
+      ors.push(`cn.nguoi_tuyen_id = $${params.length}`);
+    }
+    conditions.push(ors.length > 0 ? `(${ors.join(' OR ')})` : `1 = 0`);
+  }
+
+  const result = await db.query(
+    `SELECT DISTINCT cn.bo_phan
+       FROM cong_nhan cn
+      WHERE ${conditions.join(' AND ')}
+      ORDER BY cn.bo_phan ASC`,
+    params,
+  );
+  return result.rows.map((r) => r.bo_phan);
 }
 
 async function findById(id) {
@@ -407,4 +448,4 @@ async function nghiViecHangLoat(ids, ngayNghiViec = null) {
   return result.rows.map((r) => r.id);
 }
 
-module.exports = { findAll, findForExport, findCccdImagesForExport, findById, findByCccd, create, update, updateAnh, findByCongTy, softDelete, autoUpdateTrangThai, nghiViecHangLoat };
+module.exports = { findAll, distinctBoPhan, findForExport, findCccdImagesForExport, findById, findByCccd, create, update, updateAnh, findByCongTy, softDelete, autoUpdateTrangThai, nghiViecHangLoat };

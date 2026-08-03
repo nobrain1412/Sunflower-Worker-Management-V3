@@ -36,6 +36,7 @@ async function danhSach(query, scope, vaiTro, viewerId) {
                 : (query.cong_ty_id ? parseInt(query.cong_ty_id, 10) : undefined),
     tinh:       query.tinh || undefined,
     ngay:       query.ngay || undefined,
+    bo_phan:    query.bo_phan || undefined,
     scope,
   });
 
@@ -43,6 +44,11 @@ async function danhSach(query, scope, vaiTro, viewerId) {
     data: sanitizeListForRole(rows, vaiTro, viewerId),
     meta: { page, limit, total, total_pages: Math.ceil(total / limit) },
   };
+}
+
+// Danh sách bộ phận (distinct) trong phạm vi quyền của người dùng — cho dropdown lọc.
+async function danhSachBoPhan(scope) {
+  return congNhanModel.distinctBoPhan(scope);
 }
 
 async function chiTiet(id, scope, vaiTro, viewerId) {
@@ -601,4 +607,4 @@ async function ganCongTyHangLoat({ ids, congTyId, trangThai, user, scope }) {
   return { assigned, skipped };
 }
 
-module.exports = { danhSach, chiTiet, taoMoi, capNhat, duyet, tuChoi, xoa, ganCongTyHangLoat };
+module.exports = { danhSach, danhSachBoPhan, chiTiet, taoMoi, capNhat, duyet, tuChoi, xoa, ganCongTyHangLoat };

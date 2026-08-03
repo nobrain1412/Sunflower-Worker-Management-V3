@@ -9,6 +9,15 @@ export function useCongNhanList(params = {}) {
   });
 }
 
+// Danh sách bộ phận (distinct) cho dropdown lọc ở màn danh sách công nhân
+export function useBoPhanList() {
+  return useQuery({
+    queryKey: ['cong-nhan', 'bo-phan'],
+    queryFn:  () => api.get('/cong-nhan/bo-phan/danh-sach'),
+    staleTime: 5 * 60_000,
+  });
+}
+
 export function useCongNhanDetail(id) {
   return useQuery({
     queryKey: ['cong-nhan', id],
