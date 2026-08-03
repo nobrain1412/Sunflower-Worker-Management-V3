@@ -46,6 +46,7 @@ export default function ScanVNeID() {
   const [form, setForm]   = useState(EMPTY_FORM);
   const [errors, setErrors]       = useState({});
   const [submitErr, setSubmitErr] = useState(null);
+  const [dup, setDup]             = useState(null); // trùng CCCD: { message, co_the_kich_hoat_lai, ... }
   const [scanErr, setScanErr]     = useState(null);
   const [createdName, setCreatedName] = useState('');
 
@@ -139,7 +140,7 @@ export default function ScanVNeID() {
     return errs;
   }
 
-  async function handleApprove() {
+  async function handleApprove({ kichHoatLai = false } = {}) {
     const errs = validateLocal();
     if (Object.keys(errs).length) { setErrors(errs); return; }
 
@@ -151,6 +152,7 @@ export default function ScanVNeID() {
     }
 
     setSubmitErr(null);
+    setDup(null);
     setErrors({});
     setStage('creating');
 
@@ -177,20 +179,35 @@ export default function ScanVNeID() {
       };
       if (congTyId) payload.cong_ty_id = parseInt(congTyId, 10);
       if (canPickVender && form.nguoi_tuyen_id) payload.nguoi_tuyen_id = parseInt(form.nguoi_tuyen_id, 10);
+      // Xác nhận kích hoạt lại CN đã nghỉ việc (trùng CCCD) thay vì báo lỗi
+      if (kichHoatLai) payload.kich_hoat_lai = true;
 
       await api.post('/cong-nhan', payload);
       setCreatedName(payload.ho_ten);
       setStage('done');
     } catch (err) {
-      const det = err?.details ?? err?.response?.data?.error?.details;
-      if (Array.isArray(det) && det.length) {
-        const map = { dia_chi_hien_tai: 'dia_chi', ngay_cap_cccd: 'ngay_cap' };
-        const fieldErrs = {};
-        for (const d of det) fieldErrs[map[d.field] ?? d.field] = d.message;
-        setErrors(fieldErrs);
-        setSubmitErr(`Có ${det.length} lỗi: ${det.map((d) => `${map[d.field] ?? d.field} (${d.message})`).join('; ')}`);
+      // Trùng CCCD: backend trả kèm thông tin CN cũ (đang làm ở đâu, đã nghỉ chưa)
+      // → hiển thị hộp xác nhận trực quan thay vì lỗi chung chung; CN đã nghỉ việc thì cho thêm lại.
+      const info = err?.code === 'DUPLICATE_CCCD' ? err?.details?.[0] : null;
+      if (info) {
+        setDup({ ...info, message: err.message });
       } else {
-        setSubmitErr(err?.message ?? 'Không tạo được công nhân');
+        // Lỗi nhập liệu (validate): map từng trường về đúng ô để hiện lỗi ngay tại field.
+        const det = err?.details ?? err?.response?.data?.error?.details;
+        const fieldDet = Array.isArray(det) ? det.filter((d) => d && d.field) : [];
+        if (fieldDet.length) {
+          const map = { dia_chi_hien_tai: 'dia_chi', ngay_cap_cccd: 'ngay_cap' };
+          const fieldErrs = {};
+          for (const d of fieldDet) fieldErrs[map[d.field] ?? d.field] = d.message;
+          setErrors(fieldErrs);
+          setSubmitErr(
+            fieldDet.length > 1
+              ? `Có ${fieldDet.length} trường chưa hợp lệ — vui lòng kiểm tra các ô được đánh dấu đỏ.`
+              : fieldDet[0].message,
+          );
+        } else {
+          setSubmitErr(err?.message ?? 'Không tạo được công nhân');
+        }
       }
       setStage('review');
     }
@@ -198,7 +215,7 @@ export default function ScanVNeID() {
 
   function resetAll() {
     setForm(EMPTY_FORM);
-    setErrors({}); setSubmitErr(null); setScanErr(null);
+    setErrors({}); setSubmitErr(null); setDup(null); setScanErr(null);
     setFile(null); setPreview(null); setAnhUrl(null);
     setDegraded(false); setSource('ocr');
     setStage('scan');
@@ -296,7 +313,27 @@ export default function ScanVNeID() {
                 Hãy kiểm tra kỹ TỪNG trường với ảnh, hoặc thử quét lại sau.
               </div>
             )}
-            {submitErr && <div style={{ ...s.errorBox, marginBottom: 10 }}>{submitErr}</div>}
+            {submitErr && !dup && <div style={{ ...s.errorBox, marginBottom: 10 }}>{submitErr}</div>}
+
+            {dup && (
+              <div style={s.dupBox}>
+                <div style={s.dupTitle}>⚠️ CCCD đã tồn tại trong hệ thống</div>
+                <div style={s.dupMsg}>{dup.message}</div>
+                {dup.co_the_kich_hoat_lai ? (
+                  <div style={s.dupActions}>
+                    <button className="btn-ghost" onClick={() => setDup(null)}>Đóng</button>
+                    <button className="btn-primary" onClick={() => handleApprove({ kichHoatLai: true })}>
+                      ↻ Thêm lại vào công ty
+                    </button>
+                  </div>
+                ) : (
+                  <div style={s.dupHint}>
+                    Công nhân này đang làm việc nên không thể thêm mới. Nếu cần chuyển về
+                    công ty của bạn, hãy liên hệ quản trị viên.
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="cccd-fields-grid">
               <Field label="Họ và tên *" error={errors.ho_ten}>
@@ -366,7 +403,7 @@ export default function ScanVNeID() {
 
             <div style={s.reviewActions}>
               <button className="btn-ghost" style={{ color: 'var(--red)' }} onClick={resetAll}>Quét lại</button>
-              <button className="btn-primary" onClick={handleApprove}>✓ Thêm vào hệ thống</button>
+              <button className="btn-primary" onClick={() => handleApprove()}>✓ Thêm vào hệ thống</button>
             </div>
           </div>
         </div>
@@ -419,6 +456,11 @@ const s = {
   sub:   { fontSize: 12, color: 'var(--text2)', marginTop: 3 },
   errorBox: { background: 'rgba(255,95,114,0.12)', border: '1px solid var(--red)', borderRadius: 10, padding: '10px 14px', fontSize: 12, color: 'var(--red)' },
   degradedBox: { background: 'rgba(255,179,68,0.12)', border: '1px solid var(--amber)', borderRadius: 10, padding: '10px 14px', fontSize: 12, color: 'var(--amber)', marginBottom: 12, lineHeight: 1.5 },
+  dupBox: { background: 'rgba(255,179,68,0.10)', border: '1px solid var(--amber)', borderRadius: 10, padding: '12px 14px', marginBottom: 12 },
+  dupTitle: { fontSize: 13, fontWeight: 700, color: 'var(--amber)', marginBottom: 6 },
+  dupMsg: { fontSize: 12, color: 'var(--text1)', lineHeight: 1.5 },
+  dupHint: { fontSize: 11, color: 'var(--text2)', lineHeight: 1.5, marginTop: 8 },
+  dupActions: { display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 12 },
   scanCard: { display: 'flex', flexDirection: 'column', gap: 16 },
   processing: { background: 'var(--bg1)', border: '1px solid var(--border)', borderRadius: 14, padding: '48px 14px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 },
   dropzone: { background: 'var(--bg1)', border: '2px dashed var(--border2)', borderRadius: 14, padding: '28px 18px', display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: 'pointer', textAlign: 'center', gap: 4 },
