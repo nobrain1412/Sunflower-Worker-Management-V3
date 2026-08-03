@@ -9,11 +9,14 @@ export function useCongNhanList(params = {}) {
   });
 }
 
-// Danh sách bộ phận (distinct) cho dropdown lọc ở màn danh sách công nhân
-export function useBoPhanList() {
+// Danh sách bộ phận (distinct) cho dropdown lọc ở màn danh sách công nhân.
+// congTyId (tuỳ chọn): chỉ lấy bộ phận thuộc công ty đó — tránh đổ bộ phận
+// của toàn bộ công ty khi người dùng đã chọn 1 công ty cụ thể.
+export function useBoPhanList(congTyId) {
+  const cong_ty_id = congTyId || undefined;
   return useQuery({
-    queryKey: ['cong-nhan', 'bo-phan'],
-    queryFn:  () => api.get('/cong-nhan/bo-phan/danh-sach'),
+    queryKey: ['cong-nhan', 'bo-phan', cong_ty_id ?? 'all'],
+    queryFn:  () => api.get('/cong-nhan/bo-phan/danh-sach', { params: { cong_ty_id } }),
     staleTime: 5 * 60_000,
   });
 }

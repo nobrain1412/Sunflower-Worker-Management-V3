@@ -47,8 +47,9 @@ async function danhSach(query, scope, vaiTro, viewerId) {
 }
 
 // Danh sách bộ phận (distinct) trong phạm vi quyền của người dùng — cho dropdown lọc.
-async function danhSachBoPhan(scope) {
-  return congNhanModel.distinctBoPhan(scope);
+// congTyId (tuỳ chọn): giới hạn bộ phận theo đúng công ty đang chọn.
+async function danhSachBoPhan(scope, congTyId = null) {
+  return congNhanModel.distinctBoPhan(scope, congTyId);
 }
 
 async function chiTiet(id, scope, vaiTro, viewerId) {

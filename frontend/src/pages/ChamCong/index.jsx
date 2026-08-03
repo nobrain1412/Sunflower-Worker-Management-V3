@@ -9,7 +9,7 @@
 import { useMemo, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useChamCongThang, useUpsertChamCong } from '../../hooks/useChamCong';
-import { useCongTyList, useVenders } from '../../hooks/useCongNhan';
+import { useCongTyList, useVenders, useBoPhanList } from '../../hooks/useCongNhan';
 import { useAuth } from '../../context/AuthContext';
 import BangThang from './BangThang';
 import {
@@ -28,13 +28,19 @@ export default function ChamCong() {
   const [nam, setNam]     = useState(now.getFullYear());
   const [congTyId, setCongTyId] = useState('');
   const [nguoiTuyenId, setNguoiTuyenId] = useState('');
+  const [boPhan, setBoPhan] = useState('');
   const [search, setSearch] = useState('');
+
+  // Sentinel lọc CN chưa gán bộ phận (khớp với danh sách CN)
+  const BO_PHAN_EMPTY = '__empty__';
 
   const qThang = thang;
   const qNam   = nam;
 
   const congTyArr = useCongTyList().data?.data ?? [];
   const venderArr = useVenders().data?.data ?? [];
+  // Bộ phận theo đúng công ty đang chọn (chưa chọn công ty → toàn bộ trong phạm vi quyền)
+  const boPhanArr = useBoPhanList(congTyId || undefined).data?.data ?? [];
 
   // Kỳ công theo NGÀY CHỐT của công ty đang chọn (mặc định 25 nếu chưa chọn/không có).
   const cutoff = Number(
@@ -60,16 +66,24 @@ export default function ChamCong() {
 
   // Đổi tháng/filter → bỏ edits chưa lưu
   useEffect(() => { setEdits({}); }, [qThang, qNam, congTyId, nguoiTuyenId]);
+  // Đổi công ty → bộ phận cũ có thể không thuộc công ty mới → bỏ lọc bộ phận
+  useEffect(() => { setBoPhan(''); }, [congTyId]);
 
   const dayList = period.days; // [{ y, m, d, dow, iso }] theo kỳ chốt công
 
   const filtered = useMemo(() => {
-    if (!search) return rows;
-    const q = search.toLowerCase();
-    return rows.filter((r) =>
-      (r.cong_nhan_ten || '').toLowerCase().includes(q)
-      || (r.ten_cong_ty || '').toLowerCase().includes(q));
-  }, [rows, search]);
+    const q = search.trim().toLowerCase();
+    return rows.filter((r) => {
+      if (boPhan === BO_PHAN_EMPTY) { if (r.bo_phan) return false; }
+      else if (boPhan && r.bo_phan !== boPhan) return false;
+      if (q) {
+        const hit = (r.cong_nhan_ten || '').toLowerCase().includes(q)
+          || (r.ten_cong_ty || '').toLowerCase().includes(q);
+        if (!hit) return false;
+      }
+      return true;
+    });
+  }, [rows, search, boPhan]);
 
   // pcId → 'YYYY-MM-DD' → server cc (key theo ngày ISO vì kỳ vắt qua 2 tháng)
   const ccMap = useMemo(() => {
@@ -185,6 +199,13 @@ export default function ChamCong() {
           <select className="form-input" style={s.select} value={nguoiTuyenId} onChange={(e) => setNguoiTuyenId(e.target.value)}>
             <option value="">— Mọi người tuyển —</option>
             {venderArr.map((v) => <option key={v.id} value={v.id}>{v.ho_ten}</option>)}
+          </select>
+        )}
+        {boPhanArr.length > 0 && (
+          <select className="form-input" style={s.select} value={boPhan} onChange={(e) => setBoPhan(e.target.value)}>
+            <option value="">— Mọi bộ phận —</option>
+            <option value={BO_PHAN_EMPTY}>— Chưa có bộ phận —</option>
+            {boPhanArr.map((bp) => <option key={bp} value={bp}>{bp}</option>)}
           </select>
         )}
         <input className="form-input" style={{ ...s.select, minWidth: 200 }} placeholder="Tìm tên CN / công ty"

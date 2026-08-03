@@ -21,9 +21,14 @@ const getDanhSach = asyncWrapper(async (req, res) => {
   sendSuccess(res, data, 'Thành công', 200, meta);
 });
 
-// Danh sách bộ phận (distinct) để đổ vào dropdown lọc ở màn danh sách CN
+// Danh sách bộ phận (distinct) để đổ vào dropdown lọc ở màn danh sách CN.
+// ?cong_ty_id=... → chỉ lấy bộ phận thuộc công ty đó (khi đã chọn công ty).
 const getBoPhanList = asyncWrapper(async (req, res) => {
-  const data = await congNhanService.danhSachBoPhan(req.scope);
+  const congTyId = req.query.cong_ty_id ? Number.parseInt(req.query.cong_ty_id, 10) : null;
+  const data = await congNhanService.danhSachBoPhan(
+    req.scope,
+    Number.isInteger(congTyId) && congTyId > 0 ? congTyId : null,
+  );
   sendSuccess(res, data);
 });
 

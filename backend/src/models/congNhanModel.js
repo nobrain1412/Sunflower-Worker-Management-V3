@@ -135,7 +135,9 @@ async function findAll({ page = 1, limit = 20, sort = 'ho_ten', order = 'asc', t
 // Danh sách bộ phận (distinct) có trong hệ thống — phục vụ dropdown lọc.
 // Tôn trọng scope theo vai trò giống findAll để mỗi role chỉ thấy bộ phận
 // thuộc phạm vi CN mình được xem.
-async function distinctBoPhan(scope) {
+// congTyId (tuỳ chọn): chỉ lấy bộ phận thuộc đúng công ty này (dùng khi đã
+// chọn công ty ở bộ lọc → không đổ bộ phận của công ty khác).
+async function distinctBoPhan(scope, congTyId = null) {
   const conditions = ["cn.deleted_at IS NULL", "cn.bo_phan IS NOT NULL", "cn.bo_phan <> ''"];
   const params = [];
 
@@ -153,6 +155,11 @@ async function distinctBoPhan(scope) {
       ors.push(`cn.nguoi_tuyen_id = $${params.length}`);
     }
     conditions.push(ors.length > 0 ? `(${ors.join(' OR ')})` : `1 = 0`);
+  }
+
+  if (congTyId) {
+    params.push(congTyId);
+    conditions.push(`cn.cong_ty_id = $${params.length}`);
   }
 
   const result = await db.query(

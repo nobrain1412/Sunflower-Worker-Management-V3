@@ -295,7 +295,16 @@ export default function CongNhan() {
 
   const venders   = useVenders().data?.data ?? [];
   const congTyArr = useCongTyList().data?.data ?? [];
-  const boPhanArr = useBoPhanList().data?.data ?? [];
+  // Bộ phận lọc theo đúng công ty đang chọn (bỏ '__empty__' vì đó không phải id thật)
+  const boPhanArr = useBoPhanList(congTyId && congTyId !== EMPTY ? congTyId : undefined).data?.data ?? [];
+
+  // Đổi công ty → bộ phận cũ có thể không còn thuộc công ty mới → bỏ lọc bộ phận.
+  // Bỏ qua lần chạy đầu để không xoá bộ lọc vừa khôi phục từ session.
+  const boQuaResetBoPhanDauTien = useRef(true);
+  useEffect(() => {
+    if (boQuaResetBoPhanDauTien.current) { boQuaResetBoPhanDauTien.current = false; return; }
+    setBoPhan('');
+  }, [congTyId]);
   const { data: tinhList = [] } = useTinhList();
 
   const rows = data?.data ?? [];
