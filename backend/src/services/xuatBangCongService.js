@@ -20,6 +20,8 @@
  *   bucket = { gio_hc_ngay, gio_tc_ngay, gio_hc_dem, gio_tc_dem }
  */
 const ExcelJS = require('exceljs');
+const JSZip = require('jszip');
+const { injectCells, mapSheetNameToPart } = require('./xlsxTemplateInject');
 
 // Chuẩn hoá header: bỏ dấu, đ→d, lowercase, gộp khoảng trắng.
 function norm(v) {
@@ -185,18 +187,25 @@ function num(x) {
   return n ? Math.round(n * 100) / 100 : null;
 }
 
-// Ghi giá trị vào ô nếu ô KHÔNG phải công thức (tránh đè công thức tổng lỡ nằm trong vùng ngày).
-function setIfNotFormula(cell, value) {
-  if (cell.formula || (cell.value && typeof cell.value === 'object' && cell.value.formula)) return;
-  cell.value = value === null ? null : value;
+// Ô có phải công thức không (để không đè lên công thức tổng lỡ nằm trong vùng ngày).
+function isFormulaCell(cell) {
+  return !!(cell.formula || (cell.value && typeof cell.value === 'object' && cell.value.formula));
 }
 
 /**
- * Đổ dữ liệu 1 sheet. Trả về thống kê { matched, filled }.
+ * Tính danh sách ô cần ghi cho 1 sheet — KHÔNG mutate workbook.
+ * Trả về { writes: [{ row, col, value }], matched }.
+ *   value: number | string | null  (null = để trống)
+ * Ô đang chứa công thức sẽ bị bỏ qua (giữ nguyên).
  */
-function pourSheet(ws, layout, dataByMa) {
+function sheetWrites(ws, layout, dataByMa) {
   const { dateCols, maCol, firstRow, rowsPerWorker, roleByOffset } = layout;
+  const writes = [];
   let matched = 0;
+  const push = (r, c, value) => {
+    if (isFormulaCell(ws.getCell(r, c))) return;
+    writes.push({ row: r, col: c, value });
+  };
   for (let r = firstRow; r <= ws.rowCount; r += rowsPerWorker) {
     const ma = cellText(ws.getCell(r, maCol)).trim();
     if (!ma) continue;
@@ -211,15 +220,27 @@ function pourSheet(ws, layout, dataByMa) {
         for (let off = 0; off < rowsPerWorker; off++) {
           const role = roleByOffset[off];
           if (!role) continue;
-          setIfNotFormula(ws.getCell(r + off, col), num(b[role]));
+          push(r + off, col, num(b[role]));
         }
       } else {
         // Khuôn 2 dòng: dòng 0 = điểm danh (D/N), dòng 1 = tổng giờ tăng ca.
-        setIfNotFormula(ws.getCell(r, col), markHanhChinh(b));
+        push(r, col, markHanhChinh(b));
         const ot = (Number(b.gio_tc_ngay) || 0) + (Number(b.gio_tc_dem) || 0);
-        setIfNotFormula(ws.getCell(r + 1, col), num(ot));
+        push(r + 1, col, num(ot));
       }
     }
+  }
+  return { writes, matched };
+}
+
+/**
+ * Đổ dữ liệu 1 sheet vào workbook ExcelJS (mutate). Giữ lại cho test/preview.
+ * Luồng xuất thật KHÔNG dùng hàm này (xem xuatBangCong — chèn thẳng vào XML).
+ */
+function pourSheet(ws, layout, dataByMa) {
+  const { writes, matched } = sheetWrites(ws, layout, dataByMa);
+  for (const { row, col, value } of writes) {
+    ws.getCell(row, col).value = value === null ? null : value;
   }
   return { matched };
 }
@@ -304,14 +325,18 @@ function buildDataMap(rows) {
  * @returns {{ buffer: Buffer, sheets: Array }}
  */
 async function xuatBangCong(templateBuffer, dataByMa) {
+  // 1) Đọc khuôn bằng ExcelJS CHỈ để dò layout + tính danh sách ô cần ghi.
+  //    (load để đọc thì an toàn; chỉ writeBuffer mới gây hỏng file.)
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(templateBuffer);
 
   const sheets = [];
+  const writesByName = new Map(); // tên sheet → [{ row, col, value }]
   for (const ws of wb.worksheets) {
     const layout = detectSheetLayout(ws);
     if (!layout) { sheets.push({ ten: ws.name, nhanDien: false }); continue; }
-    const { matched } = pourSheet(ws, layout, dataByMa);
+    const { writes, matched } = sheetWrites(ws, layout, dataByMa);
+    if (writes.length) writesByName.set(ws.name, writes);
     sheets.push({
       ten: ws.name,
       nhanDien: true,
@@ -322,8 +347,19 @@ async function xuatBangCong(templateBuffer, dataByMa) {
     });
   }
 
-  const buffer = await wb.xlsx.writeBuffer();
-  return { buffer: Buffer.from(buffer), sheets };
+  // 2) Mở file gốc như zip và chèn số vào XML của từng sheet — giữ nguyên byte
+  //    mọi phần khác. KHÔNG dùng ExcelJS.writeBuffer() (tránh bug serialize styles).
+  const zip = await JSZip.loadAsync(templateBuffer);
+  const nameToPart = await mapSheetNameToPart(zip);
+  for (const [name, writes] of writesByName) {
+    const part = nameToPart.get(name);
+    if (!part || !zip.file(part)) continue;
+    const xml = await zip.file(part).async('string');
+    zip.file(part, injectCells(xml, writes));
+  }
+
+  const buffer = await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
+  return { buffer, sheets };
 }
 
 module.exports = {
@@ -332,5 +368,6 @@ module.exports = {
   buildDataMap,
   detectSheetLayout,
   pourSheet,
+  sheetWrites,
   _internal: { norm, asDate, dateKey, markHanhChinh },
 };
