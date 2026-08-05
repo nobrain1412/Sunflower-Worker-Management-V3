@@ -3,6 +3,7 @@ import { useTaoMoiCongNhan, useCongTyList, useVenders, useNoiOTruyCap } from '..
 import { usePhongList, useGiuongList } from '../../hooks/useKtx';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../hooks/useApi';
+import DuplicateCccdResolver from '../../components/DuplicateCccdResolver';
 
 function todayDMY() {
   const d = new Date();
@@ -59,8 +60,10 @@ export default function AddCongNhanModal({ onClose }) {
   const [form, setForm]     = useState(() => ({ ...INIT }));
   const [errors, setErrors] = useState({});
   const [done, setDone]     = useState(false);
-  // Thông tin CN trùng CCCD (đã tồn tại) trả về từ backend để hỏi kích hoạt lại
+  // Thông tin CN trùng CCCD (đã tồn tại) trả về từ backend để hỏi cách xử lý
   const [dup, setDup]       = useState(null);
+  // Payload đã dựng ở lần submit trước — dùng cho bảng đối chiếu khi trùng CCCD
+  const [dupPayload, setDupPayload] = useState(null);
   const mutation = useTaoMoiCongNhan();
   const congTyArr = useCongTyList().data?.data ?? [];
   const venderArr = useVenders().data?.data ?? [];
@@ -123,13 +126,16 @@ export default function AddCongNhanModal({ onClose }) {
     return errs;
   }
 
-  async function handleSubmit({ kichHoatLai = false } = {}) {
+  async function handleSubmit({ kichHoatLai = false, hanhDong = null, ghiDeTruong = null } = {}) {
     const errs = validate();
     if (Object.keys(errs).length) { setErrors(errs); return; }
 
     const payload = { ho_ten: form.ho_ten, trang_thai: form.trang_thai };
     // Xác nhận kích hoạt lại CN đã nghỉ việc (trùng CCCD) thay vì báo lỗi
     if (kichHoatLai) payload.kich_hoat_lai = true;
+    // Hành động khi trùng CCCD: ghi đè / bổ sung / thêm mới riêng
+    if (hanhDong) payload.hanh_dong_trung = hanhDong;
+    if (ghiDeTruong) payload.ghi_de_truong = ghiDeTruong;
     ['cccd','gioi_tinh','que_quan','dia_chi_hien_tai','so_dien_thoai','ghi_chu',
      'ngan_hang','so_tai_khoan','ten_chu_tk','ma_van_tay','bo_phan']
       .forEach((k) => { if (form[k]) payload[k] = form[k]; });
@@ -195,6 +201,7 @@ export default function AddCongNhanModal({ onClose }) {
       const info = err.code === 'DUPLICATE_CCCD' ? err.details?.[0] : null;
       if (info) {
         setDup({ ...info, message: err.message });
+        setDupPayload(payload);
         setErrors({});
       } else {
         setErrors({ submit: err.message || 'Có lỗi xảy ra' });
@@ -439,26 +446,18 @@ export default function AddCongNhanModal({ onClose }) {
         {errors.submit && <div style={o.errBox}>{errors.submit}</div>}
 
         {dup && (
-          <div style={o.dupBox}>
-            <div style={o.dupTitle}>⚠️ CCCD đã tồn tại trong hệ thống</div>
-            <div style={o.dupMsg}>{dup.message}</div>
-            {dup.co_the_kich_hoat_lai ? (
-              <div style={o.dupActions}>
-                <button className="btn-ghost" onClick={() => setDup(null)}>Đóng</button>
-                <button
-                  className="btn-primary"
-                  onClick={() => handleSubmit({ kichHoatLai: true })}
-                  disabled={mutation.isPending}
-                >
-                  {mutation.isPending ? 'Đang xử lý...' : '↻ Thêm lại vào công ty'}
-                </button>
-              </div>
-            ) : (
-              <div style={o.dupHint}>
-                Công nhân này đang làm việc nên không thể thêm mới. Nếu cần chuyển về
-                công ty của bạn, hãy liên hệ quản trị viên.
-              </div>
-            )}
+          <div style={{ margin: '0 24px' }}>
+            <DuplicateCccdResolver
+              dup={dup}
+              nextData={dupPayload ?? {}}
+              congTyList={congTyArr}
+              busy={mutation.isPending}
+              onClose={() => { setDup(null); setDupPayload(null); }}
+              onKichHoatLai={() => handleSubmit({ kichHoatLai: true })}
+              onThemMoi={() => handleSubmit({ hanhDong: 'them_moi' })}
+              onBoSung={() => handleSubmit({ hanhDong: 'bo_sung' })}
+              onGhiDe={(fields) => handleSubmit({ hanhDong: 'ghi_de', ghiDeTruong: fields })}
+            />
           </div>
         )}
 

@@ -102,6 +102,10 @@ const taoMoiSchema = z.object({
   ngay_chinh_thuc: nullableDate('Ngày chính thức không hợp lệ (YYYY-MM-DD)'),
   // Xác nhận kích hoạt lại 1 CN đã nghỉ việc (trùng CCCD) thay vì tạo bản ghi mới
   kich_hoat_lai:   z.boolean().optional(),
+  // Hành động khi trùng CCCD (từ các cửa sổ thêm mới): ghi đè / bổ sung / thêm mới riêng
+  hanh_dong_trung: z.enum(['ghi_de', 'bo_sung', 'them_moi']).optional(),
+  // Danh sách trường được chọn để ghi đè khi hanh_dong_trung = 'ghi_de'
+  ghi_de_truong:   z.array(z.string().max(50)).max(40).optional(),
 });
 
 // PUT cho phép partial update (mọi trường optional, chấp nhận null để xoá)

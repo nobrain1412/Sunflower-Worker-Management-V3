@@ -6,6 +6,7 @@ import { useCongTyList, useVenders } from '../../hooks/useCongNhan';
 import { parseCccdQr } from '../../utils/parseCccdQr';
 import { decodeCccdQrFromImage } from '../../utils/decodeCccdImage';
 import { ocrCccdFromImage, ocrCccdBothSides, captureVideoFrame } from '../../utils/ocrCccdImage';
+import DuplicateCccdResolver from '../../components/DuplicateCccdResolver';
 
 // Camera quét bao lâu mà không thấy QR thì tự chuyển sang nhận diện ảnh (ms)
 const CAM_OCR_DELAY_MS = 12000;
@@ -75,7 +76,8 @@ export default function ScanCCCD() {
   const [form, setForm]   = useState(EMPTY_FORM);
   const [errors, setErrors]       = useState({});
   const [submitErr, setSubmitErr] = useState(null);
-  const [dup, setDup]             = useState(null); // trùng CCCD: { message, co_the_kich_hoat_lai, ... }
+  const [dup, setDup]             = useState(null); // trùng CCCD: { message, co_the_kich_hoat_lai, hien_tai, ... }
+  const [dupPayload, setDupPayload] = useState(null); // payload lần submit trước — cho bảng đối chiếu
   const [scanErr, setScanErr]     = useState(null);
   const [createdName, setCreatedName] = useState('');
 
@@ -327,7 +329,7 @@ export default function ScanCCCD() {
     return errs;
   }
 
-  async function handleApprove({ kichHoatLai = false } = {}) {
+  async function handleApprove({ kichHoatLai = false, hanhDong = null, ghiDeTruong = null } = {}) {
     const errs = validateLocal();
     if (Object.keys(errs).length) { setErrors(errs); return; }
 
@@ -350,38 +352,41 @@ export default function ScanCCCD() {
       try { finalAnhUrl = await uploadAnh(anhFile); } catch { /* bỏ qua */ }
     }
 
-    try {
-      const payload = {
-        ho_ten:           form.ho_ten.trim(),
-        cccd:             cleanCccd(form.cccd),
-        ngay_sinh:        ddmmyyyyToIso(form.ngay_sinh),
-        gioi_tinh:        ['Nam','Nữ','Khác'].includes(form.gioi_tinh) ? form.gioi_tinh : null,
-        que_quan:         form.que_quan || null,
-        dia_chi_hien_tai: form.dia_chi  || null,
-        ngay_cap_cccd:    ddmmyyyyToIso(form.ngay_cap),
-        ngay_vao_lam:     ddmmyyyyToIso(form.ngay_vao_lam),
-        ma_van_tay:       form.ma_van_tay || null,
-        bo_phan:          form.bo_phan || null,
-        anh_cccd_truoc:   finalAnhUrl || null,
-        anh_cccd_sau:     anhUrlSau || null,
-        trang_thai:       trangThai,
-      };
-      if (congTyId) payload.cong_ty_id = parseInt(congTyId, 10);
-      if (canPickVender && form.nguoi_tuyen_id) {
-        payload.nguoi_tuyen_id = parseInt(form.nguoi_tuyen_id, 10);
-      }
-      // Xác nhận kích hoạt lại CN đã nghỉ việc (trùng CCCD) thay vì báo lỗi
-      if (kichHoatLai) payload.kich_hoat_lai = true;
+    const payload = {
+      ho_ten:           form.ho_ten.trim(),
+      cccd:             cleanCccd(form.cccd),
+      ngay_sinh:        ddmmyyyyToIso(form.ngay_sinh),
+      gioi_tinh:        ['Nam','Nữ','Khác'].includes(form.gioi_tinh) ? form.gioi_tinh : null,
+      que_quan:         form.que_quan || null,
+      dia_chi_hien_tai: form.dia_chi  || null,
+      ngay_cap_cccd:    ddmmyyyyToIso(form.ngay_cap),
+      ngay_vao_lam:     ddmmyyyyToIso(form.ngay_vao_lam),
+      ma_van_tay:       form.ma_van_tay || null,
+      bo_phan:          form.bo_phan || null,
+      anh_cccd_truoc:   finalAnhUrl || null,
+      anh_cccd_sau:     anhUrlSau || null,
+      trang_thai:       trangThai,
+    };
+    if (congTyId) payload.cong_ty_id = parseInt(congTyId, 10);
+    if (canPickVender && form.nguoi_tuyen_id) {
+      payload.nguoi_tuyen_id = parseInt(form.nguoi_tuyen_id, 10);
+    }
+    // Xác nhận kích hoạt lại CN đã nghỉ việc (trùng CCCD) thay vì báo lỗi
+    if (kichHoatLai) payload.kich_hoat_lai = true;
+    // Hành động khi trùng CCCD: ghi đè / bổ sung / thêm mới riêng
+    if (hanhDong) payload.hanh_dong_trung = hanhDong;
+    if (ghiDeTruong) payload.ghi_de_truong = ghiDeTruong;
 
+    try {
       await api.post('/cong-nhan', payload);
       setCreatedName(payload.ho_ten);
       setStage('done');
     } catch (err) {
-      // Trùng CCCD: backend trả kèm thông tin CN cũ (đang làm ở đâu, đã nghỉ chưa)
-      // → hiển thị hộp xác nhận trực quan thay vì lỗi chung chung; CN đã nghỉ việc thì cho thêm lại.
+      // Trùng CCCD: backend trả kèm thông tin CN cũ + giá trị hiện tại để đối chiếu.
       const info = err?.code === 'DUPLICATE_CCCD' ? err?.details?.[0] : null;
       if (info) {
         setDup({ ...info, message: err.message });
+        setDupPayload(payload);
       } else {
         // Lỗi nhập liệu (validate): map từng trường về đúng ô để hiện lỗi ngay tại field.
         const det = err?.details ?? err?.response?.data?.error?.details;
@@ -406,7 +411,7 @@ export default function ScanCCCD() {
 
   function resetAll() {
     setForm(EMPTY_FORM);
-    setErrors({}); setSubmitErr(null); setDup(null); setScanErr(null);
+    setErrors({}); setSubmitErr(null); setDup(null); setDupPayload(null); setScanErr(null);
     setPreview(null); setAnhFile(null); setAnhUrl(null); setAnhUrlSau(null);
     setPreviewSau(null);
     setFrontFile(null); setFrontPreview(null); setBackFile(null); setBackPreview(null);
@@ -552,23 +557,17 @@ export default function ScanCCCD() {
             {submitErr && !dup && <div style={{ ...s.errorBox, marginBottom: 10 }}>{submitErr}</div>}
 
             {dup && (
-              <div style={s.dupBox}>
-                <div style={s.dupTitle}>⚠️ CCCD đã tồn tại trong hệ thống</div>
-                <div style={s.dupMsg}>{dup.message}</div>
-                {dup.co_the_kich_hoat_lai ? (
-                  <div style={s.dupActions}>
-                    <button className="btn-ghost" onClick={() => setDup(null)}>Đóng</button>
-                    <button className="btn-primary" onClick={() => handleApprove({ kichHoatLai: true })}>
-                      ↻ Thêm lại vào công ty
-                    </button>
-                  </div>
-                ) : (
-                  <div style={s.dupHint}>
-                    Công nhân này đang làm việc nên không thể thêm mới. Nếu cần chuyển về
-                    công ty của bạn, hãy liên hệ quản trị viên.
-                  </div>
-                )}
-              </div>
+              <DuplicateCccdResolver
+                dup={dup}
+                nextData={dupPayload ?? {}}
+                congTyList={congTyArr}
+                busy={stage === 'creating'}
+                onClose={() => { setDup(null); setDupPayload(null); }}
+                onKichHoatLai={() => handleApprove({ kichHoatLai: true })}
+                onThemMoi={() => handleApprove({ hanhDong: 'them_moi' })}
+                onBoSung={() => handleApprove({ hanhDong: 'bo_sung' })}
+                onGhiDe={(fields) => handleApprove({ hanhDong: 'ghi_de', ghiDeTruong: fields })}
+              />
             )}
 
             <div className="cccd-fields-grid">

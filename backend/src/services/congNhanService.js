@@ -6,6 +6,31 @@ const { sanitizeForRole, sanitizeListForRole } = require('../utils/sanitizeCongN
 // Trạng thái "đã đi làm" bắt buộc phải gán công ty (đợi việc / chờ duyệt thì không).
 const TRANG_THAI_CAN_CONG_TY = ['dang_lam', 'moi_vao'];
 
+// Các trường được phép ghi đè / bổ sung khi trùng CCCD (từ các cửa sổ thêm mới).
+// Cố tình KHÔNG gồm cccd (khỏi tự đụng dedup) và nguoi_tuyen_id (không đổi người
+// tuyển qua thao tác ghi đè — tránh vender vô tình cướp CN của người khác).
+const GHI_DE_FIELDS = [
+  'ho_ten', 'ngay_sinh', 'gioi_tinh', 'que_quan', 'dia_chi_hien_tai',
+  'so_dien_thoai', 'ngay_cap_cccd', 'cong_ty_id', 'ngay_vao_lam',
+  'ma_van_tay', 'bo_phan', 'ghi_chu',
+  'anh_cccd_truoc', 'anh_cccd_sau', 'anh_vneid', 'anh_chan_dung',
+];
+
+// Bổ sung = chỉ điền vào ô đang trống của hồ sơ cũ (không đè lên dữ liệu có sẵn).
+const BO_SUNG_FIELDS = GHI_DE_FIELDS;
+
+// Date (DB trả Date object) → 'YYYY-MM-DD' để so khớp / trả cho FE. Chuỗi giữ nguyên.
+function toISODate(v) {
+  if (v == null) return null;
+  if (v instanceof Date) return isNaN(v.getTime()) ? null : v.toISOString().slice(0, 10);
+  const m = String(v).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? m[0] : String(v);
+}
+
+function isEmptyVal(v) {
+  return v == null || (typeof v === 'string' && v.trim() === '');
+}
+
 function assertCongTyKhiCanLamViec(trangThai, congTyId) {
   if (TRANG_THAI_CAN_CONG_TY.includes(trangThai) && !congTyId) {
     const err = new Error('Công nhân "đang làm" / "mới vào" bắt buộc phải gán công ty');
@@ -82,42 +107,18 @@ async function chiTiet(id, scope, vaiTro, viewerId) {
 }
 
 async function taoMoi(data, actorUserId = null) {
-  // Validate: trạng thái đang làm / mới vào bắt buộc có công ty
-  assertCongTyKhiCanLamViec(data.trang_thai ?? 'moi_vao', data.cong_ty_id);
-
+  // Trùng CCCD → xử lý theo hành động người dùng chọn (kích hoạt lại / ghi đè /
+  // bổ sung / thêm mới) hoặc chặn kèm thông tin đối chiếu nếu chưa chọn.
   if (data.cccd) {
     const existing = await congNhanModel.findByCccd(data.cccd);
     if (existing) {
-      const daNghiViec = existing.trang_thai === 'nghi_viec';
-
-      // CN cũ đã nghỉ việc + người thêm xác nhận → kích hoạt lại hồ sơ cũ
-      // (KHÔNG tạo bản ghi trùng CCCD, chỉ cập nhật trạng thái + lịch sử vào).
-      if (daNghiViec && data.kich_hoat_lai) {
-        return kichHoatLai(existing, data, actorUserId);
-      }
-
-      // Ngược lại: chặn nhưng kèm thông tin CN đang ở đâu để người thêm biết,
-      // vì họ có thể không tìm thấy CN này (không phải mình tuyển / khác công ty).
-      const err = new Error(
-        daNghiViec
-          ? `Công nhân "${existing.ho_ten}" đã có trong hệ thống và đã nghỉ việc${existing.ten_cong_ty ? ` tại ${existing.ten_cong_ty}` : ''}. Bạn có thể thêm lại để cập nhật trạng thái và lịch sử vào làm.`
-          : `Công nhân "${existing.ho_ten}" đã tồn tại trong hệ thống${existing.ten_cong_ty ? `, hiện đang làm tại ${existing.ten_cong_ty}` : ' (chưa gán công ty)'}.`,
-      );
-      err.statusCode = 409;
-      err.code = 'DUPLICATE_CCCD';
-      err.details = [{
-        cong_nhan_id: existing.id,
-        ho_ten: existing.ho_ten,
-        trang_thai: existing.trang_thai,
-        cong_ty_id: existing.cong_ty_id,
-        ten_cong_ty: existing.ten_cong_ty ?? null,
-        da_nghi_viec: daNghiViec,
-        // Chỉ CN đã nghỉ việc mới cho phép kích hoạt lại
-        co_the_kich_hoat_lai: daNghiViec,
-      }];
-      throw err;
+      return xuLyTrungCccd(existing, data, actorUserId);
     }
   }
+
+  // Không trùng → tạo mới bình thường.
+  // Validate: trạng thái đang làm / mới vào bắt buộc có công ty
+  assertCongTyKhiCanLamViec(data.trang_thai ?? 'moi_vao', data.cong_ty_id);
 
   const created = await congNhanModel.create(data);
 
@@ -133,6 +134,129 @@ async function taoMoi(data, actorUserId = null) {
     }
   }
 
+  return created;
+}
+
+// Điều phối khi CCCD trùng với 1 hồ sơ đang có. Tuỳ hành động người dùng chọn:
+//   - kich_hoat_lai (CN đã nghỉ)      → tái dùng hồ sơ cũ, mở lại lịch sử làm
+//   - hanh_dong_trung = 'ghi_de'      → ghi đè các trường được chọn lên hồ sơ cũ
+//   - hanh_dong_trung = 'bo_sung'     → chỉ điền vào ô đang trống của hồ sơ cũ
+//   - hanh_dong_trung = 'them_moi'    → tạo hồ sơ MỚI riêng biệt, trạng thái chờ duyệt
+//   - chưa chọn gì                    → ném lỗi 409 kèm dữ liệu để FE hiện đối chiếu
+async function xuLyTrungCccd(existing, data, actorUserId) {
+  const daNghiViec = existing.trang_thai === 'nghi_viec';
+
+  if (daNghiViec && data.kich_hoat_lai) {
+    return kichHoatLai(existing, data, actorUserId);
+  }
+  if (data.hanh_dong_trung === 'them_moi') {
+    return themMoiChoDuyet(data, actorUserId);
+  }
+  if (data.hanh_dong_trung === 'bo_sung') {
+    return boSungHoSo(existing.id, data, actorUserId);
+  }
+  if (data.hanh_dong_trung === 'ghi_de') {
+    return ghiDeHoSo(existing.id, data, actorUserId);
+  }
+
+  throw await duplicateError(existing, daNghiViec);
+}
+
+// Dựng lỗi 409 DUPLICATE_CCCD kèm giá trị hiện tại của hồ sơ cũ (hien_tai) để FE
+// hiển thị bảng đối chiếu cũ ↔ mới và cho người dùng chọn trường muốn ghi đè.
+async function duplicateError(existingLite, daNghiViec) {
+  const full = (await congNhanModel.findById(existingLite.id)) || {};
+  const hienTai = {
+    ho_ten: full.ho_ten ?? null,
+    cccd: full.cccd ?? null,
+    ngay_sinh: toISODate(full.ngay_sinh),
+    gioi_tinh: full.gioi_tinh ?? null,
+    que_quan: full.que_quan ?? null,
+    dia_chi_hien_tai: full.dia_chi_hien_tai ?? null,
+    so_dien_thoai: full.so_dien_thoai ?? null,
+    ngay_cap_cccd: toISODate(full.ngay_cap_cccd),
+    ngay_vao_lam: toISODate(full.ngay_vao_lam),
+    cong_ty_id: full.cong_ty_id ?? null,
+    ten_cong_ty: full.ten_cong_ty ?? null,
+    ma_van_tay: full.ma_van_tay ?? null,
+    bo_phan: full.bo_phan ?? null,
+    ghi_chu: full.ghi_chu ?? null,
+    anh_cccd_truoc: full.anh_cccd_truoc ?? null,
+    anh_cccd_sau: full.anh_cccd_sau ?? null,
+    anh_vneid: full.anh_vneid ?? null,
+    anh_chan_dung: full.anh_chan_dung ?? null,
+  };
+  const err = new Error(
+    daNghiViec
+      ? `Công nhân "${existingLite.ho_ten}" đã có trong hệ thống và đã nghỉ việc${existingLite.ten_cong_ty ? ` tại ${existingLite.ten_cong_ty}` : ''}. Bạn có thể thêm lại, ghi đè, bổ sung thông tin hoặc thêm mới riêng.`
+      : `Công nhân "${existingLite.ho_ten}" đã tồn tại trong hệ thống${existingLite.ten_cong_ty ? `, hiện đang làm tại ${existingLite.ten_cong_ty}` : ' (chưa gán công ty)'}. Chọn ghi đè, bổ sung thông tin hoặc thêm mới riêng.`,
+  );
+  err.statusCode = 409;
+  err.code = 'DUPLICATE_CCCD';
+  err.details = [{
+    cong_nhan_id: existingLite.id,
+    ho_ten: existingLite.ho_ten,
+    trang_thai: existingLite.trang_thai,
+    cong_ty_id: existingLite.cong_ty_id,
+    ten_cong_ty: existingLite.ten_cong_ty ?? null,
+    da_nghi_viec: daNghiViec,
+    co_the_kich_hoat_lai: daNghiViec,
+    hien_tai: hienTai,
+  }];
+  return err;
+}
+
+// GHI ĐÈ: cập nhật các trường người dùng chọn (ghi_de_truong) lên hồ sơ cũ.
+// Dùng lại capNhat để hưởng đồng bộ phan_cong (khi đổi công ty) + audit log.
+async function ghiDeHoSo(id, data, actorUserId) {
+  const chon = Array.isArray(data.ghi_de_truong) ? data.ghi_de_truong : [];
+  const patch = {};
+  for (const field of chon) {
+    if (GHI_DE_FIELDS.includes(field) && field in data) patch[field] = data[field];
+  }
+  if (Object.keys(patch).length === 0) {
+    const err = new Error('Chưa chọn trường nào để ghi đè');
+    err.statusCode = 400; err.code = 'VALIDATION_ERROR';
+    throw err;
+  }
+  return capNhat(id, patch, actorUserId, null);
+}
+
+// BỔ SUNG: chỉ điền vào các ô đang trống của hồ sơ cũ (không đè lên dữ liệu có sẵn).
+async function boSungHoSo(id, data, actorUserId) {
+  const existing = await congNhanModel.findById(id);
+  if (!existing) {
+    const err = new Error('Không tìm thấy công nhân');
+    err.statusCode = 404; err.code = 'NOT_FOUND'; throw err;
+  }
+  const patch = {};
+  for (const field of BO_SUNG_FIELDS) {
+    if (field in data && !isEmptyVal(data[field]) && isEmptyVal(existing[field])) {
+      patch[field] = data[field];
+    }
+  }
+  if (Object.keys(patch).length === 0) return existing; // không có gì để bổ sung
+  return capNhat(id, patch, actorUserId, null);
+}
+
+// THÊM MỚI: tạo 1 hồ sơ riêng biệt dù trùng CCCD → trạng thái "chờ duyệt".
+// Không tạo phan_cong (đợi admin duyệt vào làm).
+async function themMoiChoDuyet(data, actorUserId) {
+  const created = await congNhanModel.create({ ...data, trang_thai: 'cho_duyet' });
+  try {
+    await hoatDongLog.create({
+      loai: 'them_moi_trung_cccd',
+      muc_do: 'quan_trong',
+      cong_nhan_id: created.id,
+      nguoi_tuyen_id: created.nguoi_tuyen_id,
+      du_lieu: { cccd: created.cccd },
+      ghi_chu: `Thêm mới CN trùng CCCD (chờ duyệt): ${created.ho_ten}`,
+      created_by: actorUserId,
+    });
+  } catch (logErr) {
+    // eslint-disable-next-line no-console
+    console.warn('hoat_dong_log write failed:', logErr.message);
+  }
   return created;
 }
 
