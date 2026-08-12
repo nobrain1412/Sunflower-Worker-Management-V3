@@ -39,7 +39,8 @@ export default function ChamCong() {
 
   const congTyArr = useCongTyList().data?.data ?? [];
   const venderArr = useVenders().data?.data ?? [];
-  // Bộ phận theo đúng công ty đang chọn (chưa chọn công ty → toàn bộ trong phạm vi quyền)
+  // Bộ phận là nhánh con của công ty: chỉ tải khi đã chọn 1 công ty cụ thể,
+  // và chỉ gồm các bộ phận thuộc công ty đó.
   const boPhanArr = useBoPhanList(congTyId || undefined).data?.data ?? [];
 
   // Kỳ công theo NGÀY CHỐT của công ty đang chọn (mặc định 25 nếu chưa chọn/không có).
@@ -201,7 +202,7 @@ export default function ChamCong() {
             {venderArr.map((v) => <option key={v.id} value={v.id}>{v.ho_ten}</option>)}
           </select>
         )}
-        {boPhanArr.length > 0 && (
+        {congTyId && boPhanArr.length > 0 && (
           <select className="form-input" style={s.select} value={boPhan} onChange={(e) => setBoPhan(e.target.value)}>
             <option value="">— Mọi bộ phận —</option>
             <option value={BO_PHAN_EMPTY}>— Chưa có bộ phận —</option>

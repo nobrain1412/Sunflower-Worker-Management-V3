@@ -49,6 +49,18 @@ const NOI_O_LABEL = {
   ktx: 'KTX',
   phong_tro: 'Nhà trọ',
 };
+const MUON_XE_OPTIONS = [
+  { value: '', label: 'Tất cả (xe)' },
+  { value: 'dang_muon',  label: 'Đang mượn xe' },
+  { value: 'da_tra',     label: 'Đã trả xe' },
+  { value: 'khong_muon', label: 'Không mượn xe' },
+];
+const LOAI_XE_OPTIONS = [
+  { value: '', label: 'Tất cả loại xe' },
+  { value: 'xe_may',  label: 'Xe máy' },
+  { value: 'xe_dap',  label: 'Xe đạp' },
+  { value: 'xe_dien', label: 'Xe đạp điện' },
+];
 
 function fmtDate(s) {
   if (!s) return '—';
@@ -242,6 +254,8 @@ export default function CongNhan() {
   const [tinh,     setTinh]           = useState(saved.tinh ?? '');
   const [ngay,     setNgay]           = useState(saved.ngay ?? '');
   const [boPhan,   setBoPhan]         = useState(saved.boPhan ?? '');
+  const [muonXe,   setMuonXe]         = useState(saved.muonXe ?? '');
+  const [loaiXe,   setLoaiXe]         = useState(saved.loaiXe ?? '');
   const [sortBy,   setSortBy]         = useState(saved.sortBy ?? 'ho_ten');
   const [sortOrder,setSortOrder]      = useState(saved.sortOrder ?? 'asc');
   const [page, setPage]               = useState(saved.page ?? 1);
@@ -278,9 +292,9 @@ export default function CongNhan() {
   useEffect(() => {
     sessionStorage.setItem(FILTER_KEY, JSON.stringify({
       search: searchInput, trangThai, trangThaiNoiO, venderId, congTyId,
-      tinh, ngay, boPhan, sortBy, sortOrder, page,
+      tinh, ngay, boPhan, muonXe, loaiXe, sortBy, sortOrder, page,
     }));
-  }, [searchInput, trangThai, trangThaiNoiO, venderId, congTyId, tinh, ngay, boPhan, sortBy, sortOrder, page]);
+  }, [searchInput, trangThai, trangThaiNoiO, venderId, congTyId, tinh, ngay, boPhan, muonXe, loaiXe, sortBy, sortOrder, page]);
 
   const { data, isLoading, isError } = useCongNhanList({
     page, limit: 20, search, trang_thai: trangThai,
@@ -290,6 +304,9 @@ export default function CongNhan() {
     tinh: tinh || undefined,
     ngay: ngay || undefined,
     bo_phan: boPhan || undefined,
+    muon_xe: muonXe || undefined,
+    // Loại xe chỉ áp dụng khi đang lọc "đang mượn xe"
+    loai_xe: muonXe === 'dang_muon' ? (loaiXe || undefined) : undefined,
     sort: sortBy, order: sortOrder,
   });
 
@@ -305,6 +322,13 @@ export default function CongNhan() {
     if (boQuaResetBoPhanDauTien.current) { boQuaResetBoPhanDauTien.current = false; return; }
     setBoPhan('');
   }, [congTyId]);
+
+  // Loại xe là nhánh con của "đang mượn xe" → rời khỏi trạng thái này thì bỏ lọc loại xe.
+  const boQuaResetLoaiXeDauTien = useRef(true);
+  useEffect(() => {
+    if (boQuaResetLoaiXeDauTien.current) { boQuaResetLoaiXeDauTien.current = false; return; }
+    if (muonXe !== 'dang_muon') setLoaiXe('');
+  }, [muonXe]);
   const { data: tinhList = [] } = useTinhList();
 
   const rows = data?.data ?? [];
@@ -358,7 +382,7 @@ export default function CongNhan() {
             <span>🖨</span>
             In hồ sơ
           </button>
-          {(trangThai || trangThaiNoiO || venderId || congTyId || tinh || ngay || boPhan) && (
+          {(trangThai || trangThaiNoiO || venderId || congTyId || tinh || ngay || boPhan || muonXe || loaiXe) && (
             <button
               className="btn-ghost"
               style={{ fontSize: 12, padding: '6px 10px' }}
@@ -370,6 +394,8 @@ export default function CongNhan() {
                 setTinh('');
                 setNgay('');
                 setBoPhan('');
+                setMuonXe('');
+                setLoaiXe('');
                 setPage(1);
               }}
             >
@@ -392,7 +418,7 @@ export default function CongNhan() {
           <b style={{ color: 'var(--text1)', fontFamily: "'JetBrains Mono', monospace" }}>{meta.total}</b> công nhân
           {trangThai && ` · ${STATUS_OPTIONS.find(o => o.value === trangThai)?.label}`}
         </span>
-        {(trangThaiNoiO || venderId || congTyId || tinh || ngay || boPhan) && (
+        {(trangThaiNoiO || venderId || congTyId || tinh || ngay || boPhan || muonXe || loaiXe) && (
           <span style={s.filterHint}>Đang áp dụng bộ lọc nâng cao</span>
         )}
       </div>
@@ -566,7 +592,7 @@ export default function CongNhan() {
       </BottomSheet>
 
       <BottomSheet open={showFilterSheet} onClose={() => setShowFilterSheet(false)} title="Bộ lọc công nhân">
-        <div style={bs.filterGrid}>
+        <div style={{ ...bs.filterGrid, gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr' }}>
           <div style={bs.field}>
             <label className="form-label">Trạng thái</label>
             <select className="form-input" value={trangThai} onChange={(e) => { setTrangThai(e.target.value); setPage(1); }}>
@@ -582,13 +608,27 @@ export default function CongNhan() {
                   {NOI_O_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
               </div>
-              <div style={bs.field}>
-                <label className="form-label">Công ty</label>
-                <select className="form-input" value={congTyId} onChange={(e) => { setCongTyId(e.target.value); setPage(1); }}>
-                  <option value="">Tất cả công ty</option>
-                  <option value={EMPTY}>— Chưa phân công ty —</option>
-                  {congTyArr.map((ct) => <option key={ct.id} value={ct.id}>{ct.ten_cong_ty}</option>)}
-                </select>
+              <div style={bs.branchGroup}>
+                <div style={bs.field}>
+                  <label className="form-label">Công ty</label>
+                  <select className="form-input" value={congTyId} onChange={(e) => { setCongTyId(e.target.value); setPage(1); }}>
+                    <option value="">Tất cả công ty</option>
+                    <option value={EMPTY}>— Chưa phân công ty —</option>
+                    {congTyArr.map((ct) => <option key={ct.id} value={ct.id}>{ct.ten_cong_ty}</option>)}
+                  </select>
+                </div>
+                {/* Bộ phận — nhánh con của công ty, cố định ngay dưới Công ty; chỉ hiện
+                    khi đã chọn 1 công ty cụ thể, liệt kê bộ phận thuộc công ty đó. */}
+                {congTyId && congTyId !== EMPTY && boPhanArr.length > 0 && (
+                  <div style={bs.field}>
+                    <label className="form-label">Bộ phận</label>
+                    <select className="form-input" value={boPhan} onChange={(e) => { setBoPhan(e.target.value); setPage(1); }}>
+                      <option value="">Tất cả bộ phận</option>
+                      <option value={EMPTY}>— Chưa có bộ phận —</option>
+                      {boPhanArr.map((bp) => <option key={bp} value={bp}>{bp}</option>)}
+                    </select>
+                  </div>
+                )}
               </div>
               <div style={bs.field}>
                 <label className="form-label">Vender</label>
@@ -610,18 +650,25 @@ export default function CongNhan() {
             </select>
           </div>
 
-          {boPhanArr.length > 0 && (
+          <div style={bs.branchGroup}>
             <div style={bs.field}>
-              <label className="form-label">Bộ phận</label>
-              <select className="form-input" value={boPhan} onChange={(e) => { setBoPhan(e.target.value); setPage(1); }}>
-                <option value="">Tất cả bộ phận</option>
-                <option value={EMPTY}>— Chưa có bộ phận —</option>
-                {boPhanArr.map((bp) => <option key={bp} value={bp}>{bp}</option>)}
+              <label className="form-label">Trạng thái mượn xe</label>
+              <select className="form-input" value={muonXe} onChange={(e) => { setMuonXe(e.target.value); setPage(1); }}>
+                {MUON_XE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
             </div>
-          )}
+            {/* Loại xe — nhánh con của mượn xe, cố định ngay dưới; chỉ hiện khi lọc "đang mượn xe". */}
+            {muonXe === 'dang_muon' && (
+              <div style={bs.field}>
+                <label className="form-label">Loại xe mượn</label>
+                <select className="form-input" value={loaiXe} onChange={(e) => { setLoaiXe(e.target.value); setPage(1); }}>
+                  {LOAI_XE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </div>
+            )}
+          </div>
 
-          <div style={bs.field}>
+          <div style={{ ...bs.field, gridColumn: isMobile ? undefined : '1 / -1' }}>
             <label className="form-label">Ngày vào làm</label>
             <div style={{ display: 'flex', gap: 8 }}>
               <input
@@ -647,7 +694,7 @@ export default function CongNhan() {
           <button
             type="button"
             className="btn-primary"
-            style={{ marginTop: 4, width: '100%', justifyContent: 'center' }}
+            style={{ marginTop: 4, width: '100%', justifyContent: 'center', gridColumn: isMobile ? undefined : '1 / -1' }}
             onClick={() => { setPage(1); setShowFilterSheet(false); }}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
@@ -708,8 +755,10 @@ const bs = {
   itemIcon: { width: 36, height: 36, borderRadius: 10, background: 'var(--bg3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 },
   itemLabel: { fontSize: 13, fontWeight: 600, color: 'var(--text1)' },
   itemSub: { fontSize: 11, color: 'var(--text2)', marginTop: 2 },
-  filterGrid: { display: 'grid', gap: 12 },
+  filterGrid: { display: 'grid', gap: 12, alignItems: 'start' },
   field: { display: 'flex', flexDirection: 'column', gap: 4 },
+  // Nhóm nhánh chính + nhánh con: giữ nhánh con cố định ngay dưới nhánh cha trong cùng 1 cột.
+  branchGroup: { display: 'flex', flexDirection: 'column', gap: 12 },
 };
 
 const m = {

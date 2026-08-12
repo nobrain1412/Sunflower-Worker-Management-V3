@@ -63,6 +63,8 @@ async function danhSach(query, scope, vaiTro, viewerId) {
     tinh:       query.tinh || undefined,
     ngay:       query.ngay || undefined,
     bo_phan:    query.bo_phan || undefined,
+    muon_xe:    query.muon_xe || undefined,
+    loai_xe:    query.loai_xe || undefined,
     scope,
   });
 

@@ -7,7 +7,7 @@ const db = require('../utils/db');
 
 // scope: { type: 'all' } | { type: 'vender', userId } | { type: 'cong_ty', ids: [] }
 // Scope 'cong_ty' yêu cầu bảng phan_cong (sẽ implement ở migration tiếp theo)
-async function findAll({ page = 1, limit = 20, sort = 'ho_ten', order = 'asc', trang_thai, trang_thai_noi_o, search, vender_id, cong_ty_id, tinh, ngay, bo_phan, scope }) {
+async function findAll({ page = 1, limit = 20, sort = 'ho_ten', order = 'asc', trang_thai, trang_thai_noi_o, search, vender_id, cong_ty_id, tinh, ngay, bo_phan, muon_xe, loai_xe, scope }) {
   const offset = (page - 1) * limit;
   // Map field FE gửi → biểu thức ORDER BY thật (gồm cả cột join công ty/vender).
   // Field lạ → fallback ho_ten. Tránh SQL injection (whitelist) + không hardcode prefix cn.
@@ -99,6 +99,24 @@ async function findAll({ page = 1, limit = 20, sort = 'ho_ten', order = 'asc', t
   } else if (bo_phan) {
     params.push(bo_phan);
     conditions.push(`cn.bo_phan = $${params.length}`);
+  }
+
+  // Lọc theo trạng thái mượn xe:
+  //  - dang_muon : có mượn và chưa trả
+  //  - da_tra    : có mượn và đã trả
+  //  - khong_muon: không mượn (NULL coi như không mượn)
+  if (muon_xe === 'dang_muon') {
+    conditions.push(`(cn.muon_xe = TRUE AND COALESCE(cn.xe_da_tra, FALSE) = FALSE)`);
+  } else if (muon_xe === 'da_tra') {
+    conditions.push(`(cn.muon_xe = TRUE AND cn.xe_da_tra = TRUE)`);
+  } else if (muon_xe === 'khong_muon') {
+    conditions.push(`COALESCE(cn.muon_xe, FALSE) = FALSE`);
+  }
+
+  // Nhánh con của mượn xe: lọc theo loại xe đang mượn (xe_dap | xe_dien | xe_may).
+  if (loai_xe) {
+    params.push(loai_xe);
+    conditions.push(`cn.loai_xe = $${params.length}`);
   }
 
   const where = conditions.join(' AND ');
