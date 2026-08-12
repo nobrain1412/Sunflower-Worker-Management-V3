@@ -1285,6 +1285,8 @@ function DoiCongTyModal({ cn, onClose }) {
       `Xác nhận chuyển ${cn.ho_ten} sang công ty "${newCtyName}"?\n\n` +
       `- Công ty cũ "${cn.ten_cong_ty ?? '—'}" sẽ được đóng (kết thúc bảng công).\n` +
       `- Bảng công mới bắt đầu từ hôm nay tại "${newCtyName}".\n` +
+      `- Ngày vào làm cập nhật thành hôm nay.\n` +
+      `- Mã vân tay và bộ phận sẽ được xoá (nhập lại theo công ty mới).\n` +
       `- Hành động này được ghi vào log hoạt động.`
     )) return;
     try {

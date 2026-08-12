@@ -1,4 +1,5 @@
 const congNhanModel = require('../models/congNhanModel');
+const congTyModel = require('../models/congTyModel');
 const userModel = require('../models/userModel');
 const hoatDongLog = require('../models/hoatDongLogModel');
 const { sanitizeForRole, sanitizeListForRole } = require('../utils/sanitizeCongNhan');
@@ -421,6 +422,22 @@ async function capNhat(id, data, actorUserId = null, scope = null) {
     }
   }
 
+  // Đổi công ty THỰC SỰ (từ 1 công ty sang công ty KHÁC — không phải gán lần đầu
+  // hay nghỉ việc): mã vân tay + bộ phận gắn với máy chấm công / tổ của công ty cũ
+  // nên reset để nhập lại theo công ty mới; ngày vào làm đặt lại theo mốc bắt đầu ở
+  // công ty mới (hôm nay). Chỉ tự động khi caller KHÔNG chủ động gửi các trường này.
+  const doiCongTyThucSu = before
+    && 'cong_ty_id' in data
+    && data.cong_ty_id != null
+    && before.cong_ty_id != null
+    && Number(data.cong_ty_id) !== Number(before.cong_ty_id);
+  if (doiCongTyThucSu) {
+    const today = new Date().toISOString().slice(0, 10);
+    if (!('ma_van_tay' in data))   data.ma_van_tay = null;
+    if (!('bo_phan' in data))      data.bo_phan = null;
+    if (!('ngay_vao_lam' in data)) data.ngay_vao_lam = today;
+  }
+
   const updated = await congNhanModel.update(id, data);
   if (!updated) {
     const err = new Error('Không tìm thấy công nhân');
@@ -469,13 +486,23 @@ async function capNhat(id, data, actorUserId = null, scope = null) {
   if (before) {
     try {
       if ('cong_ty_id' in data && before.cong_ty_id !== updated.cong_ty_id) {
+        // Ghi tên công ty (thay vì chỉ ID) để timeline đọc được ngay.
+        const [ctyCu, ctyMoi] = await Promise.all([
+          before.cong_ty_id  ? congTyModel.findById(before.cong_ty_id)  : null,
+          updated.cong_ty_id ? congTyModel.findById(updated.cong_ty_id) : null,
+        ]);
+        const tenCu  = ctyCu?.ten_cong_ty  ?? (before.cong_ty_id  ? `#${before.cong_ty_id}`  : '—');
+        const tenMoi = ctyMoi?.ten_cong_ty ?? (updated.cong_ty_id ? `#${updated.cong_ty_id}` : '—');
         await hoatDongLog.create({
           loai: 'chuyen_cong_ty',
           muc_do: 'quan_trong',
           cong_nhan_id: id,
           nguoi_tuyen_id: updated.nguoi_tuyen_id,
-          du_lieu: { tu_cong_ty_id: before.cong_ty_id, sang_cong_ty_id: updated.cong_ty_id },
-          ghi_chu: `Chuyển công ty (#${before.cong_ty_id ?? '—'} → #${updated.cong_ty_id ?? '—'})`,
+          du_lieu: {
+            tu_cong_ty_id: before.cong_ty_id, sang_cong_ty_id: updated.cong_ty_id,
+            tu_ten_cong_ty: ctyCu?.ten_cong_ty ?? null, sang_ten_cong_ty: ctyMoi?.ten_cong_ty ?? null,
+          },
+          ghi_chu: `Chuyển công ty (${tenCu} → ${tenMoi})`,
           created_by: actorUserId,
         });
       }
