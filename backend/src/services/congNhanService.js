@@ -424,6 +424,18 @@ async function capNhat(id, data, actorUserId = null, scope = null) {
     }
   }
 
+  // "Vào lại như người mới" tại ĐÚNG công ty đang làm: caller gửi cong_ty_id trùng
+  // công ty hiện tại kèm cờ vao_lai. Coi như CN nghỉ rồi vào lại từ đầu — chốt bảng
+  // công cũ, mở bảng công mới, reset mã vân tay/bộ phận + ngày vào làm giống đổi công ty.
+  const vaoLaiCongTy = before
+    && data.vao_lai === true
+    && 'cong_ty_id' in data
+    && data.cong_ty_id != null
+    && before.cong_ty_id != null
+    && Number(data.cong_ty_id) === Number(before.cong_ty_id);
+  // vao_lai chỉ là cờ điều khiển, không phải cột DB → bỏ khỏi payload update.
+  if ('vao_lai' in data) delete data.vao_lai;
+
   // Đổi công ty THỰC SỰ (từ 1 công ty sang công ty KHÁC — không phải gán lần đầu
   // hay nghỉ việc): mã vân tay + bộ phận gắn với máy chấm công / tổ của công ty cũ
   // nên reset để nhập lại theo công ty mới; ngày vào làm đặt lại theo mốc bắt đầu ở
@@ -433,11 +445,16 @@ async function capNhat(id, data, actorUserId = null, scope = null) {
     && data.cong_ty_id != null
     && before.cong_ty_id != null
     && Number(data.cong_ty_id) !== Number(before.cong_ty_id);
-  if (doiCongTyThucSu) {
+  if (doiCongTyThucSu || vaoLaiCongTy) {
     const today = new Date().toISOString().slice(0, 10);
     if (!('ma_van_tay' in data))   data.ma_van_tay = null;
     if (!('bo_phan' in data))      data.bo_phan = null;
     if (!('ngay_vao_lam' in data)) data.ngay_vao_lam = today;
+    // Vào lại → coi như mới vào, đồng thời xoá dấu nghỉ việc nếu có.
+    if (vaoLaiCongTy) {
+      if (!('trang_thai' in data))     data.trang_thai = 'moi_vao';
+      if (!('ngay_nghi_viec' in data)) data.ngay_nghi_viec = null;
+    }
   }
 
   const updated = await congNhanModel.update(id, data);
@@ -452,7 +469,8 @@ async function capNhat(id, data, actorUserId = null, scope = null) {
   // Định nghĩa "đã nghỉ" bám theo FE: trang_thai = nghi_viec HOẶC có ngay_nghi_viec.
   if (before) {
     const today = new Date().toISOString().slice(0, 10);
-    const congTyDoi = 'cong_ty_id' in data && before.cong_ty_id !== updated.cong_ty_id;
+    const congTyDoi = ('cong_ty_id' in data && before.cong_ty_id !== updated.cong_ty_id)
+      || vaoLaiCongTy;
     const nghiTruoc = before.trang_thai === 'nghi_viec' || !!before.ngay_nghi_viec;
     const nghiSau   = updated.trang_thai === 'nghi_viec' || !!updated.ngay_nghi_viec;
     const ngayNghi  = updated.ngay_nghi_viec
@@ -505,6 +523,23 @@ async function capNhat(id, data, actorUserId = null, scope = null) {
             tu_ten_cong_ty: ctyCu?.ten_cong_ty ?? null, sang_ten_cong_ty: ctyMoi?.ten_cong_ty ?? null,
           },
           ghi_chu: `Chuyển công ty (${tenCu} → ${tenMoi})`,
+          created_by: actorUserId,
+        });
+      } else if (vaoLaiCongTy) {
+        // Vào lại như người mới tại đúng công ty cũ (cong_ty_id không đổi).
+        const cty = updated.cong_ty_id ? await congTyModel.findById(updated.cong_ty_id) : null;
+        const tenCty = cty?.ten_cong_ty ?? (updated.cong_ty_id ? `#${updated.cong_ty_id}` : '—');
+        await hoatDongLog.create({
+          loai: 'chuyen_cong_ty',
+          muc_do: 'quan_trong',
+          cong_nhan_id: id,
+          nguoi_tuyen_id: updated.nguoi_tuyen_id,
+          du_lieu: {
+            tu_cong_ty_id: before.cong_ty_id, sang_cong_ty_id: updated.cong_ty_id,
+            tu_ten_cong_ty: cty?.ten_cong_ty ?? null, sang_ten_cong_ty: cty?.ten_cong_ty ?? null,
+            vao_lai: true,
+          },
+          ghi_chu: `Vào lại như người mới tại "${tenCty}"`,
           created_by: actorUserId,
         });
       }

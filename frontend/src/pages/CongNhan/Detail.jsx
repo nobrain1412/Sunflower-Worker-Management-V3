@@ -1278,19 +1278,35 @@ function DoiCongTyModal({ cn, onClose }) {
   async function submit() {
     setErr('');
     if (!newCtyId) { setErr('Chọn công ty mới'); return; }
-    if (Number(newCtyId) === cn.cong_ty_id) { setErr('Vui lòng chọn công ty khác'); return; }
 
+    // Chọn lại đúng công ty đang làm = cho công nhân vào lại như người mới.
+    const vaoLai = Number(newCtyId) === cn.cong_ty_id;
     const newCtyName = ctys.find((c) => c.id === Number(newCtyId))?.ten_cong_ty ?? `#${newCtyId}`;
-    if (!window.confirm(
-      `Xác nhận chuyển ${cn.ho_ten} sang công ty "${newCtyName}"?\n\n` +
-      `- Công ty cũ "${cn.ten_cong_ty ?? '—'}" sẽ được đóng (kết thúc bảng công).\n` +
-      `- Bảng công mới bắt đầu từ hôm nay tại "${newCtyName}".\n` +
-      `- Ngày vào làm cập nhật thành hôm nay.\n` +
-      `- Mã vân tay và bộ phận sẽ được xoá (nhập lại theo công ty mới).\n` +
-      `- Hành động này được ghi vào log hoạt động.`
-    )) return;
+
+    const confirmMsg = vaoLai
+      ? (
+        `Cho ${cn.ho_ten} vào lại như người mới tại "${newCtyName}"?\n\n` +
+        `- Bảng công hiện tại sẽ được đóng (chốt lịch sử làm cũ).\n` +
+        `- Bảng công mới bắt đầu từ hôm nay tại "${newCtyName}".\n` +
+        `- Ngày vào làm cập nhật thành hôm nay, trạng thái về "mới vào".\n` +
+        `- Mã vân tay và bộ phận sẽ được xoá (nhập lại theo tổ mới).\n` +
+        `- Hành động này được ghi vào log hoạt động.`
+      )
+      : (
+        `Xác nhận chuyển ${cn.ho_ten} sang công ty "${newCtyName}"?\n\n` +
+        `- Công ty cũ "${cn.ten_cong_ty ?? '—'}" sẽ được đóng (kết thúc bảng công).\n` +
+        `- Bảng công mới bắt đầu từ hôm nay tại "${newCtyName}".\n` +
+        `- Ngày vào làm cập nhật thành hôm nay.\n` +
+        `- Mã vân tay và bộ phận sẽ được xoá (nhập lại theo công ty mới).\n` +
+        `- Hành động này được ghi vào log hoạt động.`
+      );
+    if (!window.confirm(confirmMsg)) return;
     try {
-      await capNhat.mutateAsync({ cong_ty_id: Number(newCtyId) });
+      await capNhat.mutateAsync(
+        vaoLai
+          ? { cong_ty_id: Number(newCtyId), vao_lai: true }
+          : { cong_ty_id: Number(newCtyId) }
+      );
       onClose();
     } catch (e) {
       setErr(e?.message ?? 'Không cập nhật được');
@@ -1312,16 +1328,23 @@ function DoiCongTyModal({ cn, onClose }) {
         <select className="form-input" value={newCtyId} onChange={(e) => setNewCtyId(e.target.value)}>
           <option value="">— Chọn công ty —</option>
           {ctys.map((c) => (
-            <option key={c.id} value={c.id} disabled={c.id === cn.cong_ty_id}>
-              {c.ten_cong_ty}{c.id === cn.cong_ty_id ? ' (đang làm)' : ''}
+            <option key={c.id} value={c.id}>
+              {c.ten_cong_ty}{c.id === cn.cong_ty_id ? ' (đang làm — vào lại như mới)' : ''}
             </option>
           ))}
         </select>
+        {Number(newCtyId) === cn.cong_ty_id && newCtyId !== '' && (
+          <div style={{ fontSize: 12, color: 'var(--amber)', marginTop: 6 }}>
+            Chọn lại công ty đang làm sẽ cho công nhân vào lại như người mới (chốt bảng công cũ, mở bảng công mới từ hôm nay).
+          </div>
+        )}
         {err && <div style={{ color: 'var(--red)', fontSize: 12, marginTop: 8 }}>{err}</div>}
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 14 }}>
           <button className="btn-ghost"   onClick={onClose}>Hủy</button>
           <button className="btn-primary" onClick={submit} disabled={capNhat.isPending || !newCtyId}>
-            {capNhat.isPending ? 'Đang chuyển...' : 'Xác nhận chuyển'}
+            {capNhat.isPending
+              ? 'Đang xử lý...'
+              : (Number(newCtyId) === cn.cong_ty_id && newCtyId !== '' ? 'Cho vào lại như mới' : 'Xác nhận chuyển')}
           </button>
         </div>
       </div>
