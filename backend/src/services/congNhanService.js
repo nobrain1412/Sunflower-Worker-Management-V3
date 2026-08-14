@@ -445,13 +445,24 @@ async function capNhat(id, data, actorUserId = null, scope = null) {
     && data.cong_ty_id != null
     && before.cong_ty_id != null
     && Number(data.cong_ty_id) !== Number(before.cong_ty_id);
-  if (doiCongTyThucSu || vaoLaiCongTy) {
+
+  // Gán công ty cho CN ĐANG NGHỈ VIỆC ngay tại hồ sơ = cho đi làm lại (kích hoạt lại),
+  // dù chọn lại đúng công ty cũ hay công ty khác. Không phải nhập mới lại từ đầu —
+  // chỉ tìm hồ sơ cũ rồi gán công ty mới. Xử lý như một lần vào mới.
+  const nghiTruoc = before
+    && (before.trang_thai === 'nghi_viec' || !!before.ngay_nghi_viec);
+  const kichHoatTuNghi = before
+    && nghiTruoc
+    && 'cong_ty_id' in data
+    && data.cong_ty_id != null;
+
+  if (doiCongTyThucSu || vaoLaiCongTy || kichHoatTuNghi) {
     const today = new Date().toISOString().slice(0, 10);
     if (!('ma_van_tay' in data))   data.ma_van_tay = null;
     if (!('bo_phan' in data))      data.bo_phan = null;
     if (!('ngay_vao_lam' in data)) data.ngay_vao_lam = today;
-    // Vào lại → coi như mới vào, đồng thời xoá dấu nghỉ việc nếu có.
-    if (vaoLaiCongTy) {
+    // Vào lại / kích hoạt lại → coi như mới vào, đồng thời xoá dấu nghỉ việc nếu có.
+    if (vaoLaiCongTy || kichHoatTuNghi) {
       if (!('trang_thai' in data))     data.trang_thai = 'moi_vao';
       if (!('ngay_nghi_viec' in data)) data.ngay_nghi_viec = null;
     }
@@ -470,8 +481,7 @@ async function capNhat(id, data, actorUserId = null, scope = null) {
   if (before) {
     const today = new Date().toISOString().slice(0, 10);
     const congTyDoi = ('cong_ty_id' in data && before.cong_ty_id !== updated.cong_ty_id)
-      || vaoLaiCongTy;
-    const nghiTruoc = before.trang_thai === 'nghi_viec' || !!before.ngay_nghi_viec;
+      || vaoLaiCongTy || kichHoatTuNghi;
     const nghiSau   = updated.trang_thai === 'nghi_viec' || !!updated.ngay_nghi_viec;
     const ngayNghi  = updated.ngay_nghi_viec
       ? new Date(updated.ngay_nghi_viec).toISOString().slice(0, 10)
