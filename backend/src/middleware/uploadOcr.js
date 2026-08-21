@@ -4,7 +4,9 @@
  */
 const multer = require('multer');
 
-const ALLOWED_MIME = ['image/jpeg', 'image/png', 'image/webp'];
+// Ảnh chụp/chọn từ iPhone thường ở định dạng HEIC/HEIF → phải chấp nhận,
+// nếu không người dùng iOS sẽ bị chặn ngay từ khâu upload.
+const ALLOWED_MIME = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'];
 
 function fileFilter(_req, file, cb) {
   ALLOWED_MIME.includes(file.mimetype)

@@ -2,7 +2,9 @@ const { createWorker } = require('tesseract.js');
 const logger = require('../utils/logger');
 const { recognizeCCCDViaVLM } = require('./ocrCccdVlm');
 
-// ─── Tesseract (fallback khi VLM lỗi hoặc chưa cấu hình key) ──────────────────
+// ─── Tesseract ────────────────────────────────────────────────────────────────
+// Chỉ dùng cho OCR DANH SÁCH viết tay. KHÔNG dùng cho quét CCCD nữa:
+// độ chính xác quá thấp gây sai lệch hồ sơ — CCCD bắt buộc qua FPT AI (VLM).
 // Nhận Buffer trực tiếp — không cần đọc từ disk.
 async function recognize(imageBuffer) {
   const worker = await createWorker(['vie', 'eng'], 1, { logger: () => {} });
@@ -14,68 +16,6 @@ async function recognize(imageBuffer) {
   } finally {
     await worker.terminate();
   }
-}
-
-// ─── CCCD parser cho Tesseract ───────────────────────────────────────────────
-
-function parseCCCD(fullText) {
-  const lines = fullText.split('\n').map((l) => l.trim()).filter(Boolean);
-
-  const result = {
-    ho_ten: '', cccd: '', ngay_sinh: '', gioi_tinh: '',
-    que_quan: '', dia_chi: '', ngay_cap: '',
-  };
-
-  const cccdMatch = fullText.match(/\b(\d{12})\b/);
-  if (cccdMatch) result.cccd = cccdMatch[1];
-
-  const allDates = (fullText.match(/\d{2}[\/\-.]\d{2}[\/\-.]\d{4}/g) ?? [])
-    .map((d) => d.replace(/[\-.]/g, '/'));
-
-  for (let i = 0; i < lines.length; i++) {
-    const lo   = lines[i].toLowerCase();
-    const nxt  = lines[i + 1] ?? '';
-    const nxt2 = lines[i + 2] ?? '';
-
-    if (/h[oọ]\s*(v[aà]\s*)?t[eêế]n|full\s*name/i.test(lo)) {
-      const cand = nxt.replace(/[:\/]/g, '').trim();
-      if (cand && !/ngày|giới|quê|nơi|date|sex|place|\d{2}\//i.test(cand))
-        result.ho_ten = cand.toUpperCase();
-    }
-
-    if (/ng[àa]y\s+sinh|date\s+of\s+birth/i.test(lo)) {
-      const m = (lines[i] + ' ' + nxt).match(/\d{2}[\/\-.]\d{2}[\/\-.]\d{4}/);
-      if (m) result.ngay_sinh = m[0].replace(/[\-.]/g, '/');
-    }
-
-    if (/gi[ớo]i\s*t[íi]nh|sex\b/i.test(lo)) {
-      const ctx = (lines[i] + ' ' + nxt).toLowerCase();
-      if (/\bnam\b/.test(ctx)) result.gioi_tinh = 'Nam';
-      else if (/\bn[ữu]\b/.test(ctx)) result.gioi_tinh = 'Nữ';
-    }
-
-    // Mẫu cũ: "Quê quán" · Mẫu mới: "Nơi đăng ký khai sinh"
-    if (/qu[eê]\s*qu[áa]n|place\s+of\s+origin|n[oơ]i\s+đăng\s*k[ýy]\s+khai\s+sinh|place\s+of\s+birth/i.test(lo)) {
-      const val = nxt.replace(/[:\/]/g, '').trim();
-      if (val && !/nơi|place\s+of\s+res/i.test(val)) result.que_quan = val;
-    }
-
-    // Mẫu cũ: "Nơi thường trú" · Mẫu mới: "Nơi cư trú"
-    if (/n[oơ]i\s+th[uư][oờ]ng\s+tr[uú]|n[oơ]i\s+c[uư]\s+tr[uú]|place\s+of\s+res/i.test(lo)) {
-      const parts = [nxt, nxt2].filter((l) => l && !/c[oó]\s+gi[áa]\s+tr[ịi]|date\s+of\s+exp/i.test(l));
-      result.dia_chi = parts.join(', ').replace(/[:\/]/g, '').trim();
-    }
-
-    if (/ng[àa]y.*c[aấ]p|date\s+of\s+issue/i.test(lo)) {
-      const m = (lines[i] + ' ' + nxt).match(/\d{2}[\/\-.]\d{2}[\/\-.]\d{4}/);
-      if (m) result.ngay_cap = m[0].replace(/[\-.]/g, '/');
-    }
-  }
-
-  if (!result.ngay_sinh && allDates[0]) result.ngay_sinh = allDates[0];
-  if (!result.ngay_cap && allDates.length > 1) result.ngay_cap = allDates[allDates.length - 1];
-
-  return result;
 }
 
 // ─── Danh sách parser ────────────────────────────────────────────────────────
@@ -165,25 +105,30 @@ function mergeCccdSides(results) {
 
 // ─── Public API ──────────────────────────────────────────────────────────────
 
-// Quét 1 mặt CCCD. Ưu tiên VLM (FPT AI Inference); lỗi/không có key → fallback Tesseract.
-// Kết quả luôn kèm `_provider` ('fpt_vlm' | 'tesseract') và `_degraded` khi chạy engine dự phòng,
-// để tầng trên hiển thị cảnh báo thay vì "kém âm thầm".
+// Quét 1 mặt CCCD BẮT BUỘC qua FPT AI (VLM) — không còn fallback Tesseract.
+// Chưa cấu hình key hoặc VLM lỗi/timeout → ném lỗi rõ ràng (statusCode) để tầng trên
+// báo đúng lý do, thay vì âm thầm cho ra dữ liệu sai từ engine kém chính xác.
 async function scanCCCD(imageBuffer) {
   const apiKey = process.env.FPT_AI_API_KEY;
-  if (apiKey) {
-    try {
-      return sanitizeCccdResult(await recognizeCCCDViaVLM(imageBuffer, apiKey));
-    } catch (err) {
-      logger.warn({ err: err.message }, 'FPT AI Inference lỗi — fallback Tesseract (độ chính xác thấp)');
-    }
-  } else {
-    logger.warn('Chưa cấu hình FPT_AI_API_KEY — dùng Tesseract (độ chính xác thấp)');
+  if (!apiKey) {
+    logger.error('Chưa cấu hình FPT_AI_API_KEY — không thể quét CCCD');
+    const e = new Error('Chưa cấu hình dịch vụ nhận diện CCCD (FPT AI). Vui lòng liên hệ quản trị viên.');
+    e.statusCode = 503;
+    throw e;
   }
 
-  const data = await recognize(imageBuffer);
-  const r = sanitizeCccdResult({ ...parseCCCD(data.text ?? ''), _provider: 'tesseract', _type: '' });
-  r._degraded = true;
-  return r;
+  try {
+    return sanitizeCccdResult(await recognizeCCCDViaVLM(imageBuffer, apiKey));
+  } catch (err) {
+    logger.error({ err: err.message, timeout: !!err.timeout }, 'FPT AI Inference quét CCCD thất bại');
+    const e = new Error(
+      err.timeout
+        ? 'Dịch vụ nhận diện CCCD (FPT AI) phản hồi quá lâu. Vui lòng thử lại sau ít phút.'
+        : `Dịch vụ nhận diện CCCD (FPT AI) đang lỗi: ${err.message}`,
+    );
+    e.statusCode = err.timeout ? 504 : 502;
+    throw e;
+  }
 }
 
 // Quét đủ 2 mặt CCCD rồi gộp. Mỗi mặt quét độc lập: một mặt lỗi vẫn dùng được mặt kia.

@@ -28,6 +28,10 @@ function normalizeError(err) {
   // Lỗi axios không có body lỗi chuẩn (mất mạng, timeout, 5xx trả HTML...)
   // AxiosError luôn kèm .config/.request → phân biệt được với lỗi tự throw.
   if (err?.isAxiosError || err?.config || err?.request) {
+    // Quá thời gian chờ (vd OCR chạy lâu) → báo rõ để người dùng thử lại thay vì tưởng treo.
+    if (err?.code === 'ECONNABORTED') {
+      return { code: 'TIMEOUT', message: 'Xử lý quá lâu, vui lòng thử lại (chụp ảnh gần & rõ hơn)' };
+    }
     return { code: err?.code || 'NETWORK_ERROR', message: 'Lỗi kết nối, vui lòng thử lại' };
   }
 

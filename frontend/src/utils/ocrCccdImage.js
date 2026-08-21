@@ -6,6 +6,10 @@ import api from '../hooks/useApi';
 // Các field OCR đổ thẳng vào form quét CCCD (bỏ qua _provider, _type...)
 const FIELDS = ['ho_ten', 'cccd', 'ngay_sinh', 'gioi_tinh', 'que_quan', 'dia_chi', 'ngay_cap'];
 
+// Giới hạn chờ phía client — lớn hơn timeout VLM backend (30s/mặt, 2 mặt chạy song song)
+// cộng thời gian upload ảnh; quá hạn thì báo lỗi thay vì treo mãi.
+const OCR_TIMEOUT_MS = 60000;
+
 /**
  * @param {File|Blob} file ảnh mặt trước CCCD
  * @returns {Promise<{ parsed: object|null, duongDanAnh: string|null, provider: string }>}
@@ -16,7 +20,7 @@ export async function ocrCccdFromImage(file) {
   fd.append('loai', 'cccd');
   fd.append('anh', file, file.name || 'cccd.jpg');
 
-  const res = await api.post('/ocr/scan', fd, { headers: { 'Content-Type': undefined } });
+  const res = await api.post('/ocr/scan', fd, { headers: { 'Content-Type': undefined }, timeout: OCR_TIMEOUT_MS });
   const ketQua = res?.data?.ket_qua ?? {};
 
   const parsed = {};
@@ -48,7 +52,7 @@ export async function ocrCccdBothSides(front, back) {
   fd.append('anh_truoc', front, front.name || 'cccd-truoc.jpg');
   fd.append('anh_sau', back, back.name || 'cccd-sau.jpg');
 
-  const res = await api.post('/ocr/scan', fd, { headers: { 'Content-Type': undefined } });
+  const res = await api.post('/ocr/scan', fd, { headers: { 'Content-Type': undefined }, timeout: OCR_TIMEOUT_MS });
   const ketQua = res?.data?.ket_qua ?? {};
 
   const parsed = {};
