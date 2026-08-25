@@ -32,6 +32,7 @@ const baoCaoRoutes         = require('./routes/baoCao');
 const tuyenDungRoutes      = require('./routes/tuyenDung');
 const traCuuCongRoutes     = require('./routes/traCuuCong');
 const xuatBangCongRoutes   = require('./routes/xuatBangCong');
+const deXuatNghiViecRoutes = require('./routes/deXuatNghiViec');
 
 const app = express();
 
@@ -109,6 +110,7 @@ app.use('/api/upload',    uploadRoutes);
 app.use('/api/cham-cong/import-excel', importChamCongRoutes);
 app.use('/api/cham-cong', chamCongRoutes);
 app.use('/api/bang-van-tay', bangVanTayRoutes);
+app.use('/api/de-xuat-nghi-viec', deXuatNghiViecRoutes);
 app.use('/api/hoat-dong', hoatDongRoutes);
 app.use('/api/todo',      todoRoutes);
 app.use('/api/bao-cao/xuat-bang-cong', xuatBangCongRoutes);
