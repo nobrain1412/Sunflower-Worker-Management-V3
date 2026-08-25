@@ -189,14 +189,22 @@ router.post('/',
           e.statusCode = 403; throw e;
         }
       } else if (vai_tro === 'quan_ly') {
+        // Quản lý được cho ứng CN thuộc công ty mình quản lý HOẶC do chính mình tuyển
+        // (khớp với scopeByRole: quan_ly = { cong_ty ids } ∪ CN mình tuyển).
         const check = await db.query(
           `SELECT cn.id FROM cong_nhan cn
-             JOIN quan_ly_cong_ty qlct ON qlct.cong_ty_id = cn.cong_ty_id
-            WHERE cn.id = $1 AND qlct.user_id = $2 AND cn.deleted_at IS NULL`,
+            WHERE cn.id = $1 AND cn.deleted_at IS NULL
+              AND (
+                cn.nguoi_tuyen_id = $2
+                OR EXISTS (
+                  SELECT 1 FROM quan_ly_cong_ty qlct
+                   WHERE qlct.cong_ty_id = cn.cong_ty_id AND qlct.user_id = $2
+                )
+              )`,
           [cnId, userId],
         );
         if (!check.rows.length) {
-          const e = new Error('Bạn chỉ được cho ứng công nhân thuộc công ty mình quản lý');
+          const e = new Error('Bạn chỉ được cho ứng công nhân thuộc công ty mình quản lý hoặc do mình tuyển');
           e.statusCode = 403; throw e;
         }
       }
