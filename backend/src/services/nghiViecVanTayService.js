@@ -25,6 +25,17 @@ function badRequest(message, code, statusCode = 400) {
   return e;
 }
 
+// Duyệt/từ chối nghỉ việc là việc của quản lý CÔNG TY: quản lý chỉ được thao tác
+// trên đề xuất thuộc công ty mình quản lý — không mở rộng theo "CN do mình tuyển".
+// admin (scope 'all') không giới hạn.
+function assertScopeCongTy(scope, congTyId) {
+  if (!scope || scope.type === 'all') return;
+  const ids = scope.type === 'cong_ty' ? (scope.ids ?? []) : [];
+  if (!congTyId || !ids.includes(congTyId)) {
+    throw badRequest('Bạn không quản lý công ty của đề xuất này', 'FORBIDDEN', 403);
+  }
+}
+
 // Chuẩn hoá mã thẻ để so khớp (trim + bỏ dấu + lowercase). KHÔNG bỏ số 0 đứng đầu
 // vì có thể là mã khác nhau tuỳ máy.
 function normMa(raw) {
@@ -187,6 +198,8 @@ async function duyet(id, user, scope) {
   if (dx.trang_thai !== 'cho_duyet') {
     throw badRequest('Đề xuất đã được xử lý', 'ALREADY_RESOLVED', 409);
   }
+  // Chỉ quản lý của đúng công ty (hoặc admin) mới được duyệt.
+  assertScopeCongTy(scope, dx.cong_ty_id);
 
   const ngayNghi = (dx.ngay_cuoi_cung_di_lam || dx.ngay_chot_bang)
     ? new Date(dx.ngay_cuoi_cung_di_lam || dx.ngay_chot_bang).toISOString().slice(0, 10)
@@ -203,12 +216,14 @@ async function duyet(id, user, scope) {
   return updated;
 }
 
-async function tuChoi(id, user, ghiChu) {
+async function tuChoi(id, user, ghiChu, scope) {
   const dx = await model.findById(id);
   if (!dx) throw badRequest('Không tìm thấy đề xuất', 'NOT_FOUND', 404);
   if (dx.trang_thai !== 'cho_duyet') {
     throw badRequest('Đề xuất đã được xử lý', 'ALREADY_RESOLVED', 409);
   }
+  // Chỉ quản lý của đúng công ty (hoặc admin) mới được từ chối.
+  assertScopeCongTy(scope, dx.cong_ty_id);
   return model.markRejected(id, user?.id ?? null, ghiChu);
 }
 

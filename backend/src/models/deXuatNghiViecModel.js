@@ -49,21 +49,20 @@ async function xoaChoDuyetTheoCongNhan(congNhanIds, exec = db) {
 
 // Danh sách đề xuất, lọc theo trạng thái + scope quyền.
 // scope: { type:'all' } | { type:'cong_ty', ids:[], userId } | { type:'vender', userId }
+// Duyệt nghỉ việc là việc của quản lý CÔNG TY: quản lý chỉ thấy đề xuất thuộc công
+// ty mình quản lý — KHÔNG mở rộng theo "công nhân do mình tuyển" (khác các module khác).
 async function findAll({ trang_thai = 'cho_duyet', scope } = {}) {
   const params = [];
   const conds = [];
   if (trang_thai) { params.push(trang_thai); conds.push(`dx.trang_thai = $${params.length}`); }
 
   if (scope && scope.type === 'cong_ty') {
-    // Quản lý: đề xuất thuộc công ty mình quản lý HOẶC công nhân do mình tuyển.
+    // Quản lý: chỉ đề xuất thuộc công ty mình quản lý.
     params.push(scope.ids ?? []);
-    const pIds = `$${params.length}`;
-    params.push(scope.userId);
-    const pUser = `$${params.length}`;
-    conds.push(`(dx.cong_ty_id = ANY(${pIds}::int[]) OR cn.nguoi_tuyen_id = ${pUser})`);
+    conds.push(`dx.cong_ty_id = ANY($${params.length}::int[])`);
   } else if (scope && scope.type === 'vender') {
-    params.push(scope.userId);
-    conds.push(`cn.nguoi_tuyen_id = $${params.length}`);
+    // Vender không có quyền vào tính năng này (route đã chặn); lọc rỗng cho an toàn.
+    conds.push('FALSE');
   }
 
   const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
