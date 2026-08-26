@@ -6,6 +6,7 @@ import { useCongTyList, useVenders } from '../../hooks/useCongNhan';
 import { parseCccdQr } from '../../utils/parseCccdQr';
 import { decodeCccdQrFromImage } from '../../utils/decodeCccdImage';
 import { ocrCccdFromImage, ocrCccdBothSides, captureVideoFrame } from '../../utils/ocrCccdImage';
+import { toUploadJpeg } from '../../utils/prepareUpload';
 import DuplicateCccdResolver from '../../components/DuplicateCccdResolver';
 
 // Camera quét bao lâu mà không thấy QR thì tự chuyển sang nhận diện ảnh (ms)
@@ -169,7 +170,17 @@ export default function ScanCCCD() {
   async function autoOcrFromCamera() {
     if (handledRef.current || !videoRef.current) return;
     const frame = await captureVideoFrame(videoRef.current);
-    if (!frame) return;
+    // iOS Safari: <video> có thể chưa sẵn sàng (videoWidth = 0) khi hẹn giờ bắn →
+    // captureVideoFrame trả null. Không được đứng im: thử lại sau, hoặc báo lỗi.
+    if (!frame) {
+      if (camTriesRef.current < CAM_OCR_MAX_TRIES) {
+        camTriesRef.current += 1;
+        camTimerRef.current = setTimeout(autoOcrFromCamera, 3000);
+      } else {
+        setScanErr('Camera chưa sẵn sàng trên thiết bị này (thường gặp trên iPhone). Hãy dùng "Tải ảnh CCCD".');
+      }
+      return;
+    }
 
     handledRef.current = true; // chặn QR bắn kết quả xen giữa
     camTriesRef.current += 1;
@@ -179,28 +190,31 @@ export default function ScanCCCD() {
 
     // Giữ lại khung hình: người dùng cần nhìn ảnh gốc để đối chiếu kết quả OCR,
     // và ảnh đã được backend upload sẵn trong lượt OCR này.
-    const ok = await applyOcrResult(frame, { keepImage: true });
+    const { ok, error } = await applyOcrResult(frame, { keepImage: true });
     if (!ok) {
       handledRef.current = false;
+      // Ưu tiên lý do cụ thể từ backend (FPT lỗi/timeout/chưa cấu hình); nếu không có
+      // (chỉ là ảnh không đọc được) thì hướng dẫn thao tác lại.
       setScanErr(
-        camTriesRef.current >= CAM_OCR_MAX_TRIES
-          ? 'Không nhận diện được CCCD từ camera. Hãy dùng "Tải ảnh CCCD" với ảnh chụp rõ nét, hoặc nhập tay.'
-          : 'Không nhận diện được CCCD trong khung hình. Đưa trọn thẻ vào khung, giữ máy yên và đủ sáng.',
+        error
+          || (camTriesRef.current >= CAM_OCR_MAX_TRIES
+            ? 'Không nhận diện được CCCD từ camera. Hãy dùng "Tải ảnh CCCD" với ảnh chụp rõ nét, hoặc nhập tay.'
+            : 'Không nhận diện được CCCD trong khung hình. Đưa trọn thẻ vào khung, giữ máy yên và đủ sáng.'),
       );
       setStage('scan');
     }
   }
 
-  // Gửi ảnh sang backend nhận diện (FPT.AI). Trả true nếu đã đổ được vào form.
+  // Gửi ảnh sang backend nhận diện (FPT AI). Trả { ok, error }.
   // keepImage = true → hiển thị ảnh gốc ở bước review và lưu vào hồ sơ.
   async function applyOcrResult(file, { keepImage }) {
     try {
-      const { parsed, duongDanAnh, degraded: isDegraded } = await ocrCccdFromImage(file);
-      if (!parsed) return false;
+      const { parsed, duongDanAnh } = await ocrCccdFromImage(file);
+      if (!parsed) return { ok: false, error: null }; // OCR chạy được nhưng không bóc được gì
 
       setForm((cur) => ({ ...cur, ...parsed, cong_ty_id: cur.cong_ty_id || defaultCongTyId() }));
       setSource('ocr');
-      setDegraded(!!isDegraded);
+      setDegraded(false);
       setPendingFile(null);
       if (keepImage) {
         setPreview(URL.createObjectURL(file));
@@ -209,9 +223,10 @@ export default function ScanCCCD() {
       // Backend đã upload ảnh khi OCR → dùng lại URL, không upload lần hai.
       setAnhUrl(keepImage ? duongDanAnh : null);
       setStage('review');
-      return true;
-    } catch {
-      return false; // OCR lỗi (thiếu API key, mạng, quota...) — người gọi tự xử lý thông báo
+      return { ok: true, error: null };
+    } catch (err) {
+      // Lỗi FPT (thiếu key, mạng, quota, timeout) — trả lý do để người gọi hiển thị.
+      return { ok: false, error: err?.message ?? null };
     }
   }
 
@@ -259,6 +274,7 @@ export default function ScanCCCD() {
     setBusyMsg('Đang nhận diện thông tin trên 2 mặt CCCD...');
     setStage('processing');
 
+    // Đọc QR từ ảnh gốc (độ phân giải đầy đủ cho decode chính xác nhất).
     let qr = null;
     try {
       const r = await decodeCccdQrFromImage(frontFile).catch(() => null);
@@ -266,16 +282,18 @@ export default function ScanCCCD() {
     } catch { qr = null; }
 
     try {
-      const { parsed, duongDanAnh, duongDanAnhSau, degraded: isDegraded } = await ocrCccdBothSides(frontFile, backFile);
+      // Chuyển HEIC (iPhone) → JPEG và giảm cỡ trước khi gửi: né lỗi định dạng trên
+      // iOS và giúp VLM xử lý nhanh hơn, tránh chờ lâu rồi timeout.
+      const [frontJpg, backJpg] = await Promise.all([toUploadJpeg(frontFile), toUploadJpeg(backFile)]);
+      const { parsed, duongDanAnh, duongDanAnhSau } = await ocrCccdBothSides(frontJpg, backJpg);
       // Gộp: OCR làm nền, QR định danh đè lên (QR chính xác hơn), giữ ngày cấp từ OCR mặt sau.
       const data = { ...(parsed ?? {}), ...(qr ?? {}) };
       setSource((data.ho_ten || data.cccd) ? (qr ? 'qr' : 'ocr') : 'manual');
-      // QR chính xác tuyệt đối → không cảnh báo dù OCR nền có degraded; chỉ cảnh báo khi dữ liệu thật sự đến từ OCR dự phòng.
-      setDegraded(!qr && !!isDegraded);
+      setDegraded(false);
       setForm((cur) => ({ ...cur, ...data, cong_ty_id: cur.cong_ty_id || defaultCongTyId() }));
       setPreview(frontPreview);
       setPreviewSau(backPreview);
-      setAnhFile(frontFile);
+      setAnhFile(frontJpg);
       setAnhUrl(duongDanAnh);
       setAnhUrlSau(duongDanAnhSau);
       setStage('review');
@@ -286,18 +304,20 @@ export default function ScanCCCD() {
   }
 
   // Nhập tay từ ảnh vừa chọn khi QR không đọc được — vẫn lưu ảnh vào hồ sơ.
-  function goManualFromPending() {
+  async function goManualFromPending() {
     const file = pendingFile;
     if (!file) return;
     setSource('manual');
     setForm((cur) => ({ ...cur, cong_ty_id: cur.cong_ty_id || defaultCongTyId() }));
     setPreview(URL.createObjectURL(file));
-    setAnhFile(file);
-    setAnhUrl(null);
     setScanErr(null);
     setPendingFile(null);
     setStage('review');
-    uploadAnhBackground(file);
+    // HEIC (iPhone) → JPEG + giảm cỡ trước khi upload để backend nhận đúng định dạng.
+    const jpg = await toUploadJpeg(file);
+    setAnhFile(jpg);
+    setAnhUrl(null);
+    uploadAnhBackground(jpg);
   }
 
   // Upload ảnh lên Cloudinary, trả URL (best-effort)

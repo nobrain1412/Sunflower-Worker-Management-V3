@@ -6,6 +6,9 @@ const logger = require('../utils/logger');
 // Cho phép override qua env; mặc định là cấu hình đã test đạt trên CCCD thật.
 const BASE_URL = process.env.FPT_AI_BASE_URL || 'https://mkp-api.fptcloud.com/chat/completions';
 const MODEL    = process.env.FPT_AI_MODEL    || 'Qwen2.5-VL-7B-Instruct';
+// Giới hạn thời gian gọi VLM — quá hạn thì hủy request và báo lỗi rõ ràng,
+// thay vì để frontend treo vô hạn khi FPT AI chậm/không phản hồi.
+const TIMEOUT_MS = Number(process.env.FPT_AI_TIMEOUT_MS) || 30000;
 
 const SYSTEM_PROMPT =
   'Bạn là hệ thống trích xuất thông tin từ ảnh thẻ Căn cước công dân / Căn cước của Việt Nam. ' +
@@ -44,6 +47,11 @@ function mapSex(sex) {
 function detectMime(buf) {
   if (buf[0] === 0x89 && buf[1] === 0x50) return 'image/png';
   if (buf[0] === 0x52 && buf[1] === 0x49) return 'image/webp'; // "RI" của RIFF
+  // HEIC/HEIF (ảnh iPhone): box "ftyp" ở offset 4, brand heic/heix/mif1/msf1.
+  if (buf.length > 11 && buf.toString('ascii', 4, 8) === 'ftyp') {
+    const brand = buf.toString('ascii', 8, 12);
+    if (/heic|heix|hevc|mif1|msf1/.test(brand)) return 'image/heic';
+  }
   return 'image/jpeg';
 }
 
@@ -76,11 +84,27 @@ async function recognizeCCCDViaVLM(imageBuffer, apiKey) {
   };
 
   const t0 = Date.now();
-  const res = await fetch(BASE_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify(body),
-  });
+  // Hủy request khi quá TIMEOUT_MS để không treo chờ FPT AI vô thời hạn.
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  let res;
+  try {
+    res = await fetch(BASE_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+  } catch (err) {
+    if (err?.name === 'AbortError') {
+      const e = new Error(`FPT AI Inference không phản hồi trong ${Math.round(TIMEOUT_MS / 1000)}s (quá thời gian chờ)`);
+      e.timeout = true;
+      throw e;
+    }
+    throw new Error(`Không kết nối được FPT AI Inference: ${err?.message ?? err}`);
+  } finally {
+    clearTimeout(timer);
+  }
   const ms = Date.now() - t0;
 
   if (!res.ok) {
