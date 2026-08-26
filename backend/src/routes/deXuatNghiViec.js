@@ -1,6 +1,10 @@
 /**
  * Routes đề xuất nghỉ việc (phát hiện từ bảng vân tay).
  *
+ * Phân quyền: chỉ admin + quan_ly. Quản lý chỉ được xem/tạo/duyệt/từ chối đề xuất
+ * thuộc CÔNG TY MÌNH QUẢN LÝ (không mở rộng theo "công nhân do mình tuyển" — duyệt
+ * nghỉ việc là việc của quản lý công ty đó).
+ *
  *   POST /api/de-xuat-nghi-viec/phan-tich   — dò ứng viên nghỉ (không ghi DB)
  *   POST /api/de-xuat-nghi-viec/tao         — tạo đề xuất cho các CN được chọn
  *   GET  /api/de-xuat-nghi-viec             — danh sách đề xuất (lọc theo scope)
@@ -111,7 +115,7 @@ router.post('/:id/tu-choi',
   validate(tuChoiSchema),
   asyncWrapper(async (req, res) => {
     const id = toPositiveInt(req.params.id, 'ID đề xuất');
-    const updated = await svc.tuChoi(id, req.user, req.validatedBody?.ghi_chu ?? null);
+    const updated = await svc.tuChoi(id, req.user, req.validatedBody?.ghi_chu ?? null, req.scope);
     sendSuccess(res, updated, 'Đã từ chối đề xuất nghỉ việc');
   }),
 );
