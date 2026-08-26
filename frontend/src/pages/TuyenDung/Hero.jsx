@@ -1,7 +1,16 @@
-import { HOT_KEYWORDS, STATS, LOCATIONS } from './tuyenDungData';
+import { LOCATIONS, fmtStat } from './tuyenDungData';
 
-// Hero + ô tìm việc + từ khóa nổi bật + thống kê.
-export default function Hero() {
+// Hero + ô tìm việc + thống kê thật.
+// `thongKe` lấy từ /api/tuyen-dung/thong-ke — số công ty đang tuyển & tổng công nhân.
+export default function Hero({ thongKe }) {
+  // Chỉ dựng ô thống kê từ dữ liệu thật; chưa có số liệu thì không hiển thị khối này.
+  const stats = thongKe
+    ? [
+        { value: fmtStat(thongKe.so_cong_ty_tuyen_dung), label: 'Công ty đang tuyển' },
+        { value: fmtStat(thongKe.tong_cong_nhan), label: 'Công nhân đã kết nối' },
+      ]
+    : [];
+
   return (
     <section style={s.hero}>
       <div style={s.inner}>
@@ -9,7 +18,7 @@ export default function Hero() {
           Tìm việc làm nhanh, <span style={{ color: 'var(--sf-navy)' }}>việc làm mới</span> khắp toàn quốc
         </h1>
         <p style={s.sub}>
-          Tiếp cận 50.000+ tin tuyển dụng mỗi ngày từ hàng nghìn doanh nghiệp uy tín tại Việt Nam
+          Kết nối trực tiếp với các doanh nghiệp đang tuyển dụng công nhân, minh bạch và nhanh chóng
         </p>
 
         <div style={s.searchBox}>
@@ -20,21 +29,16 @@ export default function Hero() {
           <button className="sf-btn-navy" style={s.searchBtn}>Tìm kiếm</button>
         </div>
 
-        <div style={s.keywords}>
-          <span style={{ fontSize: 13, color: 'var(--sf-muted)' }}>Từ khóa nổi bật:</span>
-          {HOT_KEYWORDS.map((kw) => (
-            <a key={kw} href="#" className="sf-chip" onClick={(e) => e.preventDefault()} style={s.chip}>{kw}</a>
-          ))}
-        </div>
-
-        <div style={s.stats}>
-          {STATS.map((st) => (
-            <div key={st.label}>
-              <div style={s.statValue}>{st.value}</div>
-              <div style={{ fontSize: 13, color: 'var(--sf-muted)' }}>{st.label}</div>
-            </div>
-          ))}
-        </div>
+        {stats.length > 0 && (
+          <div style={s.stats}>
+            {stats.map((st) => (
+              <div key={st.label}>
+                <div style={s.statValue}>{st.value}</div>
+                <div style={{ fontSize: 13, color: 'var(--sf-muted)' }}>{st.label}</div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </section>
   );
@@ -71,14 +75,6 @@ const s = {
   searchBtn: {
     border: 'none', borderRadius: 10, background: 'var(--sf-navy)', color: 'var(--sf-navy-ink)',
     fontSize: 15, fontWeight: 700, padding: '12px 28px', cursor: 'pointer', fontFamily: 'inherit',
-  },
-  keywords: {
-    marginTop: 16, display: 'flex', flexWrap: 'wrap', gap: 8,
-    justifyContent: 'center', alignItems: 'center',
-  },
-  chip: {
-    fontSize: 13, color: 'var(--sf-text)', textDecoration: 'none', background: 'var(--sf-surface)',
-    border: '1px solid var(--sf-brd)', borderRadius: 999, padding: '5px 12px',
   },
   stats: {
     marginTop: 32, display: 'flex', gap: 'clamp(20px,5vw,64px)',

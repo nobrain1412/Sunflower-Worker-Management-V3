@@ -76,6 +76,24 @@ async function findPublicTuyenDung() {
   return result.rows;
 }
 
+// Thống kê tổng hợp cho trang tuyển dụng CÔNG KHAI (không cần đăng nhập).
+// Chỉ trả các con số tổng, không lộ thông tin cá nhân của công nhân.
+async function thongKeTuyenDung() {
+  const result = await db.query(
+    `SELECT
+       (SELECT COUNT(*) FROM cong_ty WHERE active = TRUE)                         AS so_cong_ty_tuyen_dung,
+       (SELECT COUNT(*) FROM cong_nhan WHERE deleted_at IS NULL)                  AS tong_cong_nhan,
+       (SELECT COUNT(*) FROM cong_nhan
+         WHERE deleted_at IS NULL AND trang_thai = 'dang_lam')                    AS cong_nhan_dang_lam`,
+  );
+  const row = result.rows[0] || {};
+  return {
+    so_cong_ty_tuyen_dung: Number(row.so_cong_ty_tuyen_dung || 0),
+    tong_cong_nhan: Number(row.tong_cong_nhan || 0),
+    cong_nhan_dang_lam: Number(row.cong_nhan_dang_lam || 0),
+  };
+}
+
 // exec: pool (mặc định) hoặc client transaction để chạy trong 1 transaction chung.
 async function create(data, exec = db) {
   const { ten_cong_ty, dia_chi, map_url, so_dien_thoai, email,
@@ -253,7 +271,7 @@ async function deleteRate(userId, congTyId) {
 }
 
 module.exports = {
-  findAll, findById, findPublicTuyenDung, create, update, hardDelete,
+  findAll, findById, findPublicTuyenDung, thongKeTuyenDung, create, update, hardDelete,
   findQuanLy, assignQuanLy, removeQuanLy,
   findRatesByCongTy, findRatesByUser, upsertRate, deleteRate,
 };

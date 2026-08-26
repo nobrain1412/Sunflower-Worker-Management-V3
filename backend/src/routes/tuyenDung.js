@@ -12,4 +12,11 @@ router.get('/', asyncWrapper(async (_req, res) => {
   sendSuccess(res, data);
 }));
 
+// GET /api/tuyen-dung/thong-ke — số liệu thật (công ty đang tuyển, tổng công nhân),
+// dùng cho phần thống kê ở Hero trang tuyển dụng. CÔNG KHAI, chỉ trả con số tổng.
+router.get('/thong-ke', asyncWrapper(async (_req, res) => {
+  const data = await congTyService.thongKeTuyenDung();
+  sendSuccess(res, data);
+}));
+
 module.exports = router;

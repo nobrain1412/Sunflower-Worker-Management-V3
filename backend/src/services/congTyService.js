@@ -24,6 +24,11 @@ async function danhSachTuyenDung() {
   return rows;
 }
 
+// Thống kê thật cho trang tuyển dụng công khai (không auth).
+async function thongKeTuyenDung() {
+  return congTyModel.thongKeTuyenDung();
+}
+
 async function chiTiet(id) {
   const congTy = await congTyModel.findById(id);
   if (!congTy) {
@@ -74,4 +79,4 @@ async function goQuanLy(congTyId, userId) {
   }
 }
 
-module.exports = { danhSach, danhSachTuyenDung, chiTiet, taoMoi, capNhat, ganQuanLy, goQuanLy };
+module.exports = { danhSach, danhSachTuyenDung, thongKeTuyenDung, chiTiet, taoMoi, capNhat, ganQuanLy, goQuanLy };

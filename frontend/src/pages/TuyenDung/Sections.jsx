@@ -10,60 +10,53 @@ function SectionHead({ title }) {
   );
 }
 
-// Mục "Ngành nghề nổi bật" — grid card ngành nghề (dữ liệu mẫu).
-export function CategoriesSection({ categories, onOpen }) {
-  return (
-    <section style={s.section}>
-      <SectionHead title="Ngành nghề nổi bật" />
-      <div style={{ display: 'grid', gridTemplateColumns: 'var(--sf-cat-cols)', gap: 14 }}>
-        {categories.map((ct) => (
-          <a key={ct.key} href="#" className="sf-card" onClick={(e) => { e.preventDefault(); onOpen(ct); }} style={s.catCard}>
-            <span style={{ ...s.catAvatar, background: ct.color }}>{ct.mono}</span>
-            <span style={{ minWidth: 0 }}>
-              <span style={s.catName}>{ct.name}</span>
-              <span style={s.catCount}>{ct.count} việc làm</span>
-            </span>
-          </a>
-        ))}
-      </div>
-    </section>
-  );
+// Trạng thái rỗng khi chưa có công ty thật đang tuyển.
+function EmptyState({ text }) {
+  return <div style={s.empty}>{text}</div>;
 }
 
-// Mục "Việc làm tốt nhất hôm nay" — grid card việc làm.
+// Mục "Việc làm tốt nhất hôm nay" — grid card việc làm (dữ liệu thật).
 export function JobsSection({ jobs, saved, onSave, onOpen }) {
   return (
     <section style={s.section}>
       <SectionHead title="Việc làm tốt nhất hôm nay" />
-      <div style={{ display: 'grid', gridTemplateColumns: 'var(--sf-job-cols)', gap: 14 }}>
-        {jobs.map((jb) => (
-          <JobCard
-            key={jb.id}
-            job={jb}
-            saved={!!saved[jb.id]}
-            onSave={() => onSave(jb.id)}
-            onOpen={() => onOpen(jb)}
-          />
-        ))}
-      </div>
+      {jobs.length === 0 ? (
+        <EmptyState text="Hiện chưa có công ty nào đang tuyển dụng." />
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'var(--sf-job-cols)', gap: 14 }}>
+          {jobs.map((jb) => (
+            <JobCard
+              key={jb.id}
+              job={jb}
+              saved={!!saved[jb.id]}
+              onSave={() => onSave(jb.id)}
+              onOpen={() => onOpen(jb)}
+            />
+          ))}
+        </div>
+      )}
     </section>
   );
 }
 
-// Mục "Thương hiệu tuyển dụng hàng đầu" — grid card công ty (dọc, căn giữa).
+// Mục "Thương hiệu tuyển dụng hàng đầu" — grid card công ty (dữ liệu thật).
 export function CompaniesSection({ companies, onOpen }) {
   return (
     <section style={s.section}>
       <SectionHead title="Thương hiệu tuyển dụng hàng đầu" />
-      <div style={{ display: 'grid', gridTemplateColumns: 'var(--sf-co-cols)', gap: 14 }}>
-        {companies.map((co) => (
-          <a key={co.key} href="#" className="sf-card" onClick={(e) => { e.preventDefault(); onOpen(co); }} style={s.coCard}>
-            <span style={{ ...s.coAvatar, background: co.color }}>{co.mono}</span>
-            <span style={s.coName}>{co.name}</span>
-            <span style={s.coSub}>{co.subtitle}</span>
-          </a>
-        ))}
-      </div>
+      {companies.length === 0 ? (
+        <EmptyState text="Chưa có doanh nghiệp nào đang tuyển dụng." />
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'var(--sf-co-cols)', gap: 14 }}>
+          {companies.map((co) => (
+            <a key={co.key} href="#" className="sf-card" onClick={(e) => { e.preventDefault(); onOpen(co); }} style={s.coCard}>
+              <span style={{ ...s.coAvatar, background: co.color }}>{co.mono}</span>
+              <span style={s.coName}>{co.name}</span>
+              <span style={s.coSub}>{co.subtitle}</span>
+            </a>
+          ))}
+        </div>
+      )}
     </section>
   );
 }
@@ -75,7 +68,7 @@ export function EmployerCta({ onCta }) {
       <div style={s.cta}>
         <div style={{ flex: 1, minWidth: 260 }}>
           <h2 style={s.ctaTitle}>Bạn là nhà tuyển dụng?</h2>
-          <p style={s.ctaSub}>Đăng tin miễn phí và tiếp cận hơn 5 triệu hồ sơ ứng viên chất lượng trên Sunflower.</p>
+          <p style={s.ctaSub}>Đăng tin tuyển dụng và kết nối trực tiếp với nguồn công nhân sẵn có trên Sunflower.</p>
         </div>
         <a href="#" className="sf-btn-flame" onClick={(e) => { e.preventDefault(); onCta(); }} style={s.ctaBtn}>Đăng tuyển &amp; tìm hồ sơ</a>
       </div>
@@ -89,17 +82,10 @@ const s = {
   h2: { margin: 0, fontSize: 'clamp(19px,2.4vw,26px)', fontWeight: 800, color: 'var(--sf-text)' },
   seeAll: { fontSize: 14, fontWeight: 600, color: 'var(--sf-navy)', textDecoration: 'none', whiteSpace: 'nowrap' },
 
-  catCard: {
-    display: 'flex', alignItems: 'center', gap: 14, background: 'var(--sf-surface)',
-    border: '1px solid var(--sf-brd)', borderRadius: 12, padding: 16, textDecoration: 'none',
-    color: 'var(--sf-text)', boxShadow: 'var(--sf-shadow)', cursor: 'pointer',
+  empty: {
+    background: 'var(--sf-surface)', border: '1px dashed var(--sf-brd)', borderRadius: 12,
+    padding: 'clamp(28px,4vw,44px)', textAlign: 'center', color: 'var(--sf-muted)', fontSize: 14.5,
   },
-  catAvatar: {
-    width: 44, height: 44, flex: 'none', display: 'inline-flex', alignItems: 'center',
-    justifyContent: 'center', borderRadius: 12, fontSize: 14, fontWeight: 800, color: '#fff',
-  },
-  catName: { display: 'block', fontSize: 14.5, fontWeight: 700, lineHeight: 1.3, overflowWrap: 'anywhere' },
-  catCount: { display: 'block', fontSize: 12.5, color: 'var(--sf-muted)', marginTop: 2, overflowWrap: 'anywhere' },
 
   coCard: {
     background: 'var(--sf-surface)', border: '1px solid var(--sf-brd)', borderRadius: 12,
