@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { useGiaoDichList, useTongThang, useTaoGiaoDich, useXoaGiaoDich, useDanhMuc, useTaoDanhMuc, useCapNhatDanhMuc, useCapNhatHoanTien, useGiamSatChi } from '../../hooks/useTaiChinh';
@@ -349,25 +349,40 @@ export default function TaiChinh() {
   // Bộ lọc cho tab "Chi nhân viên" (admin giám sát khoản chi của kế toán & nhân viên)
   const [gsUserId,      setGsUserId]      = useState('');
   const [gsLoai,        setGsLoai]        = useState('');
+  const [gsThang,       setGsThang]       = useState(now.getMonth() + 1);
+  const [gsNam,         setGsNam]         = useState(now.getFullYear());
   const [addModal,      setAddModal]      = useState(false);
   const [danhMucModal,  setDanhMucModal]  = useState(false);
   const [detailGd,      setDetailGd]      = useState(null);
   const [hoanGd,        setHoanGd]        = useState(null);
-  const [thang,         setThang]         = useState(now.getMonth() + 1);
-  const [nam,           setNam]           = useState(now.getFullYear());
+  // Bộ lọc bảng giao dịch — mặc định "" = tất cả (gom mọi tháng vào 1 bảng)
+  const [filterThang,   setFilterThang]   = useState('');
+  const [filterNam,     setFilterNam]     = useState('');
   const [filterLoai,    setFilterLoai]    = useState('');
   const [filterNguoiNhan, setFilterNguoiNhan] = useState('');
+  const [page,          setPage]          = useState(1);
+
+  const LIMIT = 20;
+
+  // Đổi bất kỳ bộ lọc nào của bảng giao dịch → về trang 1
+  function resetTrang() { setPage(1); }
 
   // Tìm kiếm theo ?q= từ thanh search Topbar — lọc theo mô tả (danh mục) / ghi chú
   const [urlParams, setUrlParams] = useSearchParams();
   const q = (urlParams.get('q') ?? '').trim().toLowerCase();
 
-  const { data: gdRes }      = useGiaoDichList({ thang, nam, loai: filterLoai || undefined });
-  const { data: tongRes }    = useTongThang(thang, nam);
+  const { data: gdRes }      = useGiaoDichList({
+    page, limit: LIMIT,
+    thang: filterThang || undefined,
+    nam:   filterNam   || undefined,
+    loai:  filterLoai  || undefined,
+  });
+  // KPI luôn tính cho tháng hiện tại, không phụ thuộc bộ lọc bảng
+  const { data: tongRes }    = useTongThang(now.getMonth() + 1, now.getFullYear());
 
   // Admin — giám sát khoản chi của nhân viên (không gồm 'tieu')
   const { data: gsRes, isLoading: gsLoading } = useGiamSatChi(
-    { thang, nam, loai: gsLoai || undefined, user_id: gsUserId || undefined },
+    { thang: gsThang, nam: gsNam, loai: gsLoai || undefined, user_id: gsUserId || undefined },
     { enabled: isAdmin && tab === 'giam-sat' },
   );
   const gsList = gsRes?.data ?? [];
@@ -386,6 +401,7 @@ export default function TaiChinh() {
   }));
 
   const gdList   = gdRes?.data ?? [];
+  const meta     = gdRes?.meta ?? { total: 0, total_pages: 1 };
   const tongData = tongRes?.data ?? {};
   const tongThu  = Number(tongData.tong_thu ?? 0);
   const tongChi  = Number(tongData.tong_chi ?? 0) + Number(tongData.da_hoan ?? 0);
@@ -413,10 +429,16 @@ export default function TaiChinh() {
     return true;
   }), [gdList, q, filterNguoiNhan]);
 
-  const hasFilter = !!q || !!filterNguoiNhan;
+  // Về trang hợp lệ khi số trang thay đổi (đổi bộ lọc, xoá giao dịch...)
+  useEffect(() => {
+    const soTrang = Math.max(1, meta.total_pages);
+    if (page > soTrang) setPage(soTrang);
+  }, [meta.total_pages, page]);
+
+  const hasFilter = !!q || !!filterNguoiNhan || !!filterLoai || !!filterThang || !!filterNam;
   const emptyMsg = hasFilter
     ? 'Không tìm thấy giao dịch phù hợp với bộ lọc'
-    : `Không có giao dịch nào trong tháng ${thang}/${nam}`;
+    : 'Chưa có giao dịch nào';
 
   async function handleXoa(gd) {
     if (!window.confirm(`Bạn chắc muốn xoá giao dịch ${fmt(gd.so_tien)} này?`)) return;
@@ -474,10 +496,10 @@ export default function TaiChinh() {
             <div className="tc-filter-group" style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center' }}>
               {tab === 'giam-sat' && (
                 <>
-                  <select style={s.filterSelect} value={thang} onChange={(e) => setThang(Number(e.target.value))}>
+                  <select style={s.filterSelect} value={gsThang} onChange={(e) => setGsThang(Number(e.target.value))}>
                     {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => <option key={m} value={m}>T{m}</option>)}
                   </select>
-                  <select style={s.filterSelect} value={nam} onChange={(e) => setNam(Number(e.target.value))}>
+                  <select style={s.filterSelect} value={gsNam} onChange={(e) => setGsNam(Number(e.target.value))}>
                     {[2024,2025,2026,2027].map((y) => <option key={y} value={y}>{y}</option>)}
                   </select>
                   <select style={s.filterSelect} value={gsUserId} onChange={(e) => setGsUserId(e.target.value)}>
@@ -498,14 +520,16 @@ export default function TaiChinh() {
               )}
               {tab === 'giao-dich' && !isMobile && (
                 <>
-                  {/* Bộ lọc tháng/năm */}
-                  <select style={s.filterSelect} value={thang} onChange={(e) => setThang(Number(e.target.value))}>
+                  {/* Bộ lọc tháng/năm — mặc định "Tất cả": gom mọi tháng vào 1 bảng */}
+                  <select style={s.filterSelect} value={filterThang} onChange={(e) => { setFilterThang(e.target.value); resetTrang(); }}>
+                    <option value="">Tất cả tháng</option>
                     {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => <option key={m} value={m}>T{m}</option>)}
                   </select>
-                  <select style={s.filterSelect} value={nam} onChange={(e) => setNam(Number(e.target.value))}>
+                  <select style={s.filterSelect} value={filterNam} onChange={(e) => { setFilterNam(e.target.value); resetTrang(); }}>
+                    <option value="">Tất cả năm</option>
                     {[2024,2025,2026,2027].map((y) => <option key={y} value={y}>{y}</option>)}
                   </select>
-                  <select style={s.filterSelect} value={filterLoai} onChange={(e) => setFilterLoai(e.target.value)}>
+                  <select style={s.filterSelect} value={filterLoai} onChange={(e) => { setFilterLoai(e.target.value); resetTrang(); }}>
                     <option value="">Tất cả loại</option>
                     <option value="thu">Thu</option>
                     <option value="chi">Chi</option>
@@ -539,14 +563,16 @@ export default function TaiChinh() {
           {tab === 'giao-dich' && isMobile && (
             <div style={mobile.filterPanel}>
               <div style={mobile.filterRow}>
-                <select style={s.filterSelect} value={thang} onChange={(e) => setThang(Number(e.target.value))}>
+                <select style={s.filterSelect} value={filterThang} onChange={(e) => { setFilterThang(e.target.value); resetTrang(); }}>
+                  <option value="">Tất cả tháng</option>
                   {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => <option key={m} value={m}>T{m}</option>)}
                 </select>
-                <select style={s.filterSelect} value={nam} onChange={(e) => setNam(Number(e.target.value))}>
+                <select style={s.filterSelect} value={filterNam} onChange={(e) => { setFilterNam(e.target.value); resetTrang(); }}>
+                  <option value="">Tất cả năm</option>
                   {[2024,2025,2026,2027].map((y) => <option key={y} value={y}>{y}</option>)}
                 </select>
               </div>
-              <select style={s.filterSelect} value={filterLoai} onChange={(e) => setFilterLoai(e.target.value)}>
+              <select style={s.filterSelect} value={filterLoai} onChange={(e) => { setFilterLoai(e.target.value); resetTrang(); }}>
                 <option value="">Tất cả loại</option>
                 <option value="thu">Thu</option>
                 <option value="chi">Chi</option>
@@ -670,6 +696,26 @@ export default function TaiChinh() {
             </div>
           )}
 
+          {/* Phân trang — dùng cho cả desktop & mobile, gom mọi giao dịch */}
+          {tab === 'giao-dich' && meta.total > 0 && (
+            <div style={s.pageBar}>
+              <span style={s.pageInfo}>
+                <b style={{ color: 'var(--text1)', fontFamily: "'JetBrains Mono', monospace" }}>{meta.total}</b> giao dịch
+              </span>
+              {meta.total_pages > 1 && (
+                <div style={s.pagination}>
+                  <button className="btn-ghost" style={{ padding: '6px 12px', fontSize: 12 }}
+                    disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>← Trước</button>
+                  <span style={s.pageInfo}>
+                    Trang <b style={{ fontFamily: "'JetBrains Mono', monospace" }}>{page}</b> / {meta.total_pages}
+                  </span>
+                  <button className="btn-ghost" style={{ padding: '6px 12px', fontSize: 12 }}
+                    disabled={page >= meta.total_pages} onClick={() => setPage((p) => p + 1)}>Sau →</button>
+                </div>
+              )}
+            </div>
+          )}
+
           {tab === 'danh-muc' && (
             <div>
               <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
@@ -680,7 +726,7 @@ export default function TaiChinh() {
           )}
 
           {tab === 'giam-sat' && isAdmin && (
-            <GiamSatChiPanel list={gsList} loading={gsLoading} thang={thang} nam={nam} />
+            <GiamSatChiPanel list={gsList} loading={gsLoading} thang={gsThang} nam={gsNam} />
           )}
         </div>
       </div>
@@ -885,6 +931,9 @@ const s = {
   th:      { fontSize: 10, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', padding: '0 12px 10px 0', borderBottom: '1px solid var(--border)', textAlign: 'left' },
   tr:      { borderBottom: '1px solid var(--border)' },
   td:      { padding: '10px 12px 10px 0', verticalAlign: 'middle' },
+  pageBar:    { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginTop: 14, flexWrap: 'wrap' },
+  pagination: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12 },
+  pageInfo:   { fontSize: 12, color: 'var(--text2)' },
 };
 
 const M = {
