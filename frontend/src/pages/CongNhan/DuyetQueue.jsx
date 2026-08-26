@@ -6,8 +6,10 @@
  */
 import { useState } from 'react';
 import { useCongNhanList, useDuyetCongNhan, useTuChoiCongNhan } from '../../hooks/useCongNhan';
+import { useDeXuatNghiViecList } from '../../hooks/useDeXuatNghiViec';
 import { useAuth } from '../../context/AuthContext';
 import EditDuyetModal from './EditDuyetModal';
+import DuyetNghiViecTab from './DuyetNghiViecTab';
 
 function fmtDate(s) {
   if (!s) return '—';
@@ -18,7 +20,9 @@ function fmtDate(s) {
 
 export default function DuyetQueue() {
   const { isAdmin } = useAuth();
-  // 2 nhóm cần duyệt: 'doi_viec' (phỏng vấn đạt) và 'cho_duyet' (import trùng CCCD thêm mới).
+  const [tab, setTab] = useState('them_moi'); // 'them_moi' | 'nghi_viec'
+
+  // Tab "Thêm mới": 'doi_viec' (phỏng vấn đạt) và 'cho_duyet' (import trùng CCCD).
   const doiViecQ  = useCongNhanList({ trang_thai: 'doi_viec',  limit: 100 });
   const choDuyetQ = useCongNhanList({ trang_thai: 'cho_duyet', limit: 100 });
   const isLoading = doiViecQ.isLoading || choDuyetQ.isLoading;
@@ -27,6 +31,10 @@ export default function DuyetQueue() {
     ...(doiViecQ.data?.data ?? []),
   ];
 
+  // Badge số đề xuất nghỉ việc chờ duyệt (hiển thị trên nút tab).
+  const nghiViecQ = useDeXuatNghiViecList('cho_duyet');
+  const soNghiViec = nghiViecQ.data?.data?.length ?? 0;
+
   return (
     <div style={s.root}>
       <div style={s.header}>
@@ -34,21 +42,41 @@ export default function DuyetQueue() {
           <h1 style={s.title}>Duyệt công nhân</h1>
           <p style={s.subtitle}>
             {isAdmin
-              ? 'Công nhân đợi việc (chờ phỏng vấn) và trùng CCCD thêm mới — chờ duyệt'
-              : 'Công nhân đợi việc / trùng CCCD thuộc công ty bạn quản lý'}
+              ? 'Duyệt công nhân thêm mới và duyệt nghỉ việc (phát hiện từ bảng vân tay)'
+              : 'Duyệt công nhân thêm mới / nghỉ việc thuộc công ty bạn quản lý'}
           </p>
         </div>
-        <span style={s.countBadge}>{rows.length} đang chờ</span>
       </div>
 
-      {isLoading ? (
-        <div style={s.empty}>Đang tải...</div>
-      ) : rows.length === 0 ? (
-        <div style={s.empty}>Không có công nhân nào chờ duyệt.</div>
+      <div style={s.tabs}>
+        <button
+          style={{ ...s.tab, ...(tab === 'them_moi' ? s.tabActive : {}) }}
+          onClick={() => setTab('them_moi')}
+        >
+          Duyệt thêm mới
+          {rows.length > 0 && <span style={s.tabBadge}>{rows.length}</span>}
+        </button>
+        <button
+          style={{ ...s.tab, ...(tab === 'nghi_viec' ? s.tabActive : {}) }}
+          onClick={() => setTab('nghi_viec')}
+        >
+          Duyệt nghỉ việc
+          {soNghiViec > 0 && <span style={{ ...s.tabBadge, ...s.tabBadgeRed }}>{soNghiViec}</span>}
+        </button>
+      </div>
+
+      {tab === 'them_moi' ? (
+        isLoading ? (
+          <div style={s.empty}>Đang tải...</div>
+        ) : rows.length === 0 ? (
+          <div style={s.empty}>Không có công nhân nào chờ duyệt.</div>
+        ) : (
+          <div style={s.list}>
+            {rows.map((cn) => <DuyetCard key={cn.id} cn={cn} />)}
+          </div>
+        )
       ) : (
-        <div style={s.list}>
-          {rows.map((cn) => <DuyetCard key={cn.id} cn={cn} />)}
-        </div>
+        <DuyetNghiViecTab />
       )}
     </div>
   );
@@ -137,6 +165,19 @@ const s = {
     fontSize: 12, fontWeight: 700, color: 'var(--accent2)',
     background: 'rgba(123,95,255,0.12)', borderRadius: 12, padding: '5px 12px',
   },
+  tabs: { display: 'flex', gap: 8, marginBottom: 18, flexWrap: 'wrap' },
+  tab: {
+    display: 'flex', alignItems: 'center', gap: 8,
+    background: 'var(--bg1)', color: 'var(--text2)', border: '1px solid var(--border)',
+    borderRadius: 10, padding: '9px 16px', fontSize: 13, fontWeight: 700, cursor: 'pointer',
+    fontFamily: "'Be Vietnam Pro', sans-serif",
+  },
+  tabActive: { background: 'var(--bg3)', color: 'var(--text1)', borderColor: 'var(--border2)' },
+  tabBadge: {
+    fontSize: 11, fontWeight: 700, color: 'var(--accent2)',
+    background: 'rgba(123,95,255,0.15)', borderRadius: 10, padding: '1px 8px',
+  },
+  tabBadgeRed: { color: 'var(--red)', background: 'rgba(255,95,114,0.15)' },
   empty: {
     padding: 60, textAlign: 'center', color: 'var(--text3)',
     background: 'var(--bg1)', border: '1px solid var(--border)', borderRadius: 12,
