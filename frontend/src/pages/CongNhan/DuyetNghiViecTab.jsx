@@ -10,7 +10,7 @@ import { useState, useMemo } from 'react';
 import { useCongTyList } from '../../hooks/useCongNhan';
 import {
   useDeXuatNghiViecList, useThangVanTay, usePhanTichNghiViec,
-  useTaoDeXuatNghiViec, useDuyetNghiViec, useTuChoiNghiViec,
+  useTaoDeXuatNghiViec, useGanMaVanTay, useDuyetNghiViec, useTuChoiNghiViec,
 } from '../../hooks/useDeXuatNghiViec';
 
 function fmtDate(s) {
@@ -118,6 +118,33 @@ function PhanTichPanel() {
     });
   }
 
+  // Sau khi gán mã + đối chiếu cho 1 CN chưa có mã: gỡ khỏi box dưới, và nếu là
+  // ứng viên nghỉ việc thì đưa lên danh sách phía trên (chọn sẵn).
+  function handleGanXong(congNhanId, data) {
+    const cn = data?.cong_nhan;
+    setKetQua((prev) => {
+      if (!prev) return prev;
+      const khong = (prev.khong_doi_chieu ?? []).filter((k) => k.cong_nhan_id !== congNhanId);
+      let deXuatMoi = prev.de_xuat ?? [];
+      if (data?.la_ung_vien && cn && !deXuatMoi.some((d) => d.cong_nhan_id === congNhanId)) {
+        deXuatMoi = [cn, ...deXuatMoi];
+      }
+      return { ...prev, de_xuat: deXuatMoi, khong_doi_chieu: khong };
+    });
+
+    if (data?.la_ung_vien && cn) {
+      if (!cn.da_co_de_xuat) {
+        setChon((prev) => new Set(prev).add(congNhanId));
+      }
+      alert(`${cn.ho_ten}: đã đưa lên danh sách nghỉ việc `
+        + `(${cn.so_ngay_vang == null ? 'vắng cả kỳ' : `vắng ${cn.so_ngay_vang} ngày`}).`);
+    } else if (cn) {
+      const last = cn.ngay_cuoi_cung_di_lam;
+      alert(`${cn.ho_ten}: vẫn đang đi làm${last ? ` (ngày công cuối ${fmtDate(last)})` : ''} `
+        + '— đã lưu mã, chưa đưa vào danh sách nghỉ việc.');
+    }
+  }
+
   // Click tiêu đề cột: cùng cột thì đảo hướng, cột khác thì asc từ đầu.
   function handleSort(key) {
     setSortBy((prev) => (
@@ -183,6 +210,7 @@ function PhanTichPanel() {
             <div style={s.empty}>Không có công nhân nào thoả điều kiện nghỉ việc.</div>
           ) : (
             <>
+              {deXuat.length > 0 && (
               <div style={s.tableWrap}>
                 <table style={s.table}>
                   <thead>
@@ -226,24 +254,11 @@ function PhanTichPanel() {
                         </td>
                       </tr>
                     ))}
-                    {/* CN chưa gán mã vân tay: không đối chiếu được nên chỉ hiển thị,
-                        không cho chọn tạo đề xuất. */}
-                    {khongDoiChieu.map((k) => (
-                      <tr key={`kdc-${k.cong_nhan_id}`} style={s.trDim}>
-                        <td style={s.td}></td>
-                        <td style={s.td}>
-                          {k.ho_ten}
-                          <span style={s.badgeWarn}>{k.ly_do ?? 'Chưa gán mã vân tay'}</span>
-                        </td>
-                        <td style={{ ...s.td, color: 'var(--text3)' }}>—</td>
-                        <td style={s.td}>{k.trang_thai}</td>
-                        <td style={{ ...s.td, color: 'var(--text3)' }}>—</td>
-                        <td style={{ ...s.td, textAlign: 'right', color: 'var(--text3)' }}>—</td>
-                      </tr>
-                    ))}
                   </tbody>
                 </table>
               </div>
+              )}
+              {deXuat.length > 0 && (
               <div style={{ marginTop: 12, display: 'flex', justifyContent: 'flex-end' }}>
                 <button
                   className="btn-primary"
@@ -253,11 +268,107 @@ function PhanTichPanel() {
                   {taoDeXuat.isPending ? 'Đang tạo…' : `Tạo ${chon.size} đề xuất nghỉ việc`}
                 </button>
               </div>
+              )}
+              <ChuaGanMaBox
+                rows={khongDoiChieu}
+                congTyId={congTyId}
+                ky={ketQua.ky}
+                onKetQua={handleGanXong}
+              />
             </>
           )}
         </div>
       )}
     </div>
+  );
+}
+
+// ─── Box: công nhân chưa gán mã vân tay (nhập mã + kiểm tra nghỉ việc) ────────
+function ChuaGanMaBox({ rows, congTyId, ky, onKetQua }) {
+  if (!rows || rows.length === 0) return null;
+  return (
+    <div style={{ marginTop: 18 }}>
+      <div style={s.subHeader}>
+        <span>Công nhân chưa gán mã vân tay</span>
+        <span style={s.countBadgeAmber}>{rows.length}</span>
+      </div>
+      <div style={s.panelHint}>
+        Nhập mã vân tay rồi bấm <b>Kiểm tra</b> để đối chiếu với bảng vân tay kỳ này.
+        Nếu đã nghỉ việc, công nhân sẽ được đưa lên danh sách phía trên.
+      </div>
+      <div style={s.tableWrap}>
+        <table style={s.table}>
+          <thead>
+            <tr>
+              <th style={s.th}>Họ tên</th>
+              <th style={s.th}>Ngày vào</th>
+              <th style={s.th}>Trạng thái</th>
+              <th style={s.th}>Mã vân tay</th>
+              <th style={s.th}></th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <ChuaGanMaRow
+                key={r.cong_nhan_id}
+                row={r}
+                congTyId={congTyId}
+                ky={ky}
+                onKetQua={onKetQua}
+              />
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function ChuaGanMaRow({ row, congTyId, ky, onKetQua }) {
+  const [ma, setMa] = useState('');
+  const ganMa = useGanMaVanTay();
+
+  async function handleCheck() {
+    const val = ma.trim();
+    if (!val || !ky) return;
+    try {
+      const res = await ganMa.mutateAsync({
+        cong_ty_id: Number(congTyId), thang: ky.thang, nam: ky.nam,
+        cong_nhan_id: row.cong_nhan_id, ma_van_tay: val,
+      });
+      onKetQua(row.cong_nhan_id, res?.data ?? {});
+    } catch (err) {
+      alert(err?.message ?? 'Kiểm tra thất bại');
+    }
+  }
+
+  return (
+    <tr>
+      <td style={s.td}>{row.ho_ten}</td>
+      <td style={s.td}>{row.ngay_vao_lam ? fmtDate(row.ngay_vao_lam) : '—'}</td>
+      <td style={s.td}>{row.trang_thai}</td>
+      <td style={s.td}>
+        <input
+          className="form-input"
+          style={s.maInput}
+          value={ma}
+          onChange={(e) => setMa(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') handleCheck(); }}
+          placeholder="Nhập mã…"
+          disabled={ganMa.isPending}
+        />
+      </td>
+      <td style={s.td}>
+        <button
+          className="btn-primary"
+          style={s.btnCheck}
+          onClick={handleCheck}
+          disabled={!ma.trim() || ganMa.isPending}
+        >
+          {ganMa.isPending ? '…' : 'Kiểm tra'}
+        </button>
+      </td>
+    </tr>
   );
 }
 
@@ -360,10 +471,19 @@ const s = {
     marginLeft: 8, fontSize: 10, fontWeight: 700, color: 'var(--text3)',
     background: 'var(--bg3)', borderRadius: 6, padding: '2px 7px',
   },
-  badgeWarn: {
-    marginLeft: 8, fontSize: 10, fontWeight: 700, color: 'var(--amber)',
-    background: 'rgba(255,179,68,0.12)', borderRadius: 6, padding: '2px 7px',
+  subHeader: {
+    display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6,
+    fontSize: 13, fontWeight: 700, color: 'var(--text1)',
   },
+  countBadgeAmber: {
+    fontSize: 12, fontWeight: 700, color: 'var(--amber)',
+    background: 'rgba(255,179,68,0.12)', borderRadius: 12, padding: '3px 10px',
+  },
+  maInput: {
+    minWidth: 130, padding: '6px 8px', fontSize: 12,
+    fontFamily: "'JetBrains Mono', monospace",
+  },
+  btnCheck: { padding: '7px 14px', fontSize: 12 },
   sectionHeader: {
     display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12,
     fontSize: 14, fontWeight: 700, color: 'var(--text1)',

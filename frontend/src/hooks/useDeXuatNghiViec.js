@@ -37,6 +37,16 @@ export function useTaoDeXuatNghiViec() {
   });
 }
 
+// Gán mã vân tay cho 1 CN chưa có mã rồi đối chiếu kỳ (lưu hồ sơ + kiểm tra nghỉ việc).
+export function useGanMaVanTay() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ cong_ty_id, thang, nam, cong_nhan_id, ma_van_tay }) =>
+      api.post('/de-xuat-nghi-viec/gan-ma', { cong_ty_id, thang, nam, cong_nhan_id, ma_van_tay }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['cong-nhan'] }),
+  });
+}
+
 export function useDuyetNghiViec() {
   const qc = useQueryClient();
   return useMutation({
