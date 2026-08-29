@@ -179,7 +179,7 @@ function PhanTichPanel() {
             )}
           </div>
 
-          {deXuat.length === 0 ? (
+          {deXuat.length === 0 && khongDoiChieu.length === 0 ? (
             <div style={s.empty}>Không có công nhân nào thoả điều kiện nghỉ việc.</div>
           ) : (
             <>
@@ -224,6 +224,21 @@ function PhanTichPanel() {
                         <td style={{ ...s.td, textAlign: 'right', color: 'var(--red)', fontWeight: 700 }}>
                           {d.so_ngay_vang == null ? 'Cả kỳ' : `${d.so_ngay_vang} ngày`}
                         </td>
+                      </tr>
+                    ))}
+                    {/* CN chưa gán mã vân tay: không đối chiếu được nên chỉ hiển thị,
+                        không cho chọn tạo đề xuất. */}
+                    {khongDoiChieu.map((k) => (
+                      <tr key={`kdc-${k.cong_nhan_id}`} style={s.trDim}>
+                        <td style={s.td}></td>
+                        <td style={s.td}>
+                          {k.ho_ten}
+                          <span style={s.badgeWarn}>{k.ly_do ?? 'Chưa gán mã vân tay'}</span>
+                        </td>
+                        <td style={{ ...s.td, color: 'var(--text3)' }}>—</td>
+                        <td style={s.td}>{k.trang_thai}</td>
+                        <td style={{ ...s.td, color: 'var(--text3)' }}>—</td>
+                        <td style={{ ...s.td, textAlign: 'right', color: 'var(--text3)' }}>—</td>
                       </tr>
                     ))}
                   </tbody>
@@ -344,6 +359,10 @@ const s = {
   badgeDim: {
     marginLeft: 8, fontSize: 10, fontWeight: 700, color: 'var(--text3)',
     background: 'var(--bg3)', borderRadius: 6, padding: '2px 7px',
+  },
+  badgeWarn: {
+    marginLeft: 8, fontSize: 10, fontWeight: 700, color: 'var(--amber)',
+    background: 'rgba(255,179,68,0.12)', borderRadius: 6, padding: '2px 7px',
   },
   sectionHeader: {
     display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12,
