@@ -54,6 +54,11 @@ const taoSchema = kySchema.extend({
   cong_nhan_ids: z.array(z.number().int().positive()).max(1000).optional(),
 });
 
+const ganMaSchema = kySchema.extend({
+  cong_nhan_id: z.number().int().positive(),
+  ma_van_tay:   z.string().trim().min(1).max(50),
+});
+
 const tuChoiSchema = z.object({
   ghi_chu: z.preprocess((v) => (v === '' ? null : v), z.string().max(500).nullable().optional()),
 });
@@ -83,6 +88,22 @@ router.post('/tao',
     sendCreated(res, kq,
       `Đã tạo ${kq.da_tao} đề xuất nghỉ việc`
       + (kq.da_go ? `, gỡ ${kq.da_go} đề xuất cũ (đã đi làm lại)` : ''));
+  }),
+);
+
+// Gán mã vân tay cho 1 CN chưa có mã → lưu hồ sơ + đối chiếu kỳ ngay.
+router.post('/gan-ma',
+  requireRole('admin', 'quan_ly'),
+  scopeByRole,
+  validate(ganMaSchema),
+  asyncWrapper(async (req, res) => {
+    const { cong_ty_id, thang, nam, cong_nhan_id, ma_van_tay } = req.validatedBody;
+    assertCanManageCongTy(req, cong_ty_id);
+    const kq = await svc.ganMaKiemTra(cong_ty_id, thang, nam, cong_nhan_id, ma_van_tay, req.user, req.scope);
+    sendSuccess(res, kq,
+      kq.la_ung_vien
+        ? 'Đã gán mã — công nhân đủ điều kiện nghỉ việc'
+        : 'Đã gán mã — công nhân vẫn đang đi làm');
   }),
 );
 

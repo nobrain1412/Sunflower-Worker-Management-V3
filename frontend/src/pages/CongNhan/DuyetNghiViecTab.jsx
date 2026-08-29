@@ -10,7 +10,7 @@ import { useState, useMemo } from 'react';
 import { useCongTyList } from '../../hooks/useCongNhan';
 import {
   useDeXuatNghiViecList, useThangVanTay, usePhanTichNghiViec,
-  useTaoDeXuatNghiViec, useDuyetNghiViec, useTuChoiNghiViec,
+  useTaoDeXuatNghiViec, useGanMaVanTay, useDuyetNghiViec, useTuChoiNghiViec,
 } from '../../hooks/useDeXuatNghiViec';
 
 function fmtDate(s) {
@@ -30,11 +30,43 @@ export default function DuyetNghiViecTab() {
 }
 
 // ─── Phần 1: phân tích bảng vân tay ──────────────────────────────────────────
+// Các cột có thể sắp xếp trong bảng kết quả (không gồm cột checkbox).
+const SORT_COLS = {
+  ho_ten: { label: 'Họ tên', type: 'text' },
+  ma_van_tay: { label: 'Mã vân tay', type: 'text' },
+  trang_thai: { label: 'Trạng thái', type: 'text' },
+  ngay_cuoi_cung_di_lam: { label: 'Ngày công cuối', type: 'date' },
+  so_ngay_vang: { label: 'Số ngày vắng', type: 'absence' },
+};
+
+// So sánh 2 dòng theo cột + hướng. Xử lý riêng các giá trị đặc biệt:
+//   - ngay_cuoi_cung_di_lam = null ("Không có công") → xếp như ngày sớm nhất.
+//   - so_ngay_vang = null ("Cả kỳ", vắng toàn bộ) → coi là vắng nhiều nhất.
+function soSanh(a, b, key, dir) {
+  const type = SORT_COLS[key]?.type ?? 'text';
+  let x;
+  let y;
+  if (type === 'absence') {
+    x = a[key] == null ? Infinity : a[key];
+    y = b[key] == null ? Infinity : b[key];
+  } else if (type === 'date') {
+    x = a[key] || '';           // 'YYYY-MM-DD' so sánh chuỗi là đúng thứ tự
+    y = b[key] || '';
+  } else {
+    x = a[key] ?? '';
+    y = b[key] ?? '';
+  }
+  let cmp;
+  if (type === 'text') cmp = String(x).localeCompare(String(y), 'vi');
+  else cmp = x < y ? -1 : x > y ? 1 : 0;
+  return dir === 'asc' ? cmp : -cmp;
+}
+
 function PhanTichPanel() {
   const [congTyId, setCongTyId] = useState('');
-  const [ky, setKy] = useState('');            // 'thang|nam'
   const [ketQua, setKetQua] = useState(null);
   const [chon, setChon] = useState(() => new Set());
+  const [sortBy, setSortBy] = useState({ key: null, dir: 'asc' });
 
   const congTyQ = useCongTyList();
   const thangQ = useThangVanTay(congTyId ? Number(congTyId) : null);
@@ -43,14 +75,18 @@ function PhanTichPanel() {
 
   const congTyList = congTyQ.data?.data ?? [];
   const thangList = thangQ.data?.data ?? [];
+  // Bỏ chọn kỳ thủ công: luôn phân tích kỳ (bảng vân tay) mới nhất của công ty.
+  // listThang trả về đã sắp xếp nam DESC, thang DESC → phần tử đầu là mới nhất.
+  const kyMoiNhat = thangList[0] ?? null;
 
   async function handlePhanTich() {
-    if (!congTyId || !ky) return;
-    const [thang, nam] = ky.split('|').map(Number);
+    if (!congTyId || !kyMoiNhat) return;
+    const { thang, nam } = kyMoiNhat;
     try {
       const res = await phanTich.mutateAsync({ cong_ty_id: Number(congTyId), thang, nam });
       const data = res?.data ?? {};
       setKetQua(data);
+      setSortBy({ key: null, dir: 'asc' });
       // Mặc định chọn tất cả ứng viên chưa có đề xuất.
       setChon(new Set((data.de_xuat ?? []).filter((d) => !d.da_co_de_xuat).map((d) => d.cong_nhan_id)));
     } catch (err) {
@@ -60,8 +96,8 @@ function PhanTichPanel() {
   }
 
   async function handleTao() {
-    if (!congTyId || !ky || chon.size === 0) return;
-    const [thang, nam] = ky.split('|').map(Number);
+    if (!congTyId || !kyMoiNhat || chon.size === 0) return;
+    const { thang, nam } = kyMoiNhat;
     try {
       const res = await taoDeXuat.mutateAsync({
         cong_ty_id: Number(congTyId), thang, nam, cong_nhan_ids: [...chon],
@@ -82,50 +118,82 @@ function PhanTichPanel() {
     });
   }
 
+  // Sau khi gán mã + đối chiếu cho 1 CN chưa có mã: gỡ khỏi box dưới, và nếu là
+  // ứng viên nghỉ việc thì đưa lên danh sách phía trên (chọn sẵn).
+  function handleGanXong(congNhanId, data) {
+    const cn = data?.cong_nhan;
+    setKetQua((prev) => {
+      if (!prev) return prev;
+      const khong = (prev.khong_doi_chieu ?? []).filter((k) => k.cong_nhan_id !== congNhanId);
+      let deXuatMoi = prev.de_xuat ?? [];
+      if (data?.la_ung_vien && cn && !deXuatMoi.some((d) => d.cong_nhan_id === congNhanId)) {
+        deXuatMoi = [cn, ...deXuatMoi];
+      }
+      return { ...prev, de_xuat: deXuatMoi, khong_doi_chieu: khong };
+    });
+
+    if (data?.la_ung_vien && cn) {
+      if (!cn.da_co_de_xuat) {
+        setChon((prev) => new Set(prev).add(congNhanId));
+      }
+      alert(`${cn.ho_ten}: đã đưa lên danh sách nghỉ việc `
+        + `(${cn.so_ngay_vang == null ? 'vắng cả kỳ' : `vắng ${cn.so_ngay_vang} ngày`}).`);
+    } else if (cn) {
+      const last = cn.ngay_cuoi_cung_di_lam;
+      alert(`${cn.ho_ten}: vẫn đang đi làm${last ? ` (ngày công cuối ${fmtDate(last)})` : ''} `
+        + '— đã lưu mã, chưa đưa vào danh sách nghỉ việc.');
+    }
+  }
+
+  // Click tiêu đề cột: cùng cột thì đảo hướng, cột khác thì asc từ đầu.
+  function handleSort(key) {
+    setSortBy((prev) => (
+      prev.key === key
+        ? { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
+        : { key, dir: 'asc' }
+    ));
+  }
+
   const deXuat = ketQua?.de_xuat ?? [];
   const khongDoiChieu = ketQua?.khong_doi_chieu ?? [];
+
+  const deXuatSapXep = useMemo(() => {
+    if (!sortBy.key) return deXuat;
+    return [...deXuat].sort((a, b) => soSanh(a, b, sortBy.key, sortBy.dir));
+  }, [deXuat, sortBy]);
 
   return (
     <div style={s.panel}>
       <div style={s.panelTitle}>🔍 Phân tích nghỉ việc từ bảng vân tay</div>
       <div style={s.panelHint}>
-        Dò công nhân không đi làm ≥ 3 ngày tính tới ngày cuối cùng trong bảng vân tay của kỳ đã chọn.
+        Dò công nhân không đi làm ≥ 3 ngày tính tới ngày cuối cùng trong bảng vân tay mới nhất của công ty.
       </div>
 
       <div style={s.filterRow}>
         <select
           className="form-input" style={s.select}
           value={congTyId}
-          onChange={(e) => { setCongTyId(e.target.value); setKy(''); setKetQua(null); }}
+          onChange={(e) => { setCongTyId(e.target.value); setKetQua(null); }}
         >
           <option value="">— Chọn công ty —</option>
           {congTyList.map((c) => <option key={c.id} value={c.id}>{c.ten_cong_ty}</option>)}
         </select>
 
-        <select
-          className="form-input" style={s.select}
-          value={ky}
-          onChange={(e) => { setKy(e.target.value); setKetQua(null); }}
-          disabled={!congTyId || thangList.length === 0}
-        >
-          <option value="">
-            {!congTyId ? '— Chọn công ty trước —'
-              : thangList.length === 0 ? '— Chưa có bảng vân tay —' : '— Chọn kỳ —'}
-          </option>
-          {thangList.map((t) => (
-            <option key={`${t.thang}|${t.nam}`} value={`${t.thang}|${t.nam}`}>
-              T{t.thang}/{t.nam} ({t.so_cong_nhan} CN)
-            </option>
-          ))}
-        </select>
-
         <button
           className="btn-primary"
           onClick={handlePhanTich}
-          disabled={!congTyId || !ky || phanTich.isPending}
+          disabled={!congTyId || !kyMoiNhat || phanTich.isPending}
         >
           {phanTich.isPending ? 'Đang dò…' : 'Phân tích'}
         </button>
+
+        {congTyId && (
+          <span style={s.kyInfo}>
+            {thangList.length === 0
+              ? '— Chưa có bảng vân tay —'
+              : `Kỳ mới nhất: T${kyMoiNhat.thang}/${kyMoiNhat.nam} (${kyMoiNhat.so_cong_nhan} CN)`}
+          </span>
+        )}
       </div>
 
       {ketQua && (
@@ -138,24 +206,34 @@ function PhanTichPanel() {
             )}
           </div>
 
-          {deXuat.length === 0 ? (
+          {deXuat.length === 0 && khongDoiChieu.length === 0 ? (
             <div style={s.empty}>Không có công nhân nào thoả điều kiện nghỉ việc.</div>
           ) : (
             <>
+              {deXuat.length > 0 && (
               <div style={s.tableWrap}>
                 <table style={s.table}>
                   <thead>
                     <tr>
                       <th style={s.th}></th>
-                      <th style={s.th}>Họ tên</th>
-                      <th style={s.th}>Mã vân tay</th>
-                      <th style={s.th}>Trạng thái</th>
-                      <th style={s.th}>Ngày công cuối</th>
-                      <th style={s.th}>Số ngày vắng</th>
+                      {Object.entries(SORT_COLS).map(([key, col]) => {
+                        const active = sortBy.key === key;
+                        return (
+                          <th
+                            key={key}
+                            style={{ ...s.th, ...s.thSort, ...(active ? s.thActive : null) }}
+                            onClick={() => handleSort(key)}
+                            title="Bấm để sắp xếp"
+                          >
+                            {col.label}
+                            <span style={s.sortArrow}>{active ? (sortBy.dir === 'asc' ? '▲' : '▼') : '↕'}</span>
+                          </th>
+                        );
+                      })}
                     </tr>
                   </thead>
                   <tbody>
-                    {deXuat.map((d) => (
+                    {deXuatSapXep.map((d) => (
                       <tr key={d.cong_nhan_id} style={d.da_co_de_xuat ? s.trDim : undefined}>
                         <td style={s.td}>
                           <input
@@ -179,6 +257,8 @@ function PhanTichPanel() {
                   </tbody>
                 </table>
               </div>
+              )}
+              {deXuat.length > 0 && (
               <div style={{ marginTop: 12, display: 'flex', justifyContent: 'flex-end' }}>
                 <button
                   className="btn-primary"
@@ -188,11 +268,107 @@ function PhanTichPanel() {
                   {taoDeXuat.isPending ? 'Đang tạo…' : `Tạo ${chon.size} đề xuất nghỉ việc`}
                 </button>
               </div>
+              )}
+              <ChuaGanMaBox
+                rows={khongDoiChieu}
+                congTyId={congTyId}
+                ky={ketQua.ky}
+                onKetQua={handleGanXong}
+              />
             </>
           )}
         </div>
       )}
     </div>
+  );
+}
+
+// ─── Box: công nhân chưa gán mã vân tay (nhập mã + kiểm tra nghỉ việc) ────────
+function ChuaGanMaBox({ rows, congTyId, ky, onKetQua }) {
+  if (!rows || rows.length === 0) return null;
+  return (
+    <div style={{ marginTop: 18 }}>
+      <div style={s.subHeader}>
+        <span>Công nhân chưa gán mã vân tay</span>
+        <span style={s.countBadgeAmber}>{rows.length}</span>
+      </div>
+      <div style={s.panelHint}>
+        Nhập mã vân tay rồi bấm <b>Kiểm tra</b> để đối chiếu với bảng vân tay kỳ này.
+        Nếu đã nghỉ việc, công nhân sẽ được đưa lên danh sách phía trên.
+      </div>
+      <div style={s.tableWrap}>
+        <table style={s.table}>
+          <thead>
+            <tr>
+              <th style={s.th}>Họ tên</th>
+              <th style={s.th}>Ngày vào</th>
+              <th style={s.th}>Trạng thái</th>
+              <th style={s.th}>Mã vân tay</th>
+              <th style={s.th}></th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <ChuaGanMaRow
+                key={r.cong_nhan_id}
+                row={r}
+                congTyId={congTyId}
+                ky={ky}
+                onKetQua={onKetQua}
+              />
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function ChuaGanMaRow({ row, congTyId, ky, onKetQua }) {
+  const [ma, setMa] = useState('');
+  const ganMa = useGanMaVanTay();
+
+  async function handleCheck() {
+    const val = ma.trim();
+    if (!val || !ky) return;
+    try {
+      const res = await ganMa.mutateAsync({
+        cong_ty_id: Number(congTyId), thang: ky.thang, nam: ky.nam,
+        cong_nhan_id: row.cong_nhan_id, ma_van_tay: val,
+      });
+      onKetQua(row.cong_nhan_id, res?.data ?? {});
+    } catch (err) {
+      alert(err?.message ?? 'Kiểm tra thất bại');
+    }
+  }
+
+  return (
+    <tr>
+      <td style={s.td}>{row.ho_ten}</td>
+      <td style={s.td}>{row.ngay_vao_lam ? fmtDate(row.ngay_vao_lam) : '—'}</td>
+      <td style={s.td}>{row.trang_thai}</td>
+      <td style={s.td}>
+        <input
+          className="form-input"
+          style={s.maInput}
+          value={ma}
+          onChange={(e) => setMa(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') handleCheck(); }}
+          placeholder="Nhập mã…"
+          disabled={ganMa.isPending}
+        />
+      </td>
+      <td style={s.td}>
+        <button
+          className="btn-primary"
+          style={s.btnCheck}
+          onClick={handleCheck}
+          disabled={!ma.trim() || ganMa.isPending}
+        >
+          {ganMa.isPending ? '…' : 'Kiểm tra'}
+        </button>
+      </td>
+    </tr>
   );
 }
 
@@ -278,6 +454,7 @@ const s = {
   panelHint: { fontSize: 11, color: 'var(--text3)', marginTop: 4, marginBottom: 12 },
   filterRow: { display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' },
   select: { minWidth: 180, padding: '8px 10px', fontSize: 13 },
+  kyInfo: { fontSize: 12, color: 'var(--text2)' },
   resultMeta: { fontSize: 12, color: 'var(--text2)', marginBottom: 10 },
   tableWrap: { overflowX: 'auto', border: '1px solid var(--border)', borderRadius: 10 },
   table: { borderCollapse: 'collapse', width: '100%', fontSize: 12, whiteSpace: 'nowrap' },
@@ -285,12 +462,28 @@ const s = {
     background: 'var(--bg2)', color: 'var(--text2)', fontWeight: 600, textAlign: 'left',
     padding: '8px 10px', borderBottom: '1px solid var(--border2)', fontSize: 11,
   },
+  thSort: { cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' },
+  thActive: { color: 'var(--text1)' },
+  sortArrow: { marginLeft: 6, fontSize: 10, color: 'var(--text3)' },
   td: { padding: '7px 10px', color: 'var(--text1)', borderBottom: '1px solid var(--border)' },
   trDim: { opacity: 0.55 },
   badgeDim: {
     marginLeft: 8, fontSize: 10, fontWeight: 700, color: 'var(--text3)',
     background: 'var(--bg3)', borderRadius: 6, padding: '2px 7px',
   },
+  subHeader: {
+    display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6,
+    fontSize: 13, fontWeight: 700, color: 'var(--text1)',
+  },
+  countBadgeAmber: {
+    fontSize: 12, fontWeight: 700, color: 'var(--amber)',
+    background: 'rgba(255,179,68,0.12)', borderRadius: 12, padding: '3px 10px',
+  },
+  maInput: {
+    minWidth: 130, padding: '6px 8px', fontSize: 12,
+    fontFamily: "'JetBrains Mono', monospace",
+  },
+  btnCheck: { padding: '7px 14px', fontSize: 12 },
   sectionHeader: {
     display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12,
     fontSize: 14, fontWeight: 700, color: 'var(--text1)',

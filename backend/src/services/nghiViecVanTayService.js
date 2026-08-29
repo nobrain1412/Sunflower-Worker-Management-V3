@@ -14,6 +14,7 @@
 const db = require('../utils/db');
 const bvt = require('./bangVanTayService');
 const model = require('../models/deXuatNghiViecModel');
+const congNhanModel = require('../models/congNhanModel');
 const congNhanService = require('./congNhanService');
 
 // Ngưỡng ngày vắng (lịch) để coi là ứng viên nghỉ việc.
@@ -93,7 +94,7 @@ async function phanTich(congTyId, thang, nam) {
 
   // Roster: CN của công ty, còn hiệu lực, KHÔNG tính người đã nghỉ việc / mới vào.
   const { rows: workers } = await db.query(
-    `SELECT id, ho_ten, ma_van_tay, trang_thai, so_dien_thoai, nguoi_tuyen_id
+    `SELECT id, ho_ten, ma_van_tay, trang_thai, so_dien_thoai, nguoi_tuyen_id, ngay_vao_lam
        FROM cong_nhan
       WHERE cong_ty_id = $1 AND deleted_at IS NULL
         AND trang_thai NOT IN ('nghi_viec', 'moi_vao')`,
@@ -106,7 +107,7 @@ async function phanTich(congTyId, thang, nam) {
     if (w.ma_van_tay == null || String(w.ma_van_tay).trim() === '') {
       khongDoiChieu.push({
         cong_nhan_id: w.id, ho_ten: w.ho_ten, trang_thai: w.trang_thai,
-        ly_do: 'Chưa gán mã vân tay',
+        ngay_vao_lam: w.ngay_vao_lam, ly_do: 'Chưa gán mã vân tay',
       });
       continue;
     }
@@ -188,6 +189,67 @@ async function taoDeXuat(congTyId, thang, nam, congNhanIds, nguoiTaoId) {
 }
 
 /**
+ * Gán mã vân tay cho 1 công nhân (đang chưa có mã) rồi ĐỐI CHIẾU ngay với bảng vân
+ * tay của kỳ: lưu mã vào hồ sơ, tính số ngày vắng, trả về công nhân có phải ứng
+ * viên nghỉ việc hay không (để FE đưa lên danh sách phía trên).
+ *
+ * @returns {
+ *   la_ung_vien, ma_ton_tai, ngay_chot,
+ *   cong_nhan: { cong_nhan_id, ho_ten, ma_van_tay, trang_thai, so_dien_thoai,
+ *               ngay_cuoi_cung_di_lam, so_ngay_vang, da_co_de_xuat }
+ * }
+ */
+async function ganMaKiemTra(congTyId, thang, nam, congNhanId, maVanTay, user, scope) {
+  const ma = String(maVanTay ?? '').trim();
+  if (!ma) throw badRequest('Vui lòng nhập mã vân tay', 'VALIDATION_ERROR');
+
+  const cn = await congNhanModel.findById(congNhanId);
+  if (!cn || cn.deleted_at) throw badRequest('Không tìm thấy công nhân', 'NOT_FOUND', 404);
+  if (Number(cn.cong_ty_id) !== Number(congTyId)) {
+    throw badRequest('Công nhân không thuộc công ty đang phân tích', 'VALIDATION_ERROR');
+  }
+
+  // Mã vân tay phải là DUY NHẤT trong cùng công ty (tránh gán trùng máy chấm công).
+  const { rows: trung } = await db.query(
+    `SELECT id, ho_ten FROM cong_nhan
+      WHERE cong_ty_id = $1 AND id <> $2 AND deleted_at IS NULL
+        AND ma_van_tay IS NOT NULL AND LOWER(TRIM(ma_van_tay)) = LOWER($3)`,
+    [congTyId, congNhanId, ma],
+  );
+  if (trung.length > 0) {
+    throw badRequest(`Mã vân tay đã gán cho công nhân khác (${trung[0].ho_ten})`, 'DUPLICATE_MA_VAN_TAY', 409);
+  }
+
+  // Đối chiếu với bảng vân tay của kỳ.
+  const { lastByMa, ngayChot } = await docKyVanTay(congTyId, thang, nam);
+  const maTonTai = lastByMa.has(normMa(ma));
+  const last = lastByMa.get(normMa(ma)) || null;
+  const soNgayVang = last ? soNgayLich(last, ngayChot) : null;
+  // Có mã nhưng không có công nào trong kỳ → coi như vắng cả kỳ (ứng viên).
+  const laUngVien = last ? soNgayVang >= NGUONG_NGAY_VANG : true;
+
+  // LƯU mã vào hồ sơ (qua capNhat để kiểm tra scope + ghi audit log).
+  await congNhanService.capNhat(congNhanId, { ma_van_tay: ma }, user?.id ?? null, scope);
+
+  const daCo = await model.pendingCongNhanIds([congNhanId]);
+  return {
+    la_ung_vien: laUngVien,
+    ma_ton_tai: maTonTai,
+    ngay_chot: ngayChot,
+    cong_nhan: {
+      cong_nhan_id: cn.id,
+      ho_ten: cn.ho_ten,
+      ma_van_tay: ma,
+      trang_thai: cn.trang_thai,
+      so_dien_thoai: cn.so_dien_thoai,
+      ngay_cuoi_cung_di_lam: last,
+      so_ngay_vang: soNgayVang,
+      da_co_de_xuat: daCo.has(congNhanId),
+    },
+  };
+}
+
+/**
  * Duyệt 1 đề xuất → công nhân chuyển 'nghi_viec' (ngày nghỉ = ngày cuối đi làm,
  * fallback ngày chốt bảng). Dùng lại congNhanService.capNhat để đồng bộ phan_cong
  * + ghi audit log. scope để đảm bảo quyền (admin: all, quan_ly: cty mình / CN mình tuyển).
@@ -227,4 +289,4 @@ async function tuChoi(id, user, ghiChu, scope) {
   return model.markRejected(id, user?.id ?? null, ghiChu);
 }
 
-module.exports = { phanTich, taoDeXuat, duyet, tuChoi, NGUONG_NGAY_VANG };
+module.exports = { phanTich, taoDeXuat, ganMaKiemTra, duyet, tuChoi, NGUONG_NGAY_VANG };
