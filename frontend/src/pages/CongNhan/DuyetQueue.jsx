@@ -6,7 +6,6 @@
  */
 import { useState } from 'react';
 import { useCongNhanList, useDuyetCongNhan, useTuChoiCongNhan } from '../../hooks/useCongNhan';
-import { useDeXuatNghiViecList } from '../../hooks/useDeXuatNghiViec';
 import { useAuth } from '../../context/AuthContext';
 import EditDuyetModal from './EditDuyetModal';
 import DuyetNghiViecTab from './DuyetNghiViecTab';
@@ -30,10 +29,6 @@ export default function DuyetQueue() {
     ...(choDuyetQ.data?.data ?? []),
     ...(doiViecQ.data?.data ?? []),
   ];
-
-  // Badge số đề xuất nghỉ việc chờ duyệt (hiển thị trên nút tab).
-  const nghiViecQ = useDeXuatNghiViecList('cho_duyet');
-  const soNghiViec = nghiViecQ.data?.data?.length ?? 0;
 
   return (
     <div style={s.root}>
@@ -61,7 +56,6 @@ export default function DuyetQueue() {
           onClick={() => setTab('nghi_viec')}
         >
           Duyệt nghỉ việc
-          {soNghiViec > 0 && <span style={{ ...s.tabBadge, ...s.tabBadgeRed }}>{soNghiViec}</span>}
         </button>
       </div>
 
