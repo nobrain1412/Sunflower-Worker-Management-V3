@@ -47,6 +47,29 @@ export function useGanMaVanTay() {
   });
 }
 
+// Gán mã + kiểm tra HÀNG LOẠT cho nhiều CN chưa có mã trong 1 lần bấm.
+export function useGanMaHangLoat() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ cong_ty_id, thang, nam, items }) =>
+      api.post('/de-xuat-nghi-viec/gan-ma-hang-loat', { cong_ty_id, thang, nam, items }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['cong-nhan'] }),
+  });
+}
+
+// Duyệt nghỉ việc TRỰC TIẾP cho các CN được tích chọn (không qua hàng đợi đề xuất).
+export function useDuyetTrucTiep() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ cong_ty_id, thang, nam, cong_nhan_ids }) =>
+      api.post('/de-xuat-nghi-viec/duyet-truc-tiep', { cong_ty_id, thang, nam, cong_nhan_ids }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['de-xuat-nghi-viec'] });
+      qc.invalidateQueries({ queryKey: ['cong-nhan'] });
+    },
+  });
+}
+
 export function useDuyetNghiViec() {
   const qc = useQueryClient();
   return useMutation({

@@ -59,6 +59,17 @@ const ganMaSchema = kySchema.extend({
   ma_van_tay:   z.string().trim().min(1).max(50),
 });
 
+const duyetTrucTiepSchema = kySchema.extend({
+  cong_nhan_ids: z.array(z.number().int().positive()).min(1).max(1000),
+});
+
+const ganMaHangLoatSchema = kySchema.extend({
+  items: z.array(z.object({
+    cong_nhan_id: z.number().int().positive(),
+    ma_van_tay:   z.string().trim().min(1).max(50),
+  })).min(1).max(1000),
+});
+
 const tuChoiSchema = z.object({
   ghi_chu: z.preprocess((v) => (v === '' ? null : v), z.string().max(500).nullable().optional()),
 });
@@ -104,6 +115,32 @@ router.post('/gan-ma',
       kq.la_ung_vien
         ? 'Đã gán mã — công nhân đủ điều kiện nghỉ việc'
         : 'Đã gán mã — công nhân vẫn đang đi làm');
+  }),
+);
+
+// Duyệt nghỉ việc TRỰC TIẾP cho các CN được tích chọn (không qua hàng đợi đề xuất).
+router.post('/duyet-truc-tiep',
+  requireRole('admin', 'quan_ly'),
+  scopeByRole,
+  validate(duyetTrucTiepSchema),
+  asyncWrapper(async (req, res) => {
+    const { cong_ty_id, thang, nam, cong_nhan_ids } = req.validatedBody;
+    assertCanManageCongTy(req, cong_ty_id);
+    const kq = await svc.duyetTrucTiep(cong_ty_id, thang, nam, cong_nhan_ids, req.user, req.scope);
+    sendSuccess(res, kq, `Đã duyệt nghỉ việc cho ${kq.da_duyet} công nhân`);
+  }),
+);
+
+// Gán mã + kiểm tra HÀNG LOẠT cho nhiều CN chưa có mã trong 1 lần bấm.
+router.post('/gan-ma-hang-loat',
+  requireRole('admin', 'quan_ly'),
+  scopeByRole,
+  validate(ganMaHangLoatSchema),
+  asyncWrapper(async (req, res) => {
+    const { cong_ty_id, thang, nam, items } = req.validatedBody;
+    assertCanManageCongTy(req, cong_ty_id);
+    const kq = await svc.ganMaHangLoat(cong_ty_id, thang, nam, items, req.user, req.scope);
+    sendSuccess(res, kq, 'Đã kiểm tra hàng loạt');
   }),
 );
 

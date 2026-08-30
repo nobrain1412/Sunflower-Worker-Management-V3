@@ -189,6 +189,43 @@ async function taoDeXuat(congTyId, thang, nam, congNhanIds, nguoiTaoId) {
 }
 
 /**
+ * Duyệt nghỉ việc TRỰC TIẾP (không qua hàng đợi đề xuất) cho các công nhân được
+ * tích chọn: chạy lại phân tích ở server để lấy số liệu tin cậy, chỉ duyệt những
+ * người thực sự là ứng viên, đặt trang_thai = 'nghi_viec' + ngày nghỉ = ngày công
+ * cuối (fallback ngày chốt bảng). Tự gỡ đề xuất 'cho_duyet' cũ (nếu có).
+ */
+async function duyetTrucTiep(congTyId, thang, nam, congNhanIds, user, scope) {
+  assertScopeCongTy(scope, congTyId);
+  if (!Array.isArray(congNhanIds) || congNhanIds.length === 0) {
+    return { da_duyet: 0, tong_chon: 0 };
+  }
+
+  const kq = await phanTich(congTyId, thang, nam);
+  const ungVienTheoId = new Map(kq.de_xuat.map((d) => [d.cong_nhan_id, d]));
+  const chon = [...new Set(congNhanIds)].filter((id) => ungVienTheoId.has(id));
+
+  let daDuyet = 0;
+  for (const id of chon) {
+    const d = ungVienTheoId.get(id);
+    const goc = d.ngay_cuoi_cung_di_lam || kq.ngay_chot;
+    const ngayNghi = goc ? new Date(goc).toISOString().slice(0, 10) : null;
+    // capNhat tự kiểm tra scope + đồng bộ phan_cong + ghi audit log.
+    await congNhanService.capNhat(
+      id,
+      { trang_thai: 'nghi_viec', ngay_nghi_viec: ngayNghi },
+      user?.id ?? null,
+      scope,
+    );
+    daDuyet += 1;
+  }
+
+  // Gỡ đề xuất 'cho_duyet' cũ (nếu có) của những người vừa duyệt.
+  await model.xoaChoDuyetTheoCongNhan(chon);
+
+  return { da_duyet: daDuyet, tong_chon: congNhanIds.length };
+}
+
+/**
  * Gán mã vân tay cho 1 công nhân (đang chưa có mã) rồi ĐỐI CHIẾU ngay với bảng vân
  * tay của kỳ: lưu mã vào hồ sơ, tính số ngày vắng, trả về công nhân có phải ứng
  * viên nghỉ việc hay không (để FE đưa lên danh sách phía trên).
@@ -250,6 +287,24 @@ async function ganMaKiemTra(congTyId, thang, nam, congNhanId, maVanTay, user, sc
 }
 
 /**
+ * Gán mã + kiểm tra HÀNG LOẠT cho nhiều công nhân trong 1 lần bấm.
+ * Chạy tuần tự (để bắt mã trùng ngay trong lô) và trả kết quả từng người.
+ * @returns { ket_qua: [{ cong_nhan_id, ok, la_ung_vien?, cong_nhan?, error? }] }
+ */
+async function ganMaHangLoat(congTyId, thang, nam, items, user, scope) {
+  const ketQua = [];
+  for (const it of items || []) {
+    try {
+      const r = await ganMaKiemTra(congTyId, thang, nam, it.cong_nhan_id, it.ma_van_tay, user, scope);
+      ketQua.push({ cong_nhan_id: it.cong_nhan_id, ok: true, ...r });
+    } catch (err) {
+      ketQua.push({ cong_nhan_id: it.cong_nhan_id, ok: false, error: err.message || 'Kiểm tra thất bại' });
+    }
+  }
+  return { ket_qua: ketQua };
+}
+
+/**
  * Duyệt 1 đề xuất → công nhân chuyển 'nghi_viec' (ngày nghỉ = ngày cuối đi làm,
  * fallback ngày chốt bảng). Dùng lại congNhanService.capNhat để đồng bộ phan_cong
  * + ghi audit log. scope để đảm bảo quyền (admin: all, quan_ly: cty mình / CN mình tuyển).
@@ -289,4 +344,7 @@ async function tuChoi(id, user, ghiChu, scope) {
   return model.markRejected(id, user?.id ?? null, ghiChu);
 }
 
-module.exports = { phanTich, taoDeXuat, ganMaKiemTra, duyet, tuChoi, NGUONG_NGAY_VANG };
+module.exports = {
+  phanTich, taoDeXuat, duyetTrucTiep, ganMaKiemTra, ganMaHangLoat,
+  duyet, tuChoi, NGUONG_NGAY_VANG,
+};
