@@ -52,6 +52,19 @@ function soNgayLich(a, b) {
   return Math.round((dbb - da) / 86400000);
 }
 
+// Ô số giờ công → number (0 nếu trống/không hợp lệ). Chấp nhận '7,5' hoặc '7.5'.
+function soGio(raw) {
+  if (raw == null || raw === '') return 0;
+  const n = typeof raw === 'number' ? raw : parseFloat(String(raw).replace(',', '.'));
+  return Number.isFinite(n) ? n : 0;
+}
+
+// Tìm header khớp CHÍNH XÁC tên chuẩn hoá (bỏ dấu, gộp khoảng trắng). Dùng để
+// xác định cột "ca ngày" / "ca đêm" — số giờ công thực tế trong ngày.
+function findColExact(headers, target) {
+  return headers.find((h) => bvt.normalizeSearch(h).replace(/\s+/g, ' ').trim() === target) || null;
+}
+
 // Đọc blob bảng vân tay của 1 kỳ → { lastByMa: Map<normMa, 'YYYY-MM-DD'>, ngayChot }.
 async function docKyVanTay(congTyId, thang, nam) {
   const { rows } = await db.query(
@@ -71,6 +84,13 @@ async function docKyVanTay(congTyId, thang, nam) {
     throw badRequest('Bảng vân tay không có cột "Ngày" — không xác định được ngày công', 'NO_NGAY_COLUMN');
   }
 
+  // Cột giờ công để xác định NGÀY CÔNG THỰC TẾ. Bảng vân tay có 1 dòng cho mỗi ngày
+  // lịch (kể cả ngày vắng/chủ nhật với ca ngày = ca đêm = 0) → không thể coi "có dòng
+  // là có đi làm". Chỉ tính đi làm khi ca ngày > 0 HOẶC ca đêm > 0.
+  const caNgayH = findColExact(headers, 'ca ngay');
+  const caDemH = findColExact(headers, 'ca dem');
+  const coCotCa = !!(caNgayH || caDemH);
+
   const lastByMa = new Map();
   let ngayChot = null;
   for (const r of du.rows || []) {
@@ -78,8 +98,13 @@ async function docKyVanTay(congTyId, thang, nam) {
     if (!ma) continue;
     const d = r[ngayH]; // đã chuẩn hoá 'YYYY-MM-DD' ở bước parse
     if (!d || typeof d !== 'string') continue;
-    if (!lastByMa.has(ma) || d > lastByMa.get(ma)) lastByMa.set(ma, d);
+    // Ngày chốt bảng = ngày lịch cuối cùng CÓ trong bảng (không phụ thuộc đi làm hay không).
     if (!ngayChot || d > ngayChot) ngayChot = d;
+    // Ngày công cuối = ngày MUỘN NHẤT thực sự có đi làm. Nếu bảng không có cột ca
+    // (định dạng công ty khác) → giữ hành vi cũ: coi mọi dòng có ngày là đi làm.
+    const coDiLam = coCotCa ? (soGio(r[caNgayH]) > 0 || soGio(r[caDemH]) > 0) : true;
+    if (!coDiLam) continue;
+    if (!lastByMa.has(ma) || d > lastByMa.get(ma)) lastByMa.set(ma, d);
   }
   if (!ngayChot) throw badRequest('Bảng vân tay không có dữ liệu ngày hợp lệ', 'NO_DATA_NGAY');
   return { lastByMa, ngayChot };
