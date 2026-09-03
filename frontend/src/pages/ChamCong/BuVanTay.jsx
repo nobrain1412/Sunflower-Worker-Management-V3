@@ -39,6 +39,7 @@ export default function BuVanTay() {
   const records = res?.data?.records ?? [];
   const congTy = res?.data?.cong_ty ?? '';
   const thieuCot = res?.data?.thieu_cot;
+  const soCnCoMa = res?.data?.so_cn_co_ma;
 
   // Mặc định tick chọn tất cả dòng cần bù mỗi khi có kết quả mới.
   useEffect(() => {
@@ -84,7 +85,8 @@ export default function BuVanTay() {
         <div>
           <div style={s.title}>Bù chấm vân tay</div>
           <div style={s.subtitle}>
-            Tự phát hiện ngày thiếu chấm từ bảng vân tay đã upload. Tick chọn rồi in phiếu (khổ A5).
+            Chỉ tạo phiếu cho công nhân có mã vân tay trong danh sách công ty. Tự phát hiện ngày
+            thiếu chấm từ bảng vân tay đã upload, tick chọn rồi in phiếu (khổ A5).
           </div>
         </div>
         <button className="btn-ghost" onClick={() => navigate('/cham-cong')}>← Chấm công</button>
@@ -135,9 +137,15 @@ export default function BuVanTay() {
           Không nhận diện được cột giờ chấm (上班/下班…) trong bảng vân tay kỳ này.
           Không thể tự phát hiện ngày thiếu chấm.
         </div></div>
+      ) : soCnCoMa === 0 ? (
+        <div style={s.card}><div style={{ ...s.empty, color: 'var(--amber)' }}>
+          Chưa có công nhân nào của công ty này được gán mã vân tay — không thể đối chiếu.
+          Hãy gán mã vân tay trong hồ sơ công nhân trước.
+        </div></div>
       ) : records.length === 0 ? (
         <div style={s.card}><div style={s.empty}>
-          Không có ngày nào thiếu chấm{ma ? ` cho mã “${ma}”` : ''} trong kỳ này. 🎉
+          Không có ngày nào thiếu chấm{ma ? ` cho mã “${ma}”` : ''} trong kỳ này
+          {soCnCoMa != null ? ` (đã đối chiếu ${soCnCoMa} công nhân có mã)` : ''}. 🎉
         </div></div>
       ) : (
         <>

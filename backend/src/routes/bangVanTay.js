@@ -171,7 +171,10 @@ router.get('/bu-cham',
     const ma = req.query.ma ? String(req.query.ma).trim() : null;
     const result = await buSvc.taoPhieuBu(congTyId, thang, nam, { ma });
     sendSuccess(res,
-      { cong_ty: result.cong_ty, ky: result.ky, cot: result.cot, thieu_cot: result.thieu_cot, records: result.records },
+      {
+        cong_ty: result.cong_ty, ky: result.ky, cot: result.cot,
+        thieu_cot: result.thieu_cot, so_cn_co_ma: result.so_cn_co_ma, records: result.records,
+      },
       'Tạo danh sách phiếu bù thành công', 200, { total: result.records.length });
   }),
 );

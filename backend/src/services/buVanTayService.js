@@ -144,15 +144,29 @@ async function taoPhieuBu(congTyId, thang, nam, { ma } = {}) {
   // Không nhận diện được cột chấm nào → không suy ra được ngày thiếu chấm.
   const thieuCot = !cot.start1 && !cot.off1 && !cot.on2 && !cot.off2 && !cot.end3;
 
-  const needle = ma ? bvt.normalizeSearch(ma).replace(/\s+/g, '') : null;
+  // Chỉ tạo phiếu cho công nhân ĐANG có trong danh sách công ty và đã gán mã vân tay.
+  // Đối chiếu mã thẻ (bảng vân tay) với cong_nhan.ma_van_tay → bỏ qua khách vãng lai
+  // / mã lạ không thuộc roster. Đồng thời lấy tên chuẩn từ hồ sơ để in lên phiếu.
+  const { rows: cnRows } = await db.query(
+    `SELECT ma_van_tay, ho_ten FROM cong_nhan
+      WHERE cong_ty_id = $1 AND deleted_at IS NULL
+        AND ma_van_tay IS NOT NULL AND TRIM(ma_van_tay) <> ''`,
+    [congTyId],
+  );
+  const normMa = (v) => bvt.normalizeSearch(v).replace(/\s+/g, '');
+  const tenTheoMa = new Map();
+  for (const cn of cnRows) tenTheoMa.set(normMa(cn.ma_van_tay), cn.ho_ten);
+  const soCnCoMa = tenTheoMa.size;
+
+  const needle = ma ? normMa(ma) : null;
   const records = [];
   for (const row of duLieu.rows || []) {
     const card = row[maH];
     if (isEmpty(card)) continue;
-    if (needle) {
-      const c = bvt.normalizeSearch(card).replace(/\s+/g, '');
-      if (c !== needle) continue; // luồng 1 công nhân: khớp CHÍNH XÁC mã
-    }
+    const cardNorm = normMa(card);
+    // Chỉ nhận mã thuộc danh sách công nhân của công ty.
+    if (!tenTheoMa.has(cardNorm)) continue;
+    if (needle && cardNorm !== needle) continue; // luồng 1 công nhân: khớp CHÍNH XÁC mã
 
     const start1 = cot.start1 ? row[cot.start1] : null;
     const off1 = cot.off1 ? row[cot.off1] : null;
@@ -167,7 +181,8 @@ async function taoPhieuBu(congTyId, thang, nam, { ma } = {}) {
     const endHHmm = roundDownQuarter(formatTime(end3) || formatTime(off2));
     records.push({
       card: String(card).trim(),
-      name: tenH ? (row[tenH] ?? '') : '',
+      // Ưu tiên tên trong hồ sơ công nhân; fallback tên trong bảng vân tay.
+      name: tenTheoMa.get(cardNorm) || (tenH ? (row[tenH] ?? '') : ''),
       dept: boPhanH ? (row[boPhanH] ?? '') : '',
       ngay_iso: iso || '',
       date_str: shortDate(iso),
@@ -195,6 +210,7 @@ async function taoPhieuBu(congTyId, thang, nam, { ma } = {}) {
     ky: { thang, nam },
     cot,
     thieu_cot: thieuCot,
+    so_cn_co_ma: soCnCoMa,   // số CN của công ty đã gán mã vân tay (để FE gợi ý)
     records,
   };
 }
