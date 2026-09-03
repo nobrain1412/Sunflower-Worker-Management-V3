@@ -15,6 +15,7 @@ const { uploadExcel } = require('../middleware/upload');
 const asyncWrapper = require('../utils/asyncWrapper');
 const { sendSuccess } = require('../utils/response');
 const svc = require('../services/bangVanTayService');
+const buSvc = require('../services/buVanTayService');
 const db = require('../utils/db');
 
 const router = Router();
@@ -153,6 +154,25 @@ router.get('/tra-cuu-ma',
 
     const result = await svc.lookupByMa(ma, { congTyId, limit });
     sendSuccess(res, { groups: result.groups }, 'Tra cứu thành công', 200, result.meta);
+  }),
+);
+
+// Sinh danh sách phiếu bù chấm vân tay (dòng thiếu chấm) cho 1 kỳ.
+// Có thể lọc theo 1 mã vân tay (luồng tra cứu 1 công nhân) hoặc để trống (cả kỳ).
+router.get('/bu-cham',
+  authenticate,
+  requireRole('admin', 'quan_ly', 'ke_toan', 'vender'),
+  asyncWrapper(async (req, res) => {
+    const congTyId = parsePositiveInt(req.query.cong_ty_id, 'cong_ty_id');
+    const { thang, nam } = parseThangNam(req.query.thang, req.query.nam);
+    if (thang == null) {
+      const e = new Error('Thiếu thang/nam để tạo phiếu bù'); e.statusCode = 400; e.code = 'VALIDATION_ERROR'; throw e;
+    }
+    const ma = req.query.ma ? String(req.query.ma).trim() : null;
+    const result = await buSvc.taoPhieuBu(congTyId, thang, nam, { ma });
+    sendSuccess(res,
+      { cong_ty: result.cong_ty, ky: result.ky, cot: result.cot, thieu_cot: result.thieu_cot, records: result.records },
+      'Tạo danh sách phiếu bù thành công', 200, { total: result.records.length });
   }),
 );
 

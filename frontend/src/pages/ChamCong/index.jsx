@@ -169,6 +169,10 @@ export default function ChamCong() {
             style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             🔍 Tra cứu vân tay
           </button>
+          <button className="btn-ghost" onClick={() => navigate('/cham-cong/bu-van-tay')}
+            style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            🖨 Bù chấm vân tay
+          </button>
           {canImport && (
             <button className="btn-ghost" onClick={() => navigate('/cham-cong/xuat-bang-cong')}
               style={{ display: 'flex', alignItems: 'center', gap: 6 }}>

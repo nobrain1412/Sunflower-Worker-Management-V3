@@ -15,3 +15,18 @@ export function useTraCuuVanTay(ma, { congTyId, page = 1, limit = 100 } = {}) {
     staleTime: 15_000,
   });
 }
+
+// Danh sách phiếu bù chấm vân tay (dòng thiếu chấm) của 1 kỳ.
+// Cần congTyId + thang + nam; ma tuỳ chọn để lọc 1 công nhân. enabled khi đủ kỳ.
+export function useBuVanTay({ congTyId, thang, nam, ma } = {}) {
+  return useQuery({
+    queryKey: ['bang-van-tay', 'bu-cham', congTyId, thang, nam, ma || ''],
+    queryFn: () => {
+      const params = { cong_ty_id: congTyId, thang, nam };
+      if (ma) params.ma = ma;
+      return api.get('/bang-van-tay/bu-cham', { params });
+    },
+    enabled: !!congTyId && !!thang && !!nam,
+    staleTime: 15_000,
+  });
+}
