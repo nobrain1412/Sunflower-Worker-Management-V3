@@ -23,6 +23,8 @@ const BulkReview     = lazy(() => import('./pages/OCR/BulkReview'));
 const ChamCong       = lazy(() => import('./pages/ChamCong/index'));
 const ImportChamCong = lazy(() => import('./pages/ChamCong/ImportExcel'));
 const TraCuuVanTay   = lazy(() => import('./pages/ChamCong/TraCuuVanTay'));
+const BuVanTay       = lazy(() => import('./pages/ChamCong/BuVanTay'));
+const BuVanTayIn     = lazy(() => import('./pages/ChamCong/BuVanTayIn'));
 const XuatBangCong   = lazy(() => import('./pages/ChamCong/XuatBangCong'));
 const TaiChinh       = lazy(() => import('./pages/TaiChinh/index'));
 const KTX            = lazy(() => import('./pages/KTX/index'));
@@ -112,6 +114,11 @@ export default function App() {
             <Route path="/cham-cong/tra-cuu-van-tay" element={
               <RoleRoute allowedRoles={['admin','quan_ly','ke_toan','vender']}><TraCuuVanTay /></RoleRoute>
             } />
+            <Route path="/cham-cong/bu-van-tay" element={
+              <RoleRoute allowedRoles={['admin','quan_ly','ke_toan','vender']}><BuVanTay /></RoleRoute>
+            } />
+            {/* Trang in phiếu bù — ngoài Layout để bản in sạch */}
+            <Route path="/cham-cong/bu-van-tay/in" element={<BareRoute><BuVanTayIn /></BareRoute>} />
             <Route path="/cham-cong/xuat-bang-cong" element={
               <RoleRoute allowedRoles={['admin','quan_ly']}><XuatBangCong /></RoleRoute>
             } />

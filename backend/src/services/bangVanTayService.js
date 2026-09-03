@@ -370,8 +370,9 @@ module.exports = {
   listThang,
   lookup,
   lookupByMa,
-  // Export helpers dùng lại cho luồng phát hiện nghỉ việc từ bảng vân tay.
+  // Export helpers dùng lại cho luồng phát hiện nghỉ việc / bù chấm từ bảng vân tay.
   normalizeSearch,
   findMaHeader,
   findNgayHeader,
+  findTenHeader,
 };

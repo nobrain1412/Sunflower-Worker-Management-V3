@@ -31,7 +31,13 @@ export default function TraCuuVanTay() {
           <div style={s.title}>Tra cứu bảng công vân tay</div>
           <div style={s.subtitle}>Nhập mã vân tay (mã thẻ) để xem toàn bộ ngày công đã lưu.</div>
         </div>
-        <button className="btn-ghost" onClick={() => navigate('/cham-cong')}>← Chấm công</button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn-ghost" onClick={() => navigate('/cham-cong/bu-van-tay')}
+            style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            🖨 Bù chấm vân tay
+          </button>
+          <button className="btn-ghost" onClick={() => navigate('/cham-cong')}>← Chấm công</button>
+        </div>
       </div>
 
       {/* Ô tìm kiếm duy nhất */}
