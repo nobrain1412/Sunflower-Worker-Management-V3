@@ -6,11 +6,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BU_PRINT_KEY } from './BuVanTay';
+import kangyinLogo from './kangyin-logo.svg';
 import './buVanTay.print.css';
 
-// Logo phiếu — người dùng cung cấp sau. Đặt đường dẫn ảnh vào đây (VD import file
-// hoặc URL) để hiện logo góc trái. Để trống → chỉ in tiêu đề chữ + tên công ty.
-const LOGO_URL = '';
+// Logo phiếu — mặc định logo Kangyin. Thay bằng file khác nếu cần (đổi import trên).
+const LOGO_URL = kangyinLogo;
 
 function PhieuBu({ rec, congTy }) {
   return (

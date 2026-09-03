@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 300" width="260" height="300" font-family="'Be Vietnam Pro','Segoe UI',sans-serif">
+  <!-- Biểu tượng: hình vuông bo góc màu đỏ mận, spine trái + các thanh ngang trắng -->
+  <g>
+    <rect x="70" y="10" width="120" height="150" rx="14" fill="#7a2c3d"/>
+    <!-- khe trắng ngăn spine (gáy) với phần "trang" -->
+    <rect x="96" y="18" width="5" height="134" rx="2.5" fill="#ffffff"/>
+    <!-- các thanh ngang trắng, độ dài khác nhau (như dòng kẻ) -->
+    <g fill="#ffffff">
+      <rect x="108" y="28"  width="66" height="12" rx="6"/>
+      <rect x="108" y="49"  width="50" height="12" rx="6"/>
+      <rect x="108" y="70"  width="60" height="12" rx="6"/>
+      <rect x="108" y="91"  width="44" height="12" rx="6"/>
+      <rect x="108" y="112" width="56" height="12" rx="6"/>
+      <rect x="108" y="133" width="70" height="12" rx="6"/>
+    </g>
+  </g>
+  <!-- Chữ Trung: 康音电子 (đỏ) -->
+  <text x="130" y="222" text-anchor="middle" font-size="52" font-weight="700" fill="#c62828">康音电子</text>
+  <!-- Chữ Latin: KANGYIN (xanh, in nghiêng đậm) -->
+  <text x="130" y="278" text-anchor="middle" font-size="48" font-weight="800" font-style="italic" fill="#1f3f94" letter-spacing="1">KANGYIN</text>
+</svg>
