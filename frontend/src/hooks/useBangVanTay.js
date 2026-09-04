@@ -30,3 +30,17 @@ export function useBuVanTay({ congTyId, thang, nam, ma } = {}) {
     staleTime: 15_000,
   });
 }
+
+// Kiểm tra thiếu đề xuất tăng ca của 1 kỳ (nhánh phụ của bù vân tay).
+export function useKiemTraTangCa({ congTyId, thang, nam, ma } = {}) {
+  return useQuery({
+    queryKey: ['bang-van-tay', 'kiem-tra-tang-ca', congTyId, thang, nam, ma || ''],
+    queryFn: () => {
+      const params = { cong_ty_id: congTyId, thang, nam };
+      if (ma) params.ma = ma;
+      return api.get('/bang-van-tay/kiem-tra-tang-ca', { params });
+    },
+    enabled: !!congTyId && !!thang && !!nam,
+    staleTime: 15_000,
+  });
+}

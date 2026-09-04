@@ -280,5 +280,6 @@ async function taoPhieuBu(congTyId, thang, nam, { ma } = {}) {
 
 module.exports = {
   taoPhieuBu, detectPunchCols, computeBu3, computeBuTime,
-  findLichSuCol, formatTime, roundDownQuarter, shortDate,
+  docKy, findTenCol, findBoPhanCol, findByAliases, findLichSuCol,
+  formatTime, roundDownQuarter, shortDate,
 };
