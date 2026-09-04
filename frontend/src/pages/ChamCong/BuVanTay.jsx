@@ -165,6 +165,7 @@ export default function BuVanTay() {
                     <th style={s.th}>Mã thẻ</th>
                     <th style={s.th}>Họ tên</th>
                     <th style={s.th}>Bộ phận</th>
+                    <th style={s.th}>Ca</th>
                     <th style={s.th}>Ngày</th>
                     <th style={s.th}>Giờ vào</th>
                     <th style={s.th}>Giờ ra</th>
@@ -183,6 +184,7 @@ export default function BuVanTay() {
                         <td style={{ ...s.td, ...s.mono }}>{r.card}</td>
                         <td style={s.td}>{r.name || ''}</td>
                         <td style={s.td}>{r.dept || ''}</td>
+                        <td style={s.td}>{r.ca === 'dem' ? 'Đêm' : 'Ngày'}</td>
                         <td style={{ ...s.td, ...s.mono }}>{r.date_str}</td>
                         <td style={{ ...s.td, ...s.mono }}>{r.start_str || '—'}</td>
                         <td style={{ ...s.td, ...s.mono }}>{r.end_str || '—'}</td>

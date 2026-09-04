@@ -30,7 +30,7 @@ function PhieuBu({ rec, congTy }) {
 
       <div className="bu-section">
         日期 Ngày: <b>{rec.date_str || '.........'}</b> &nbsp;&nbsp;
-        工作时间 Khung giờ làm việc: Từ <b>07:30</b> đến <b>{rec.end_str || '.........'}</b>
+        工作时间 Khung giờ làm việc: Từ <b>{rec.gio_vao_chuan || '07:30'}</b> đến <b>{rec.end_str || '.........'}</b>
       </div>
       <div className="bu-section">补卡时间 Thời gian bù vân tay: <b>{rec.bu_str || ''}</b></div>
       <div className="bu-section">事由 Lý do (ghi rõ): <b>Quên chấm vân tay</b></div>
