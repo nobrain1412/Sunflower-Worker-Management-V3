@@ -25,9 +25,9 @@ const isEmpty = (v) => v == null || String(v).trim() === '';
 // Bí danh cột chấm — khớp theo normalizeSearch (giữ ký tự Trung, bỏ dấu tiếng Việt).
 // Ưu tiên bí danh có số thứ tự (上班1/上班2…) để tránh gán nhầm 上班/下班 chung.
 const PUNCH_ALIASES = {
-  start1: ['上班1', '上班 1', 'gio vao 1', 'gio vao', 'vao 1', 'cong viec 1', 'ca vao 1', 'vao', '上班'],
+  start1: ['上班1', '上班 1', 'dang hoat dong 1', 'hoat dong 1', 'gio vao 1', 'gio vao', 'vao 1', 'cong viec 1', 'ca vao 1', 'dang hoat dong', 'vao', '上班'],
   off1:   ['下班1', '下班 1', 'nghi lam 1', 'ra 1', 'gio ra 1', '下班'],
-  on2:    ['上班2', '上班 2', 'cong viec 2', 'vao ca 2', 'vao 2', '上班'],
+  on2:    ['上班2', '上班 2', 'dang hoat dong 2', 'hoat dong 2', 'cong viec 2', 'vao ca 2', 'vao 2', '上班'],
   off2:   ['下班2', '下班 2', 'nghi lam 2', 'ra ca 2', 'ra 2', '下班'],
   end3:   ['下班3', '下班 3', 'nghi lam 3', 'ra 3', 'gio ra', 'gio ra 3', '下班'],
 };
@@ -173,6 +173,10 @@ async function taoPhieuBu(congTyId, thang, nam, { ma } = {}) {
     const on2 = cot.on2 ? row[cot.on2] : null;
     const off2 = cot.off2 ? row[cot.off2] : null;
     const end3 = cot.end3 ? row[cot.end3] : null;
+
+    // Ngày KHÔNG có bất kỳ dấu chấm nào = nghỉ/Chủ nhật/vắng mặt, KHÔNG phải "quên
+    // chấm" → bỏ qua (tránh gắn bù 07:30 cho mọi ngày nghỉ).
+    if (isEmpty(start1) && isEmpty(off1) && isEmpty(on2) && isEmpty(off2) && isEmpty(end3)) continue;
 
     const buStr = thieuCot ? '' : computeBuTime(start1, off1, on2, off2, end3);
     if (!buStr) continue; // đủ chấm → không cần phiếu
