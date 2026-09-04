@@ -16,6 +16,7 @@ const asyncWrapper = require('../utils/asyncWrapper');
 const { sendSuccess } = require('../utils/response');
 const svc = require('../services/bangVanTayService');
 const buSvc = require('../services/buVanTayService');
+const tcSvc = require('../services/kiemTraTangCaService');
 const db = require('../utils/db');
 
 const router = Router();
@@ -176,6 +177,24 @@ router.get('/bu-cham',
         thieu_cot: result.thieu_cot, so_cn_co_ma: result.so_cn_co_ma, records: result.records,
       },
       'Tạo danh sách phiếu bù thành công', 200, { total: result.records.length });
+  }),
+);
+
+// Kiểm tra thiếu đề xuất tăng ca (nhánh phụ của bù vân tay) — chỉ lọc danh sách.
+router.get('/kiem-tra-tang-ca',
+  authenticate,
+  requireRole('admin', 'quan_ly', 'ke_toan', 'vender'),
+  asyncWrapper(async (req, res) => {
+    const congTyId = parsePositiveInt(req.query.cong_ty_id, 'cong_ty_id');
+    const { thang, nam } = parseThangNam(req.query.thang, req.query.nam);
+    if (thang == null) {
+      const e = new Error('Thiếu thang/nam để kiểm tra'); e.statusCode = 400; e.code = 'VALIDATION_ERROR'; throw e;
+    }
+    const ma = req.query.ma ? String(req.query.ma).trim() : null;
+    const result = await tcSvc.kiemTra(congTyId, thang, nam, { ma });
+    sendSuccess(res,
+      { cong_ty: result.cong_ty, ky: result.ky, co_cot: result.co_cot, so_cn_co_ma: result.so_cn_co_ma, records: result.records },
+      'Kiểm tra đề xuất tăng ca thành công', 200, { total: result.records.length });
   }),
 );
 

@@ -11,9 +11,11 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useBuVanTay } from '../../hooks/useBangVanTay';
+import { useBuVanTay, useKiemTraTangCa } from '../../hooks/useBangVanTay';
 import { useCongTyList } from '../../hooks/useCongNhan';
 import { MONTH_NAMES } from './chamCongShared';
+
+const LOAI_NGAY_LABEL = { thuong: 'Thường', cn: 'Chủ nhật', le: 'Ngày lễ' };
 
 export const BU_PRINT_KEY = 'bu-van-tay-print';
 
@@ -24,6 +26,7 @@ export default function BuVanTay() {
   const navigate = useNavigate();
 
   const now = new Date();
+  const [mode, setMode] = useState('bu');    // 'bu' = bù chấm · 'tang_ca' = kiểm tra tăng ca
   const [thang, setThang] = useState(now.getMonth() + 1);
   const [nam, setNam] = useState(now.getFullYear());
   const [congTyId, setCongTyId] = useState('');
@@ -32,14 +35,22 @@ export default function BuVanTay() {
   const [selected, setSelected] = useState({}); // rowKey -> true
 
   const congTyArr = useCongTyList().data?.data ?? [];
+  const kyOk = congTyId ? { congTyId, thang, nam, ma: ma || undefined } : {};
 
-  const { data: res, isFetching, isError, error } = useBuVanTay({
-    congTyId: congTyId || undefined, thang, nam, ma: ma || undefined,
-  });
+  const { data: res, isFetching, isError, error } = useBuVanTay(
+    mode === 'bu' ? kyOk : {},
+  );
+  const tc = useKiemTraTangCa(mode === 'tang_ca' ? kyOk : {});
+
   const records = res?.data?.records ?? [];
   const congTy = res?.data?.cong_ty ?? '';
   const thieuCot = res?.data?.thieu_cot;
   const soCnCoMa = res?.data?.so_cn_co_ma;
+
+  const tcRows = tc.data?.data?.records ?? [];
+  const tcCongTy = tc.data?.data?.cong_ty ?? '';
+  const tcCoCot = tc.data?.data?.co_cot;
+  const tcSoCnCoMa = tc.data?.data?.so_cn_co_ma;
 
   // Mặc định tick chọn tất cả dòng cần bù mỗi khi có kết quả mới.
   useEffect(() => {
@@ -85,11 +96,22 @@ export default function BuVanTay() {
         <div>
           <div style={s.title}>Bù chấm vân tay</div>
           <div style={s.subtitle}>
-            Chỉ tạo phiếu cho công nhân có mã vân tay trong danh sách công ty. Tự phát hiện ngày
-            thiếu chấm từ bảng vân tay đã upload, tick chọn rồi in phiếu (khổ A5).
+            {mode === 'bu'
+              ? 'Tự phát hiện ngày thiếu chấm (chỉ CN có mã trong danh sách công ty), tick chọn rồi in phiếu (A5).'
+              : 'Lọc người có tăng ca nhưng thiếu/không đủ đề xuất tăng ca. Chủ nhật & ngày lễ tính cả ngày.'}
           </div>
         </div>
         <button className="btn-ghost" onClick={() => navigate('/cham-cong')}>← Chấm công</button>
+      </div>
+
+      {/* Chọn chế độ */}
+      <div style={s.segment}>
+        <button style={{ ...s.segBtn, ...(mode === 'bu' ? s.segOn : {}) }} onClick={() => setMode('bu')}>
+          🖨 Bù chấm vân tay
+        </button>
+        <button style={{ ...s.segBtn, ...(mode === 'tang_ca' ? s.segOn : {}) }} onClick={() => setMode('tang_ca')}>
+          ⏱ Kiểm tra tăng ca
+        </button>
       </div>
 
       {/* Bộ lọc */}
@@ -123,8 +145,79 @@ export default function BuVanTay() {
         </form>
       </div>
 
-      {/* Nội dung */}
-      {chuaChonCty ? (
+      {/* Nội dung — chế độ Kiểm tra tăng ca */}
+      {mode === 'tang_ca' ? (
+        chuaChonCty ? (
+          <div style={s.card}><div style={s.empty}>Chọn một công ty ở trên để bắt đầu.</div></div>
+        ) : tc.isFetching ? (
+          <div style={s.card}><div style={s.empty}>Đang tải…</div></div>
+        ) : tc.isError ? (
+          <div style={s.card}><div style={{ ...s.empty, color: 'var(--red)' }}>
+            {tc.error?.message || 'Có lỗi khi tải dữ liệu'}
+          </div></div>
+        ) : !tcCoCot ? (
+          <div style={s.card}><div style={{ ...s.empty, color: 'var(--amber)' }}>
+            Bảng vân tay kỳ này thiếu cột “Lịch sử chấm vân tay” hoặc “Đề xuất tăng ca” — không kiểm tra được.
+          </div></div>
+        ) : tcSoCnCoMa === 0 ? (
+          <div style={s.card}><div style={{ ...s.empty, color: 'var(--amber)' }}>
+            Chưa có công nhân nào của công ty này được gán mã vân tay — không thể đối chiếu.
+          </div></div>
+        ) : tcRows.length === 0 ? (
+          <div style={s.card}><div style={s.empty}>
+            Không có ai thiếu đề xuất tăng ca{ma ? ` cho mã “${ma}”` : ''} trong kỳ này. 🎉
+          </div></div>
+        ) : (
+          <>
+            <div style={s.resultMeta}>
+              {tcCongTy && <b style={{ color: 'var(--text1)' }}>{tcCongTy}</b>} · Có{' '}
+              <b style={{ color: 'var(--red)' }}>{tcRows.length}</b> ngày thiếu đề xuất tăng ca
+            </div>
+            <div style={s.card}>
+              <div style={s.tableWrap}>
+                <table style={s.table}>
+                  <thead>
+                    <tr>
+                      <th style={s.th}>Mã thẻ</th>
+                      <th style={s.th}>Họ tên</th>
+                      <th style={s.th}>Bộ phận</th>
+                      <th style={s.th}>Ca</th>
+                      <th style={s.th}>Loại ngày</th>
+                      <th style={s.th}>Ngày</th>
+                      <th style={s.th}>Giờ về</th>
+                      <th style={s.th}>TC thực tế (h)</th>
+                      <th style={s.th}>Đề xuất (h)</th>
+                      <th style={s.th}>Thiếu (h)</th>
+                      <th style={s.th}>Tình trạng</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {tcRows.map((r, i) => (
+                      <tr key={`${r.card}__${r.ngay_iso}`} style={i % 2 ? s.trAlt : undefined}>
+                        <td style={{ ...s.td, ...s.mono }}>{r.card}</td>
+                        <td style={s.td}>{r.name || ''}</td>
+                        <td style={s.td}>{r.dept || ''}</td>
+                        <td style={s.td}>{r.ca === 'dem' ? 'Đêm' : 'Ngày'}</td>
+                        <td style={s.td}>{LOAI_NGAY_LABEL[r.loai_ngay] || r.loai_ngay}</td>
+                        <td style={{ ...s.td, ...s.mono }}>{r.date_str}</td>
+                        <td style={{ ...s.td, ...s.mono }}>{r.gio_ve || '—'}</td>
+                        <td style={{ ...s.td, ...s.mono }}>{r.tang_ca_thuc_te}</td>
+                        <td style={{ ...s.td, ...s.mono }}>{r.de_xuat}</td>
+                        <td style={{ ...s.td, ...s.mono, color: 'var(--red)' }}>{r.thieu}</td>
+                        <td style={s.td}>
+                          <span style={r.loai === 'thieu_de_xuat' ? s.pillRed : s.pillAmber}>
+                            {r.loai === 'thieu_de_xuat' ? 'Không có đề xuất' : 'Đề xuất thiếu giờ'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </>
+        )
+      ) : /* Nội dung — chế độ Bù chấm */ chuaChonCty ? (
         <div style={s.card}><div style={s.empty}>Chọn một công ty ở trên để bắt đầu.</div></div>
       ) : isFetching ? (
         <div style={s.card}><div style={s.empty}>Đang tải…</div></div>
@@ -165,6 +258,7 @@ export default function BuVanTay() {
                     <th style={s.th}>Mã thẻ</th>
                     <th style={s.th}>Họ tên</th>
                     <th style={s.th}>Bộ phận</th>
+                    <th style={s.th}>Ca</th>
                     <th style={s.th}>Ngày</th>
                     <th style={s.th}>Giờ vào</th>
                     <th style={s.th}>Giờ ra</th>
@@ -183,6 +277,7 @@ export default function BuVanTay() {
                         <td style={{ ...s.td, ...s.mono }}>{r.card}</td>
                         <td style={s.td}>{r.name || ''}</td>
                         <td style={s.td}>{r.dept || ''}</td>
+                        <td style={s.td}>{r.ca === 'dem' ? 'Đêm' : 'Ngày'}</td>
                         <td style={{ ...s.td, ...s.mono }}>{r.date_str}</td>
                         <td style={{ ...s.td, ...s.mono }}>{r.start_str || '—'}</td>
                         <td style={{ ...s.td, ...s.mono }}>{r.end_str || '—'}</td>
@@ -198,8 +293,8 @@ export default function BuVanTay() {
         </>
       )}
 
-      {/* Thanh in cố định */}
-      {selectedRecords.length > 0 && (
+      {/* Thanh in cố định (chỉ chế độ bù chấm) */}
+      {mode === 'bu' && selectedRecords.length > 0 && (
         <div style={s.printBar}>
           <span style={{ fontSize: 13, color: 'var(--text1)', fontWeight: 600 }}>
             {selectedRecords.length} phiếu đã chọn
@@ -217,6 +312,12 @@ const s = {
   header: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 },
   title: { fontSize: 16, fontWeight: 700, color: 'var(--text1)' },
   subtitle: { fontSize: 11, color: 'var(--text3)', marginTop: 2 },
+  segment: { display: 'inline-flex', background: 'var(--bg3)', borderRadius: 10, padding: 3, gap: 3, alignSelf: 'flex-start' },
+  segBtn: {
+    background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600,
+    color: 'var(--text2)', padding: '7px 14px', borderRadius: 7, fontFamily: "'Be Vietnam Pro', sans-serif",
+  },
+  segOn: { background: 'var(--accent)', color: '#fff' },
   toolbar: { display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' },
   select: { padding: '6px 10px', fontSize: 12 },
   card: { background: 'var(--bg1)', border: '1px solid var(--border)', borderRadius: 14, padding: 14 },
@@ -232,6 +333,14 @@ const s = {
   td: { padding: '7px 10px', color: 'var(--text1)', borderBottom: '1px solid var(--border)' },
   mono: { fontFamily: "'JetBrains Mono', monospace" },
   trAlt: { background: 'var(--bg2)' },
+  pillRed: {
+    fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 999,
+    background: 'rgba(255,95,114,0.15)', color: 'var(--red)', whiteSpace: 'nowrap',
+  },
+  pillAmber: {
+    fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 999,
+    background: 'rgba(255,179,68,0.15)', color: 'var(--amber)', whiteSpace: 'nowrap',
+  },
   printBar: {
     position: 'sticky', bottom: 12, zIndex: 50,
     display: 'flex', alignItems: 'center', gap: 10,
