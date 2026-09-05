@@ -22,6 +22,37 @@ export const BU_PRINT_KEY = 'bu-van-tay-print';
 // Khoá duy nhất cho 1 dòng (mã thẻ + ngày) để tick chọn.
 const rowKey = (r) => `${r.card}__${r.ngay_iso}`;
 
+// So sánh 2 ô: số theo trị, chuỗi theo bảng chữ cái tiếng Việt (có nhận diện số trong chuỗi).
+function cmpVal(a, b) {
+  if (a == null) a = '';
+  if (b == null) b = '';
+  if (typeof a === 'number' && typeof b === 'number') return a - b;
+  return String(a).localeCompare(String(b), 'vi', { numeric: true });
+}
+
+// Sắp xếp bản sao mảng theo { key, dir }; không có key → giữ nguyên thứ tự gốc.
+function sortRows(rows, sort) {
+  if (!sort?.key) return rows;
+  return [...rows].sort((x, y) => {
+    const r = cmpVal(x[sort.key], y[sort.key]);
+    return sort.dir === 'desc' ? -r : r;
+  });
+}
+
+// Header có thể bấm để sắp xếp; hiển thị mũi tên trạng thái.
+function SortTh({ label, col, sort, onSort, style }) {
+  const active = sort.key === col;
+  const arrow = !active ? '⇅' : sort.dir === 'asc' ? '▲' : '▼';
+  return (
+    <th style={{ ...s.th, cursor: 'pointer', userSelect: 'none', ...style }} onClick={() => onSort(col)}>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+        {label}
+        <span style={{ fontSize: 9, color: active ? 'var(--accent)' : 'var(--text3)' }}>{arrow}</span>
+      </span>
+    </th>
+  );
+}
+
 export default function BuVanTay() {
   const navigate = useNavigate();
 
@@ -33,6 +64,14 @@ export default function BuVanTay() {
   const [maInput, setMaInput] = useState('');
   const [ma, setMa] = useState('');          // mã đã áp dụng (lọc 1 công nhân)
   const [selected, setSelected] = useState({}); // rowKey -> true
+  const [buSort, setBuSort] = useState({ key: null, dir: 'asc' });    // sắp xếp bảng bù chấm
+  const [tcSort, setTcSort] = useState({ key: null, dir: 'asc' });    // sắp xếp bảng tăng ca
+
+  // Bấm 1 cột: lần đầu tăng dần, bấm lại đảo chiều.
+  const makeSortHandler = (setSort) => (col) =>
+    setSort((p) => (p.key === col ? { key: col, dir: p.dir === 'asc' ? 'desc' : 'asc' } : { key: col, dir: 'asc' }));
+  const onBuSort = makeSortHandler(setBuSort);
+  const onTcSort = makeSortHandler(setTcSort);
 
   const congTyArr = useCongTyList().data?.data ?? [];
   const kyOk = congTyId ? { congTyId, thang, nam, ma: ma || undefined } : {};
@@ -51,6 +90,9 @@ export default function BuVanTay() {
   const tcCongTy = tc.data?.data?.cong_ty ?? '';
   const tcCoCot = tc.data?.data?.co_cot;
   const tcSoCnCoMa = tc.data?.data?.so_cn_co_ma;
+
+  const recordsSorted = useMemo(() => sortRows(records, buSort), [records, buSort]);
+  const tcRowsSorted = useMemo(() => sortRows(tcRows, tcSort), [tcRows, tcSort]);
 
   // Mặc định tick chọn tất cả dòng cần bù mỗi khi có kết quả mới.
   useEffect(() => {
@@ -178,21 +220,21 @@ export default function BuVanTay() {
                 <table style={s.table}>
                   <thead>
                     <tr>
-                      <th style={s.th}>Mã thẻ</th>
-                      <th style={s.th}>Họ tên</th>
-                      <th style={s.th}>Bộ phận</th>
-                      <th style={s.th}>Ca</th>
-                      <th style={s.th}>Loại ngày</th>
-                      <th style={s.th}>Ngày</th>
-                      <th style={s.th}>Giờ về</th>
-                      <th style={s.th}>TC thực tế (h)</th>
-                      <th style={s.th}>Đề xuất (h)</th>
-                      <th style={s.th}>Thiếu (h)</th>
-                      <th style={s.th}>Tình trạng</th>
+                      <SortTh label="Mã thẻ" col="card" sort={tcSort} onSort={onTcSort} />
+                      <SortTh label="Họ tên" col="name" sort={tcSort} onSort={onTcSort} />
+                      <SortTh label="Bộ phận" col="dept" sort={tcSort} onSort={onTcSort} />
+                      <SortTh label="Ca" col="ca" sort={tcSort} onSort={onTcSort} />
+                      <SortTh label="Loại ngày" col="loai_ngay" sort={tcSort} onSort={onTcSort} />
+                      <SortTh label="Ngày" col="ngay_iso" sort={tcSort} onSort={onTcSort} />
+                      <SortTh label="Giờ về" col="gio_ve" sort={tcSort} onSort={onTcSort} />
+                      <SortTh label="TC thực tế (h)" col="tang_ca_thuc_te" sort={tcSort} onSort={onTcSort} />
+                      <SortTh label="Đề xuất (h)" col="de_xuat" sort={tcSort} onSort={onTcSort} />
+                      <SortTh label="Thiếu (h)" col="thieu" sort={tcSort} onSort={onTcSort} />
+                      <SortTh label="Tình trạng" col="loai" sort={tcSort} onSort={onTcSort} />
                     </tr>
                   </thead>
                   <tbody>
-                    {tcRows.map((r, i) => (
+                    {tcRowsSorted.map((r, i) => (
                       <tr key={`${r.card}__${r.ngay_iso}`} style={i % 2 ? s.trAlt : undefined}>
                         <td style={{ ...s.td, ...s.mono }}>{r.card}</td>
                         <td style={s.td}>{r.name || ''}</td>
@@ -255,19 +297,19 @@ export default function BuVanTay() {
                     <th style={{ ...s.th, width: 34 }}>
                       <input type="checkbox" checked={allChecked} onChange={toggleAll} />
                     </th>
-                    <th style={s.th}>Mã thẻ</th>
-                    <th style={s.th}>Họ tên</th>
-                    <th style={s.th}>Bộ phận</th>
-                    <th style={s.th}>Ca</th>
-                    <th style={s.th}>Ngày</th>
-                    <th style={s.th}>Giờ vào</th>
-                    <th style={s.th}>Giờ ra</th>
-                    <th style={s.th}>Giờ bù đề xuất</th>
-                    <th style={s.th}>Lần thứ</th>
+                    <SortTh label="Mã thẻ" col="card" sort={buSort} onSort={onBuSort} />
+                    <SortTh label="Họ tên" col="name" sort={buSort} onSort={onBuSort} />
+                    <SortTh label="Bộ phận" col="dept" sort={buSort} onSort={onBuSort} />
+                    <SortTh label="Ca" col="ca" sort={buSort} onSort={onBuSort} />
+                    <SortTh label="Ngày" col="ngay_iso" sort={buSort} onSort={onBuSort} />
+                    <SortTh label="Giờ vào" col="start_str" sort={buSort} onSort={onBuSort} />
+                    <SortTh label="Giờ ra" col="end_str" sort={buSort} onSort={onBuSort} />
+                    <SortTh label="Giờ bù đề xuất" col="bu_str" sort={buSort} onSort={onBuSort} />
+                    <SortTh label="Lần thứ" col="order" sort={buSort} onSort={onBuSort} />
                   </tr>
                 </thead>
                 <tbody>
-                  {records.map((r, i) => {
+                  {recordsSorted.map((r, i) => {
                     const k = rowKey(r);
                     return (
                       <tr key={k} style={i % 2 ? s.trAlt : undefined}>
