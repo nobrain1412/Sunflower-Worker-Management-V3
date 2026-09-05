@@ -2,15 +2,16 @@
  * Kiểm tra ĐỀ XUẤT TĂNG CA — nhánh phụ của Bù vân tay (chỉ LỌC danh sách, không in phiếu).
  *
  * Cơ chế:
- *   - Giờ hành chính kết thúc 16:30; làm sau 16:30 là tăng ca (OT) và CẦN đề xuất.
+ *   - Giờ hành chính kết thúc 17:00; làm sau 17:00 là tăng ca (OT) và CẦN đề xuất.
  *     Không có đề xuất → giờ OT không được tính vào bảng công dù vân tay có chấm.
  *   - Lọc người có OT thực tế NHƯNG: không có đề xuất, hoặc đề xuất < OT thực tế.
  *   - Chủ nhật / ngày lễ: không có giờ hành chính → cần đề xuất cho CẢ NGÀY làm việc.
  *
  * OT thực tế tự tính từ giờ chấm (không tin cột OT máy tính sẵn):
- *   - Ngày thường (ca ngày): OT = giờ về − 16:30 (gross).
+ *   - Ngày thường (ca ngày): OT = giờ về − 17:00 (gross).
  *   - Ngày thường (ca đêm) : OT = số giờ làm − 8h (trừ 1h nghỉ nếu có chấm nghỉ).
  *   - CN / lễ            : OT = cả ngày = (giờ về − giờ vào) − 1h nghỉ (nếu có).
+ *   - OT luôn LÀM TRÒN XUỐNG theo bội số 0.5h (1 · 1.5 · 2 · 2.5 · 3 …).
  * Đề xuất lấy từ cột "ĐỀ XUẤT TĂNG CA" (giờ) trong bảng vân tay.
  */
 const db = require('../utils/db');
@@ -18,8 +19,11 @@ const bvt = require('./bangVanTayService');
 const bu = require('./buVanTayService');
 const pl = require('./phanLoaiVanTay');
 
-const HC_KET_THUC = 990;   // 16:30 tính bằng phút
+const HC_KET_THUC = 1020;  // 17:00 tính bằng phút
 const EPS = 0.25;          // dung sai 15 phút để tránh nhiễu làm tròn
+
+// Làm tròn XUỐNG theo bội số 0.5h: 1.4 → 1.0, 1.6 → 1.5, 2.9 → 2.5 …
+const floorHalf = (n) => Math.floor(n * 2 + 1e-9) / 2;
 
 // Ô số (giờ) → number; chấp nhận '4,5' hoặc '4.5'.
 function toNum(v) {
@@ -47,13 +51,13 @@ function tinhTangCaGio(cls, loaiNgay) {
 
   if (loaiNgay === 'cn' || loaiNgay === 'le') {
     if (den == null) return 0;
-    return Math.max(0, (ve - den) / 60 - (coNghi ? 1 : 0)); // cả ngày (trừ nghỉ)
+    return floorHalf(Math.max(0, (ve - den) / 60 - (coNghi ? 1 : 0))); // cả ngày (trừ nghỉ)
   }
   if (cls.ca === 'dem') {
     if (den == null) return 0;
-    return Math.max(0, (ve - den) / 60 - (coNghi ? 1 : 0) - 8); // vượt 8h chuẩn
+    return floorHalf(Math.max(0, (ve - den) / 60 - (coNghi ? 1 : 0) - 8)); // vượt 8h chuẩn
   }
-  return Math.max(0, (ve - HC_KET_THUC) / 60); // ca ngày: sau 16:30 (gross)
+  return floorHalf(Math.max(0, (ve - HC_KET_THUC) / 60)); // ca ngày: sau 17:00 (gross)
 }
 
 function loaiNgayCua(iso, row, ngayLeH) {
