@@ -16,12 +16,12 @@ function EmptyState({ text }) {
 }
 
 // Mục "Việc làm tốt nhất hôm nay" — grid card việc làm (dữ liệu thật).
-export function JobsSection({ jobs, saved, onSave, onOpen }) {
+export function JobsSection({ jobs, saved, onSave, onOpen, emptyText }) {
   return (
     <section style={s.section}>
       <SectionHead title="Việc làm tốt nhất hôm nay" />
       {jobs.length === 0 ? (
-        <EmptyState text="Hiện chưa có công ty nào đang tuyển dụng." />
+        <EmptyState text={emptyText || 'Hiện chưa có công ty nào đang tuyển dụng.'} />
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'var(--sf-job-cols)', gap: 14 }}>
           {jobs.map((jb) => (
@@ -40,12 +40,12 @@ export function JobsSection({ jobs, saved, onSave, onOpen }) {
 }
 
 // Mục "Thương hiệu tuyển dụng hàng đầu" — grid card công ty (dữ liệu thật).
-export function CompaniesSection({ companies, onOpen }) {
+export function CompaniesSection({ companies, onOpen, emptyText }) {
   return (
     <section style={s.section}>
       <SectionHead title="Thương hiệu tuyển dụng hàng đầu" />
       {companies.length === 0 ? (
-        <EmptyState text="Chưa có doanh nghiệp nào đang tuyển dụng." />
+        <EmptyState text={emptyText || 'Chưa có doanh nghiệp nào đang tuyển dụng.'} />
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'var(--sf-co-cols)', gap: 14 }}>
           {companies.map((co) => (

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import api from '../../hooks/useApi';
@@ -6,6 +6,7 @@ import { useAuth } from '../../context/AuthContext';
 import { ThemeScope } from '../../context/ThemeContext';
 import {
   companyToJob, companyToBrand, salaryText, toArr,
+  phanTichDiaDiem, boDau,
 } from './tuyenDungData';
 import Header from './Header';
 import Hero from './Hero';
@@ -44,6 +45,8 @@ export default function TuyenDung() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [saved, setSaved] = useState({});
   const [view, setView] = useState({ type: 'home' });
+  // Bộ lọc địa điểm: từ khoá tìm kiếm + tỉnh/thành + khu công nghiệp.
+  const [filters, setFilters] = useState({ q: '', tinh: '', kcn: '' });
 
   const { data } = useQuery({
     queryKey: ['tuyen-dung'],
@@ -58,10 +61,31 @@ export default function TuyenDung() {
   });
 
   const congTyList = toArr(data?.data);
-  // Chỉ hiển thị công ty thật đang tuyển; không còn fallback dữ liệu mẫu.
-  const jobs = congTyList.map(companyToJob);
-  const companies = congTyList.map(companyToBrand);
   const thongKe = thongKeRes?.data ?? null;
+
+  // Suy ra tỉnh/thành & KCN từ địa chỉ thật; danh sách option chỉ gồm nơi có công ty.
+  const { items, tinhOptions, kcnOptions } = useMemo(
+    () => phanTichDiaDiem(congTyList),
+    [congTyList],
+  );
+
+  // Lọc client theo từ khoá (tên/địa chỉ) + tỉnh + KCN đã chọn.
+  const congTyLoc = useMemo(() => {
+    const q = boDau(filters.q);
+    const tinhKey = boDau(filters.tinh);
+    const kcnKey = boDau(filters.kcn);
+    return items.filter((ct) => {
+      if (tinhKey && boDau(ct._tinh) !== tinhKey) return false;
+      if (kcnKey && boDau(ct._kcn) !== kcnKey) return false;
+      if (q && !boDau(ct.ten_cong_ty).includes(q) && !boDau(ct.dia_chi).includes(q)) return false;
+      return true;
+    });
+  }, [items, filters]);
+
+  const coFilter = !!(filters.q || filters.tinh || filters.kcn);
+  // Chỉ hiển thị công ty thật đang tuyển (đã lọc); không còn fallback dữ liệu mẫu.
+  const jobs = congTyLoc.map(companyToJob);
+  const companies = congTyLoc.map(companyToBrand);
 
   const toggleSave = (id) => setSaved((s) => ({ ...s, [id]: !s[id] }));
 
@@ -86,9 +110,25 @@ export default function TuyenDung() {
 
       {isHome ? (
         <>
-          <Hero thongKe={thongKe} />
-          <JobsSection jobs={jobs} saved={saved} onSave={toggleSave} onOpen={(jb) => openView('company', jb)} />
-          <CompaniesSection companies={companies} onOpen={(co) => openView('company', co)} />
+          <Hero
+            thongKe={thongKe}
+            filters={filters}
+            onFilters={setFilters}
+            tinhOptions={tinhOptions}
+            kcnOptions={kcnOptions}
+          />
+          <JobsSection
+            jobs={jobs}
+            saved={saved}
+            onSave={toggleSave}
+            onOpen={(jb) => openView('company', jb)}
+            emptyText={coFilter ? 'Không có công ty nào khớp bộ lọc.' : 'Hiện chưa có công ty nào đang tuyển dụng.'}
+          />
+          <CompaniesSection
+            companies={companies}
+            onOpen={(co) => openView('company', co)}
+            emptyText={coFilter ? 'Không có doanh nghiệp nào khớp bộ lọc.' : 'Chưa có doanh nghiệp nào đang tuyển dụng.'}
+          />
           <EmployerCta onCta={() => navigate(isLoggedIn ? '/quan-ly' : '/login')} />
         </>
       ) : (

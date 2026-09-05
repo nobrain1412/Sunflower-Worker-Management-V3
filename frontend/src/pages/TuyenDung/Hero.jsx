@@ -1,8 +1,12 @@
-import { LOCATIONS, fmtStat } from './tuyenDungData';
+import { fmtStat } from './tuyenDungData';
 
-// Hero + ô tìm việc + thống kê thật.
+// Hero + ô tìm việc + lọc theo tỉnh/KCN + thống kê thật.
 // `thongKe` lấy từ /api/tuyen-dung/thong-ke — số công ty đang tuyển & tổng công nhân.
-export default function Hero({ thongKe }) {
+// `filters`/`onFilters` do trang cha kiểm soát; lọc chạy ngay khi thay đổi.
+export default function Hero({ thongKe, filters, onFilters, tinhOptions = [], kcnOptions = [] }) {
+  const f = filters ?? { q: '', tinh: '', kcn: '' };
+  const setField = (key, value) => onFilters?.({ ...f, [key]: value });
+
   // Chỉ dựng ô thống kê từ dữ liệu thật; chưa có số liệu thì không hiển thị khối này.
   const stats = thongKe
     ? [
@@ -22,11 +26,20 @@ export default function Hero({ thongKe }) {
         </p>
 
         <div style={s.searchBox}>
-          <input placeholder="Vị trí tuyển dụng, tên công ty…" style={s.input} />
-          <select style={s.select} defaultValue={LOCATIONS[0]}>
-            {LOCATIONS.map((l) => <option key={l}>{l}</option>)}
+          <input
+            placeholder="Tên công ty, địa chỉ…"
+            style={s.input}
+            value={f.q}
+            onChange={(e) => setField('q', e.target.value)}
+          />
+          <select style={s.select} value={f.tinh} onChange={(e) => setField('tinh', e.target.value)}>
+            <option value="">Tất cả tỉnh/thành</option>
+            {tinhOptions.map((t) => <option key={t} value={t}>{t}</option>)}
           </select>
-          <button className="sf-btn-navy" style={s.searchBtn}>Tìm kiếm</button>
+          <select style={s.select} value={f.kcn} onChange={(e) => setField('kcn', e.target.value)}>
+            <option value="">Tất cả khu công nghiệp</option>
+            {kcnOptions.map((k) => <option key={k} value={k}>{k}</option>)}
+          </select>
         </div>
 
         {stats.length > 0 && (
@@ -71,10 +84,6 @@ const s = {
     flex: 1, border: 'none', outline: 'none', background: 'var(--sf-surface2)',
     color: 'var(--sf-text)', fontSize: 14.5, padding: '12px 14px', borderRadius: 9,
     cursor: 'pointer', fontFamily: 'inherit',
-  },
-  searchBtn: {
-    border: 'none', borderRadius: 10, background: 'var(--sf-navy)', color: 'var(--sf-navy-ink)',
-    fontSize: 15, fontWeight: 700, padding: '12px 28px', cursor: 'pointer', fontFamily: 'inherit',
   },
   stats: {
     marginTop: 32, display: 'flex', gap: 'clamp(20px,5vw,64px)',

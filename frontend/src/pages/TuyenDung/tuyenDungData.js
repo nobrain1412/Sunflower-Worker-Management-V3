@@ -41,6 +41,88 @@ export function fmtStat(n) {
 
 export const toArr = (v) => (Array.isArray(v) ? v : []);
 
+// Bỏ dấu tiếng Việt + hạ chữ thường để so khớp không phân biệt dấu/hoa-thường.
+export function boDau(s) {
+  return String(s || '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/đ/g, 'd').replace(/Đ/g, 'D')
+    .toLowerCase()
+    .trim();
+}
+
+// 63 tỉnh/thành để nhận diện tỉnh từ địa chỉ dạng text tự do trong cong_ty.dia_chi.
+export const VN_PROVINCES = [
+  'An Giang', 'Bà Rịa - Vũng Tàu', 'Bắc Giang', 'Bắc Kạn', 'Bạc Liêu', 'Bắc Ninh',
+  'Bến Tre', 'Bình Định', 'Bình Dương', 'Bình Phước', 'Bình Thuận', 'Cà Mau',
+  'Cần Thơ', 'Cao Bằng', 'Đà Nẵng', 'Đắk Lắk', 'Đắk Nông', 'Điện Biên', 'Đồng Nai',
+  'Đồng Tháp', 'Gia Lai', 'Hà Giang', 'Hà Nam', 'Hà Nội', 'Hà Tĩnh', 'Hải Dương',
+  'Hải Phòng', 'Hậu Giang', 'Hòa Bình', 'Hưng Yên', 'Khánh Hòa', 'Kiên Giang',
+  'Kon Tum', 'Lai Châu', 'Lâm Đồng', 'Lạng Sơn', 'Lào Cai', 'Long An', 'Nam Định',
+  'Nghệ An', 'Ninh Bình', 'Ninh Thuận', 'Phú Thọ', 'Phú Yên', 'Quảng Bình',
+  'Quảng Nam', 'Quảng Ngãi', 'Quảng Ninh', 'Quảng Trị', 'Sóc Trăng', 'Sơn La',
+  'Tây Ninh', 'Thái Bình', 'Thái Nguyên', 'Thanh Hóa', 'Thừa Thiên Huế', 'Tiền Giang',
+  'TP. Hồ Chí Minh', 'Trà Vinh', 'Tuyên Quang', 'Vĩnh Long', 'Vĩnh Phúc', 'Yên Bái',
+];
+
+// Chuẩn hoá sẵn tên tỉnh để so khớp nhanh; "TP. Hồ Chí Minh" khớp cả "hồ chí minh"/"tphcm".
+const PROVINCE_MATCH = VN_PROVINCES.map((ten) => {
+  const keys = [boDau(ten)];
+  if (ten === 'TP. Hồ Chí Minh') keys.push('ho chi minh', 'tphcm', 'tp hcm', 'hcm', 'sai gon');
+  if (ten === 'Bà Rịa - Vũng Tàu') keys.push('vung tau', 'ba ria');
+  if (ten === 'Thừa Thiên Huế') keys.push('hue');
+  return { ten, keys };
+});
+
+// Nhận diện tỉnh/thành xuất hiện trong địa chỉ; trả tên chuẩn hoặc null.
+// Ưu tiên chuỗi khớp dài nhất để tránh nhầm (vd "Nam" trong "Nam Định").
+export function extractTinh(diaChi) {
+  const norm = boDau(diaChi);
+  if (!norm) return null;
+  let found = null;
+  let foundLen = 0;
+  for (const p of PROVINCE_MATCH) {
+    for (const k of p.keys) {
+      if (k.length > foundLen && norm.includes(k)) { found = p.ten; foundLen = k.length; }
+    }
+  }
+  return found;
+}
+
+// Nhận diện tên khu/cụm công nghiệp từ địa chỉ (KCN, CCN, Khu/Cụm công nghiệp, Cụm CN).
+// Trả tên KCN đã gọn (cắt tại dấu phẩy/gạch) hoặc null nếu địa chỉ không nêu KCN.
+export function extractKcn(diaChi) {
+  const m = String(diaChi || '').match(
+    /(?:KCN|CCN|Khu\s+công\s+nghiệp|Cụm\s+công\s+nghiệp|Cụm\s+CN)\s+([^,\-–—;.]+)/i,
+  );
+  if (!m) return null;
+  const ten = m[1].replace(/\s+/g, ' ').trim();
+  return ten.length >= 2 ? ten : null;
+}
+
+// Danh sách lựa chọn (tỉnh, KCN) suy ra từ dữ liệu công ty thật — chỉ hiện mục có công ty.
+// Đồng thời gắn _tinh/_kcn vào từng công ty để lọc phía client.
+export function phanTichDiaDiem(congTyList) {
+  const items = congTyList.map((ct) => ({
+    ...ct,
+    _tinh: extractTinh(ct.dia_chi),
+    _kcn: extractKcn(ct.dia_chi),
+  }));
+
+  const tinhSet = new Map();   // boDau -> tên hiển thị
+  const kcnSet = new Map();
+  for (const it of items) {
+    if (it._tinh) tinhSet.set(boDau(it._tinh), it._tinh);
+    if (it._kcn)  kcnSet.set(boDau(it._kcn),  it._kcn);
+  }
+  const sortVi = (a, b) => a.localeCompare(b, 'vi');
+  return {
+    items,
+    tinhOptions: [...tinhSet.values()].sort(sortVi),
+    kcnOptions:  [...kcnSet.values()].sort(sortVi),
+  };
+}
+
 // Mỗi mục có thể kèm `to` để điều hướng thật; không có `to` là link marketing (trơ).
 export const NAV_ITEMS = [
   { label: 'Việc làm' },
@@ -48,10 +130,6 @@ export const NAV_ITEMS = [
   { label: 'Công ty' },
   { label: 'Công cụ' },
   { label: 'Tra cứu vân tay', to: '/tra-cuu-cong' },
-];
-
-export const LOCATIONS = [
-  'Tất cả địa điểm', 'Hà Nội', 'TP. Hồ Chí Minh', 'Đà Nẵng', 'Bình Dương', 'Cần Thơ', 'Làm từ xa',
 ];
 
 export const FOOTER_COLS = [
