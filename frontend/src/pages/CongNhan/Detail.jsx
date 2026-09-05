@@ -756,31 +756,38 @@ export default function CongNhanDetail() {
   const isRecruiter = !!user && cn?.nguoi_tuyen_id === user.id;
   const canViewPrivate = user?.vai_tro === 'admin' || isRecruiter;
 
-  // Quyền sửa cty / nghỉ việc: admin, QL với CN trong cty mình, vender/CTV với CN mình tuyển
+  // Quyền sửa cty / nghỉ việc — khớp với phân quyền backend ở services/congNhanService.js (capNhat):
+  // - admin   : luôn được
+  // - quan_ly : CN thuộc công ty mình quản lý HOẶC do chính mình tuyển
+  //             (CN mình tuyển có thể đang ở công ty khác → vẫn phải thao tác được)
+  // - vender / cong_tac_vien : CN do mình tuyển
   const canDoiCty = (() => {
     if (!user || !cn) return false;
     if (user.vai_tro === 'admin') return true;
     if (user.vai_tro === 'quan_ly') {
-      return Array.isArray(user.cong_ty_ids) && user.cong_ty_ids.includes(cn.cong_ty_id);
+      return isRecruiter
+        || (Array.isArray(user.cong_ty_ids) && user.cong_ty_ids.includes(cn.cong_ty_id));
     }
     if (user.vai_tro === 'vender' || user.vai_tro === 'cong_tac_vien') {
-      return cn.nguoi_tuyen_id === user.id;
+      return isRecruiter;
     }
     return false;
   })();
 
-  // Quyền cho ứng (tạm ứng):
+  // Quyền cho ứng (tạm ứng) — khớp với phân quyền backend ở routes/taiChinh.js:
   // - admin   : luôn được
-  // - quan_ly : CN thuộc công ty mình quản lý
+  // - quan_ly : CN thuộc công ty mình quản lý HOẶC do chính mình tuyển
+  //             (CN mình tuyển có thể đang ở công ty khác → vẫn phải cho ứng được)
   // - vender / cong_tac_vien : CN do mình tuyển
   const canChoUng = (() => {
     if (!user || !cn) return false;
     if (user.vai_tro === 'admin') return true;
     if (user.vai_tro === 'quan_ly') {
-      return Array.isArray(user.cong_ty_ids) && user.cong_ty_ids.includes(cn.cong_ty_id);
+      return isRecruiter
+        || (Array.isArray(user.cong_ty_ids) && user.cong_ty_ids.includes(cn.cong_ty_id));
     }
     if (user.vai_tro === 'vender' || user.vai_tro === 'cong_tac_vien') {
-      return cn.nguoi_tuyen_id === user.id;
+      return isRecruiter;
     }
     return false;
   })();
