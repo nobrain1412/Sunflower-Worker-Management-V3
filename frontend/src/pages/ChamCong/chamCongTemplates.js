@@ -20,7 +20,8 @@ function normalizeKey(raw) {
 
 // key template → mảng bucket key hiển thị.
 const COLUMNS = {
-  default: ['gio_hc_ngay', 'gio_tc_ngay'],
+  // Default nhận diện đầy đủ bố cục máy vân tay (HC/TC × ngày/đêm) — xem BE mirror.
+  default: ['gio_hc_ngay', 'gio_tc_ngay', 'gio_hc_dem', 'gio_tc_dem'],
   kangyin: ['gio_hc_ngay', 'gio_tc_ngay', 'gio_hc_dem', 'gio_tc_dem'],
 };
 
