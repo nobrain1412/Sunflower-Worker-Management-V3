@@ -110,7 +110,7 @@ function DuyetCard({ cn }) {
   }
 
   return (
-    <div style={s.card}>
+    <div className="duyet-card" style={s.card}>
       <div style={s.avatar}>{cn.ho_ten?.[0]?.toUpperCase() ?? '?'}</div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={s.name}>
@@ -127,7 +127,7 @@ function DuyetCard({ cn }) {
           <span>· Tạo: {fmtDate(cn.created_at)}</span>
         </div>
       </div>
-      <div style={s.actions}>
+      <div className="duyet-card-actions" style={s.actions}>
         <button onClick={() => setEditing(true)} style={s.btnEdit} disabled={busy}>
           ✎ Sửa
         </button>
@@ -178,7 +178,7 @@ const s = {
   },
   list: { display: 'flex', flexDirection: 'column', gap: 10 },
   card: {
-    display: 'flex', alignItems: 'center', gap: 14,
+    display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
     background: 'var(--bg1)', border: '1px solid var(--border)',
     borderRadius: 12, padding: 16,
   },

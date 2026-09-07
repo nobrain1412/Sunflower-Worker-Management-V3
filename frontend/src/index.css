@@ -382,6 +382,23 @@ body {
     white-space: nowrap;
   }
 
+  /* ---- Duyệt công nhân (hàng đợi duyệt) ----
+     Thẻ CN là flex ngang; trên điện thoại 3 nút thao tác không đủ chỗ nên
+     tràn ngang, đè lên chữ và bị cắt mất. Cho khối nút xuống hẳn 1 hàng riêng
+     chiếm trọn chiều ngang, chia đều 3 nút để bấm dễ. */
+  .duyet-card-actions {
+    width: 100%;
+    justify-content: space-between !important;
+  }
+  .duyet-card-actions button {
+    flex: 1 1 0;
+    min-width: 0;
+    justify-content: center;
+    text-align: center;
+    padding-left: 8px !important;
+    padding-right: 8px !important;
+  }
+
   /* ---- CongNhan detail ---- */
   .cn-profile-card {
     padding: 16px !important;
