@@ -45,6 +45,28 @@ const COMMON_TIME_HEADERS = {
   'gio cham ra':   '__gio_ve',
 };
 
+// Map các cột GIỜ chuẩn của máy vân tay — dùng chung cho mọi template.
+// Đây là bố cục cột do MÁY VÂN TAY xuất ra, nhiều công ty dùng chung định dạng này;
+// vì vậy các cột OT phải được nhận diện kể cả khi công ty chưa có template riêng
+// (nếu chỉ khai báo ở Kangyin thì công ty khác rơi vào 'default' sẽ mất giờ tăng ca).
+// LƯU Ý: "ĐỀ XUẤT TĂNG CA" cố tình KHÔNG map — đó là OT đề xuất, không phải OT thực làm.
+const COMMON_MACHINE_HOURS = {
+  // Giờ hành chính
+  'ca ngay':          '__h_day',
+  'ca dem':           '__h_night',
+  'chu nhat':         '__h_sunday',
+  'ngay le':          '__h_holiday',
+  // Giờ tăng ca (thực tế)
+  'tang ca trc 9 45': '__ot_before_945',
+  'trc 9 45':         '__ot_before_945',
+  'tang ca trc 945':  '__ot_before_945',
+  'sau 9 45':         '__ot_after_945',
+  'tang ca sau 9 45': '__ot_after_945',
+  'tang ca dem':      '__ot_night',
+  'tang ca chu nhat': '__ot_sunday',
+  'tang ca ngay le':  '__ot_holiday',
+};
+
 // Identity + ngày — chung cho mọi template.
 const COMMON_IDENTITY_HEADERS = {
   'ma the':           'ma_van_tay',
@@ -69,24 +91,11 @@ const KANGYIN = {
   headerMap: {
     ...COMMON_IDENTITY_HEADERS,
     ...COMMON_TIME_HEADERS,
+    ...COMMON_MACHINE_HOURS,
     // Cột lịch sử vân tay Kangyin (tất cả mốc giờ trong 1 ô)
     'lich su cham van tay': '__lich_su_van_tay',
     'lich su van tay':      '__lich_su_van_tay',
     'thoi gian cham':       '__lich_su_van_tay',
-    // Regular hours
-    'ca ngay':          '__h_day',
-    'ca dem':           '__h_night',
-    'chu nhat':         '__h_sunday',
-    'ngay le':          '__h_holiday',
-    // OT hours (thực tế, không phải "đề xuất")
-    'tang ca trc 9 45': '__ot_before_945',
-    'trc 9 45':         '__ot_before_945',
-    'tang ca trc 945':  '__ot_before_945',
-    'sau 9 45':         '__ot_after_945',
-    'tang ca sau 9 45': '__ot_after_945',
-    'tang ca dem':      '__ot_night',
-    'tang ca chu nhat': '__ot_sunday',
-    'tang ca ngay le':  '__ot_holiday',
   },
   // Cột tiêu đề cho file mẫu tải về (giữ dấu tiếng Việt cho người dùng dễ đọc).
   templateHeaders: [
@@ -101,19 +110,26 @@ const KANGYIN = {
 const DEFAULT = {
   key: 'default',
   label: 'Mặc định',
-  columns: ['gio_hc_ngay', 'gio_tc_ngay'],
+  columns: [...ALL_BUCKETS],
   headerMap: {
     ...COMMON_IDENTITY_HEADERS,
     ...COMMON_TIME_HEADERS,
-    'ca ngay':      '__h_day',
+    // Nhận diện bố cục cột chuẩn của máy vân tay (CA NGÀY/ĐÊM + các cột TĂNG CA...)
+    ...COMMON_MACHINE_HOURS,
+    // Lịch sử vân tay gộp trong 1 ô (một số máy xuất kiểu này)
+    'lich su cham van tay': '__lich_su_van_tay',
+    'lich su van tay':      '__lich_su_van_tay',
+    'thoi gian cham':       '__lich_su_van_tay',
+    // Alias rút gọn cho công ty chỉ có 1 cột giờ HC / 1 cột OT
     'gio hanh chinh': '__h_day',
     'gio cong':     '__h_day',
     'tang ca':      '__ot_before_945',
     'ot':           '__ot_before_945',
   },
   templateHeaders: [
-    'Mã thẻ', 'Họ tên', 'Bộ phận', 'Ngày', 'Giờ đến', 'Nghỉ trưa', 'Giờ về',
-    'CA NGÀY', 'TĂNG CA',
+    'Mã thẻ', 'Họ tên', 'Bộ phận', 'Ngày', 'Lịch sử chấm vân tay',
+    'CA NGÀY', 'CA ĐÊM', 'CHỦ NHẬT', 'NGÀY LỄ',
+    'TĂNG CA TRC 9:45', 'SAU 9:45', 'TĂNG CA ĐÊM', 'TĂNG CA CHỦ NHẬT', 'TĂNG CA NGÀY LỄ',
   ],
 };
 
