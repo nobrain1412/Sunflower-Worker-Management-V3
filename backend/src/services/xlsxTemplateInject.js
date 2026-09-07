@@ -87,6 +87,96 @@ function injectCells(xml, writes) {
   return xml;
 }
 
+// Dịch mọi tham chiếu DÒNG trong 1 công thức đi `delta` dòng.
+// Bắt token dạng cột+dòng ("AH5", "$D$5") — số đứng SAU chữ cái cột mới bị dịch,
+// nên hằng số ("*8") hay số trong chuỗi ("D/2") không bị đụng.
+function shiftFormulaRows(formulaBody, delta) {
+  return formulaBody.replace(/(\$?[A-Z]{1,3}\$?)(\d+)/g, (_, col, n) => `${col}${Number(n) + delta}`);
+}
+
+// Clone XML 1 dòng nguồn sang dòng mới: đổi số dòng ở thuộc tính <row r> và mọi
+// cell ref <c r="..">, đồng thời dịch tham chiếu dòng trong công thức theo delta.
+function cloneRowXml(rowXml, srcRow, delta) {
+  const newRow = srcRow + delta;
+  let out = rowXml.replace(new RegExp(`(<row\\b[^>]*\\br=")${srcRow}(")`), `$1${newRow}$2`);
+  // Cell ref: chỉ token có CHỮ CÁI cột đứng trước số (không đụng <row r="..">).
+  out = out.replace(/(<c\b[^>]*\br="[A-Z]+)(\d+)"/g, (_, p, n) => `${p}${Number(n) + delta}"`);
+  out = out.replace(/(<f\b[^>]*>)([\s\S]*?)(<\/f>)/g, (_, o, body, c) => o + shiftFormulaRows(body, delta) + c);
+  return out;
+}
+
+// Xoá giá trị mọi ô KHÔNG phải công thức trong 1 dòng (giữ nguyên style s="..").
+// Dùng để dòng clone chỉ còn khung + công thức tổng; mã/tên/giờ sẽ ghi lại sau.
+function blankNonFormulaCells(rowXml) {
+  return rowXml.replace(/<c\b[^>]*\br="([A-Z]+\d+)"[^>]*?(?:\/>|>[\s\S]*?<\/c>)/g, (m, ref) => {
+    if (/<f[\s/>]/.test(m)) return m; // giữ công thức (cột tổng)
+    const sMatch = m.match(/\bs="\d+"/);
+    return `<c r="${ref}"${sMatch ? ' ' + sMatch[0] : ''}/>`;
+  });
+}
+
+// Số dòng lớn nhất đang có trong sheetData.
+function maxRowOf(xml) {
+  let max = 0;
+  for (const m of xml.matchAll(/<row\b[^>]*\br="(\d+)"/g)) max = Math.max(max, Number(m[1]));
+  return max;
+}
+
+// Trích XML nguyên vẹn của 1 dòng theo số dòng (hỗ trợ cả dòng rỗng self-closing).
+function extractRowXml(xml, row) {
+  const full = xml.match(new RegExp(`<row\\b[^>]*\\br="${row}"[^>]*>[\\s\\S]*?</row>`));
+  if (full) return full[0];
+  const self = xml.match(new RegExp(`<row\\b[^>]*\\br="${row}"[^>]*/>`));
+  return self ? self[0] : `<row r="${row}"/>`;
+}
+
+// Nới <dimension ref="A1:AHnn"/> để phủ tới dòng mới (nếu file có khai báo).
+function bumpDimension(xml, maxRow) {
+  return xml.replace(/(<dimension\b[^>]*\bref="[A-Z]+\d+:[A-Z]+)(\d+)("[^>]*\/>)/,
+    (m, p, n, s) => (Number(n) >= maxRow ? m : `${p}${maxRow}${s}`));
+}
+
+/**
+ * Chèn thêm các "cụm dòng" công nhân MỚI vào CUỐI sheet (append).
+ * Mỗi cụm được clone từ cụm mẫu (dòng firstRow..firstRow+rowsPerWorker-1) để thừa
+ * hưởng style + công thức cột tổng, rồi ghi đè mã/tên/giờ theo `overrides`.
+ * Chèn ở cuối nên KHÔNG phải đánh lại số dòng của phần cũ.
+ *
+ * @param {string} xml       XML của sheet (đã đổ số cho người có sẵn)
+ * @param {{firstRow:number, rowsPerWorker:number}} layout
+ * @param {Array<Array<Object>>} blocks  mỗi block = mảng dài rowsPerWorker,
+ *        phần tử off = { [colIndex]: value } (value: number|string|null)
+ * @returns {string} XML đã chèn
+ */
+function appendWorkerBlocks(xml, layout, blocks) {
+  const { firstRow, rowsPerWorker } = layout;
+  const sdClose = xml.lastIndexOf('</sheetData>');
+  if (sdClose < 0 || !blocks || blocks.length === 0) return xml;
+
+  // Lấy XML mẫu của từng dòng trong cụm (chỉ 1 lần).
+  const srcRows = [];
+  for (let off = 0; off < rowsPerWorker; off++) srcRows.push(extractRowXml(xml, firstRow + off));
+
+  let cursor = maxRowOf(xml);
+  let addition = '';
+  for (const block of blocks) {
+    const delta = (cursor + 1) - firstRow; // dòng đầu cụm mới = cursor+1
+    for (let off = 0; off < rowsPerWorker; off++) {
+      const srcRow = firstRow + off;
+      const newRow = srcRow + delta;
+      let rowXml = blankNonFormulaCells(cloneRowXml(srcRows[off], srcRow, delta));
+      const overrides = block[off] || {};
+      const writes = Object.entries(overrides)
+        .map(([col, value]) => ({ row: newRow, col: Number(col), value }));
+      rowXml = injectCells(rowXml, writes);
+      addition += rowXml;
+    }
+    cursor += rowsPerWorker;
+  }
+
+  return bumpDimension(xml.slice(0, sdClose) + addition + xml.slice(sdClose), cursor);
+}
+
 /**
  * Map tên sheet (đã giải mã entity) → đường dẫn part XML trong zip.
  * @param {JSZip} zip
@@ -116,8 +206,12 @@ async function mapSheetNameToPart(zip) {
 
 module.exports = {
   injectCells,
+  appendWorkerBlocks,
   mapSheetNameToPart,
   colLetter,
   buildCellXml,
-  _internal: { xmlEscape, decodeXmlEntities, colIndexFromRef, insertCellIntoRow },
+  _internal: {
+    xmlEscape, decodeXmlEntities, colIndexFromRef, insertCellIntoRow,
+    cloneRowXml, blankNonFormulaCells, shiftFormulaRows, maxRowOf, bumpDimension,
+  },
 };
