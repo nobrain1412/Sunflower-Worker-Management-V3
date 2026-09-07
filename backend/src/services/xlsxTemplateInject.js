@@ -136,6 +136,30 @@ function bumpDimension(xml, maxRow) {
     (m, p, n, s) => (Number(n) >= maxRow ? m : `${p}${maxRow}${s}`));
 }
 
+// Các range gộp ô (merge) NẰM GỌN trong cụm mẫu [firstRow, lastRow] — vd MVT/họ tên
+// gộp dọc cả cụm. Trả [{ c1, r1, c2, r2 }] để nhân bản cho cụm mới.
+function blockMergeRanges(xml, firstRow, lastRow) {
+  const mc = xml.match(/<mergeCells\b[^>]*>([\s\S]*?)<\/mergeCells>/);
+  if (!mc) return [];
+  const out = [];
+  for (const m of mc[1].matchAll(/<mergeCell\b[^>]*\bref="([A-Z]+)(\d+):([A-Z]+)(\d+)"/g)) {
+    const r1 = Number(m[2]);
+    const r2 = Number(m[4]);
+    if (r1 >= firstRow && r2 <= lastRow) out.push({ c1: m[1], r1, c2: m[3], r2 });
+  }
+  return out;
+}
+
+// Chèn thêm các <mergeCell> đã dịch dòng vào khối <mergeCells> sẵn có + cập nhật count.
+// Nếu file không có <mergeCells> (cụm mẫu vốn không gộp ô) → giữ nguyên.
+function addMergeCells(xml, newRefs) {
+  if (newRefs.length === 0 || !/<mergeCells\b/.test(xml)) return xml;
+  const added = newRefs.map((r) => `<mergeCell ref="${r}"/>`).join('');
+  xml = xml.replace(/(<mergeCells\b[^>]*\bcount=")(\d+)(")/,
+    (m, p, n, s) => `${p}${Number(n) + newRefs.length}${s}`);
+  return xml.replace('</mergeCells>', `${added}</mergeCells>`);
+}
+
 /**
  * Chèn thêm các "cụm dòng" công nhân MỚI vào CUỐI sheet (append).
  * Mỗi cụm được clone từ cụm mẫu (dòng firstRow..firstRow+rowsPerWorker-1) để thừa
@@ -153,12 +177,14 @@ function appendWorkerBlocks(xml, layout, blocks) {
   const sdClose = xml.lastIndexOf('</sheetData>');
   if (sdClose < 0 || !blocks || blocks.length === 0) return xml;
 
-  // Lấy XML mẫu của từng dòng trong cụm (chỉ 1 lần).
+  // Lấy XML mẫu của từng dòng trong cụm + các range gộp ô của cụm (chỉ 1 lần).
   const srcRows = [];
   for (let off = 0; off < rowsPerWorker; off++) srcRows.push(extractRowXml(xml, firstRow + off));
+  const srcMerges = blockMergeRanges(xml, firstRow, firstRow + rowsPerWorker - 1);
 
   let cursor = maxRowOf(xml);
   let addition = '';
+  const newMergeRefs = [];
   for (const block of blocks) {
     const delta = (cursor + 1) - firstRow; // dòng đầu cụm mới = cursor+1
     for (let off = 0; off < rowsPerWorker; off++) {
@@ -171,10 +197,14 @@ function appendWorkerBlocks(xml, layout, blocks) {
       rowXml = injectCells(rowXml, writes);
       addition += rowXml;
     }
+    // Nhân bản gộp ô (MVT/họ tên… gộp dọc cả cụm) cho cụm mới.
+    for (const s of srcMerges) newMergeRefs.push(`${s.c1}${s.r1 + delta}:${s.c2}${s.r2 + delta}`);
     cursor += rowsPerWorker;
   }
 
-  return bumpDimension(xml.slice(0, sdClose) + addition + xml.slice(sdClose), cursor);
+  let out = xml.slice(0, sdClose) + addition + xml.slice(sdClose);
+  out = addMergeCells(out, newMergeRefs);
+  return bumpDimension(out, cursor);
 }
 
 /**
@@ -213,5 +243,6 @@ module.exports = {
   _internal: {
     xmlEscape, decodeXmlEntities, colIndexFromRef, insertCellIntoRow,
     cloneRowXml, blankNonFormulaCells, shiftFormulaRows, maxRowOf, bumpDimension,
+    blockMergeRanges, addMergeCells,
   },
 };
