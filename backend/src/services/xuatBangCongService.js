@@ -21,7 +21,7 @@
  */
 const ExcelJS = require('exceljs');
 const JSZip = require('jszip');
-const { injectCells, mapSheetNameToPart } = require('./xlsxTemplateInject');
+const { injectCells, appendWorkerBlocks, mapSheetNameToPart } = require('./xlsxTemplateInject');
 
 // Chuẩn hoá header: bỏ dấu, đ→d, lowercase, gộp khoảng trắng.
 function norm(v) {
@@ -247,6 +247,33 @@ function sheetWrites(ws, layout, dataByMa) {
 }
 
 /**
+ * Dựng override cho 1 "cụm dòng" công nhân MỚI (để append vào cuối sheet).
+ * Trả mảng dài rowsPerWorker; phần tử off = { [colIndex]: value }.
+ * Chỉ dòng đầu mang mã + tên (khớp cách trình bày phổ biến của khuôn).
+ */
+function buildBlockOverrides(layout, person, byDate) {
+  const { rowsPerWorker, maCol, nameCol, dateCols, roleByOffset } = layout;
+  const ov = Array.from({ length: rowsPerWorker }, () => ({}));
+  ov[0][maCol] = person.ma_van_tay;
+  ov[0][nameCol] = person.ho_ten || '';
+  for (const { col, key } of dateCols) {
+    const b = (byDate && byDate.get(key)) || {};
+    if (rowsPerWorker >= 4 && roleByOffset) {
+      for (let off = 0; off < rowsPerWorker; off++) {
+        const role = roleByOffset[off];
+        if (role) ov[off][col] = num(b[role]);
+      }
+    } else {
+      ov[0][col] = markHanhChinh(b);
+      const ot = (Number(b.gio_tc_ngay) || 0) + (Number(b.gio_tc_dem) || 0);
+      ov[1] = ov[1] || {};
+      ov[1][col] = num(ot);
+    }
+  }
+  return ov;
+}
+
+/**
  * Đổ dữ liệu 1 sheet vào workbook ExcelJS (mutate). Giữ lại cho test/preview.
  * Luồng xuất thật KHÔNG dùng hàm này (xem xuatBangCong — chèn thẳng vào XML).
  */
@@ -335,9 +362,11 @@ function buildDataMap(rows) {
  * Đổ dữ liệu công vào khuôn Excel của công ty.
  * @param {Buffer} templateBuffer  file .xlsx mẫu do người dùng upload
  * @param {Map} dataByMa           Map<ma_van_tay, Map<'YYYY-MM-DD', bucket>>
- * @returns {{ buffer: Buffer, sheets: Array }}
+ * @param {{ sheet:string, people:Array<{ma_van_tay, ho_ten}> }|null} themMoi
+ *        Người CÓ CÔNG nhưng THIẾU trong file → chèn thêm cụm dòng vào cuối sheet.
+ * @returns {{ buffer: Buffer, sheets: Array, daThem: Array<string> }}
  */
-async function xuatBangCong(templateBuffer, dataByMa) {
+async function xuatBangCong(templateBuffer, dataByMa, themMoi = null) {
   // 1) Đọc khuôn bằng ExcelJS CHỈ để dò layout + tính danh sách ô cần ghi.
   //    (load để đọc thì an toàn; chỉ writeBuffer mới gây hỏng file.)
   const wb = new ExcelJS.Workbook();
@@ -345,9 +374,11 @@ async function xuatBangCong(templateBuffer, dataByMa) {
 
   const sheets = [];
   const writesByName = new Map(); // tên sheet → [{ row, col, value }]
+  const layoutByName = new Map(); // tên sheet → layout (để append người mới)
   for (const ws of wb.worksheets) {
     const layout = detectSheetLayout(ws);
     if (!layout) { sheets.push({ ten: ws.name, nhanDien: false }); continue; }
+    layoutByName.set(ws.name, layout);
     const { writes, matched } = sheetWrites(ws, layout, dataByMa);
     if (writes.length) writesByName.set(ws.name, writes);
     sheets.push({
@@ -371,8 +402,30 @@ async function xuatBangCong(templateBuffer, dataByMa) {
     zip.file(part, injectCells(xml, writes));
   }
 
+  // 3) Chèn thêm người CÓ CÔNG nhưng THIẾU trong file vào CUỐI 1 sheet chỉ định.
+  //    Đọc XML SAU khi đã đổ số ở bước 2 để không mất phần vừa ghi.
+  const daThem = [];
+  if (themMoi && themMoi.sheet && Array.isArray(themMoi.people) && themMoi.people.length) {
+    const layout = layoutByName.get(themMoi.sheet);
+    const part = nameToPart.get(themMoi.sheet);
+    if (layout && part && zip.file(part)) {
+      const blocks = [];
+      for (const p of themMoi.people) {
+        if (!p.ma_van_tay) continue;             // bắt buộc có mã vân tay
+        const byDate = dataByMa.get(p.ma_van_tay);
+        if (!byDate) continue;                   // không có công → bỏ qua
+        blocks.push(buildBlockOverrides(layout, p, byDate));
+        daThem.push(p.ma_van_tay);
+      }
+      if (blocks.length) {
+        const xml = await zip.file(part).async('string');
+        zip.file(part, appendWorkerBlocks(xml, layout, blocks));
+      }
+    }
+  }
+
   const buffer = await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
-  return { buffer, sheets };
+  return { buffer, sheets, daThem };
 }
 
 module.exports = {
@@ -382,5 +435,6 @@ module.exports = {
   detectSheetLayout,
   pourSheet,
   sheetWrites,
+  buildBlockOverrides,
   _internal: { norm, asDate, dateKey, markHanhChinh },
 };

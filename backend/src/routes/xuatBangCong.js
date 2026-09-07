@@ -47,17 +47,32 @@ async function tenCongTy(congTyId) {
 }
 
 // Phân tích khuôn + lấy dữ liệu công khớp. Dùng chung cho preview & xuất.
-async function chuanBiDuLieu(buffer, congTyId) {
+// extraMa: mã vân tay của người CÓ CÔNG nhưng THIẾU trong file (được chọn để thêm)
+// → nạp thêm dữ liệu công của họ vào dataByMa dù không có mã trong file.
+async function chuanBiDuLieu(buffer, congTyId, extraMa = []) {
   const phanTich = await svc.phanTichKhuon(buffer);
   if (!phanTich.dateMin) {
     const e = new Error('Không nhận diện được bảng chấm công nào trong file');
     e.statusCode = 400; e.code = 'NO_TIMESHEET'; throw e;
   }
+  const maList = [...new Set([...phanTich.maList, ...extraMa])];
   const rows = await model.layCongTheoKhoang(
-    congTyId, phanTich.dateMin, phanTich.dateMax, phanTich.maList,
+    congTyId, phanTich.dateMin, phanTich.dateMax, maList,
   );
   const dataByMa = svc.buildDataMap(rows);
   return { phanTich, dataByMa };
+}
+
+// Đọc danh sách mã vân tay cần thêm mới từ body (JSON string hoặc mảng).
+function parseThemMoi(body) {
+  let raw = body?.them_moi;
+  if (typeof raw === 'string') {
+    try { raw = JSON.parse(raw); } catch { raw = []; }
+  }
+  const list = Array.isArray(raw) ? raw : [];
+  const maList = [...new Set(list.map((m) => String(m).trim()).filter(Boolean))];
+  const sheet = body?.them_sheet ? String(body.them_sheet) : null;
+  return { maList, sheet };
 }
 
 router.post('/preview',
@@ -164,9 +179,22 @@ router.post('/',
     requireFile(req);
     const congTyId = parseCongTyId(req.body?.cong_ty_id);
     const ten = await tenCongTy(congTyId);
-    const { dataByMa } = await chuanBiDuLieu(req.file.buffer, congTyId);
 
-    const { buffer } = await svc.xuatBangCong(req.file.buffer, dataByMa);
+    // Người được chọn để CHÈN THÊM (có công, thiếu trong file) — bắt buộc có mã vân tay.
+    const { maList: themMa, sheet: themSheet } = parseThemMoi(req.body);
+    const { dataByMa } = await chuanBiDuLieu(req.file.buffer, congTyId, themMa);
+
+    let themMoi = null;
+    if (themMa.length > 0 && themSheet) {
+      const cnList = await model.layCongNhanTheoMa(themMa);
+      const tenTheoMa = new Map(cnList.map((c) => [c.ma_van_tay, c.ho_ten]));
+      themMoi = {
+        sheet: themSheet,
+        people: themMa.map((ma) => ({ ma_van_tay: ma, ho_ten: tenTheoMa.get(ma) || '' })),
+      };
+    }
+
+    const { buffer } = await svc.xuatBangCong(req.file.buffer, dataByMa, themMoi);
 
     const safeName = String(ten || 'cong-ty')
       .normalize('NFD').replace(/\p{Diacritic}/gu, '')

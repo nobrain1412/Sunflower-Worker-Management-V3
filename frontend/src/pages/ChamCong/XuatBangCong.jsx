@@ -20,12 +20,15 @@ export default function XuatBangCong() {
   const [chon, setChon] = useState(() => new Set()); // id CN được tick để nghỉ việc
   const [nghiViecing, setNghiViecing] = useState(false);
   const [nghiViecMsg, setNghiViecMsg] = useState('');
+  const [themChon, setThemChon] = useState(() => new Set()); // mã VT được tick để CHÈN THÊM
+  const [themSheet, setThemSheet] = useState(''); // sheet đích để chèn người thiếu
 
   const congTyArr = useCongTyList().data?.data ?? [];
 
   function reset() {
     setFile(null); setPreview(null); setError('');
     setChon(new Set()); setNghiViecMsg('');
+    setThemChon(new Set()); setThemSheet('');
     if (fileInputRef.current) fileInputRef.current.value = '';
   }
 
@@ -33,6 +36,7 @@ export default function XuatBangCong() {
     const f = e.target.files?.[0];
     if (!f) return;
     setFile(f); setPreview(null); setError(''); setChon(new Set()); setNghiViecMsg('');
+    setThemChon(new Set()); setThemSheet('');
   }
 
   async function doPreview() {
@@ -46,6 +50,10 @@ export default function XuatBangCong() {
       const res = await api.post('/bao-cao/xuat-bang-cong/preview', fd);
       setPreview(res.data);
       setChon(new Set());
+      setThemChon(new Set());
+      // Mặc định chọn sheet đầu tiên nhận diện được làm nơi chèn người thiếu.
+      const sheetDaus = (res.data?.sheets || []).filter((sh) => sh.nhanDien);
+      setThemSheet(sheetDaus[0]?.ten || '');
     } catch (err) {
       setError(err?.message || 'Phân tích khuôn thất bại');
     } finally {
@@ -59,6 +67,11 @@ export default function XuatBangCong() {
       const fd = new FormData();
       fd.append('file', file);
       fd.append('cong_ty_id', congTyId);
+      // Người CÓ CÔNG nhưng THIẾU trong file, được chọn để CHÈN THÊM vào cuối 1 sheet.
+      if (themChon.size > 0 && themSheet) {
+        fd.append('them_moi', JSON.stringify([...themChon]));
+        fd.append('them_sheet', themSheet);
+      }
       const blob = await api.post('/bao-cao/xuat-bang-cong', fd, { responseType: 'blob' });
       const ct = congTyArr.find((c) => String(c.id) === String(congTyId));
       const name = (ct?.ten_cong_ty || 'cong-ty')
@@ -104,11 +117,26 @@ export default function XuatBangCong() {
   const goiY = dc?.goi_y_nghi_viec ?? [];
   const allChosen = goiY.length > 0 && goiY.every((x) => chon.has(x.id));
 
+  // Nhóm ③ — người có công nhưng thiếu trong file (ứng viên chèn thêm).
+  const thieu = dc?.co_cong_thieu_trong_file ?? [];
+  const themCoTheThem = thieu.filter((x) => !!x.ma_van_tay);   // đủ điều kiện chèn (có mã)
+  const themKhongMa = thieu.filter((x) => !x.ma_van_tay);      // thiếu mã → không chèn được
+  const recognizedSheets = (preview?.sheets ?? []).filter((sh) => sh.nhanDien);
+  const themAllChosen = themCoTheThem.length > 0
+    && themCoTheThem.every((x) => themChon.has(x.ma_van_tay));
+
   function toggle(id) {
     setChon((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   }
   function toggleAll() {
     setChon(allChosen ? new Set() : new Set(goiY.map((x) => x.id)));
+  }
+  function toggleThem(ma) {
+    if (!ma) return;
+    setThemChon((prev) => { const n = new Set(prev); n.has(ma) ? n.delete(ma) : n.add(ma); return n; });
+  }
+  function toggleThemAll() {
+    setThemChon(themAllChosen ? new Set() : new Set(themCoTheThem.map((x) => x.ma_van_tay)));
   }
 
   return (
@@ -203,10 +231,68 @@ export default function XuatBangCong() {
             cols={['Mã vân tay', 'Họ tên', 'Trạng thái']}
             rows={dc.trong_file_khong_cong.map((x) => [x.ma_van_tay, x.ho_ten, x.trang_thai])} />
 
-          <Group title="③ Có công trong hệ thống nhưng THIẾU tên trong file — dữ liệu sẽ bị bỏ sót!" color="var(--red)"
-            count={dc.co_cong_thieu_trong_file.length}
-            cols={['Mã vân tay', 'Họ tên', 'Tổng giờ']}
-            rows={dc.co_cong_thieu_trong_file.map((x) => [x.ma_van_tay || '—', x.ho_ten, (x.tong_gio ?? 0) + 'h'])} />
+          {/* Nhóm ③: có checkbox để CHÈN THÊM người thiếu vào cuối 1 sheet */}
+          <div style={s.group}>
+            <div style={{ ...s.groupHead, color: 'var(--red)', cursor: 'default' }}>
+              <span>③ Có công trong hệ thống nhưng THIẾU tên trong file — dữ liệu sẽ bị bỏ sót!
+                <span style={s.badge}>{thieu.length}</span></span>
+            </div>
+            {thieu.length === 0 ? (
+              <div style={s.emptyRow}>Không có ai.</div>
+            ) : (
+              <>
+                <div style={s.tip}>
+                  Tick người muốn <strong>chèn thêm vào cuối bảng</strong> khi xuất. Hệ thống clone
+                  đúng cụm dòng mẫu (style + công thức) và đổ số giờ theo mã vân tay.
+                  {themCoTheThem.length > 0 && (
+                    <>
+                      {' '}Chèn vào sheet:{' '}
+                      <select className="form-input" value={themSheet} style={s.sheetSelect}
+                        onChange={(e) => setThemSheet(e.target.value)}>
+                        {recognizedSheets.map((sh) => (
+                          <option key={sh.ten} value={sh.ten}>{sh.ten}</option>
+                        ))}
+                      </select>
+                    </>
+                  )}
+                  {themKhongMa.length > 0 && (
+                    <div style={{ color: 'var(--amber)', marginTop: 6 }}>
+                      ⚠ {themKhongMa.length} người chưa có mã vân tay → không thể chèn.
+                      Bổ sung mã vân tay vào hồ sơ trước.
+                    </div>
+                  )}
+                </div>
+                <div style={s.tableWrap}>
+                  <table style={s.table}>
+                    <thead><tr>
+                      <th style={{ ...s.th, width: 36 }}>
+                        <input type="checkbox" checked={themAllChosen}
+                          onChange={toggleThemAll} disabled={themCoTheThem.length === 0} />
+                      </th>
+                      <th style={s.th}>Mã vân tay</th><th style={s.th}>Họ tên</th><th style={s.th}>Tổng giờ</th>
+                    </tr></thead>
+                    <tbody>
+                      {thieu.map((x) => {
+                        const coMa = !!x.ma_van_tay;
+                        return (
+                          <tr key={x.id} style={coMa && themChon.has(x.ma_van_tay) ? s.rowSelBlue : null}>
+                            <td style={s.td}>
+                              <input type="checkbox" disabled={!coMa}
+                                checked={coMa && themChon.has(x.ma_van_tay)}
+                                onChange={() => toggleThem(x.ma_van_tay)} />
+                            </td>
+                            <td style={s.tdMono}>{x.ma_van_tay || '— (thiếu mã)'}</td>
+                            <td style={s.td}>{x.ho_ten}</td>
+                            <td style={s.td}>{(x.tong_gio ?? 0)}h</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+          </div>
 
           {/* Nhóm 4: có checkbox chuyển nghỉ việc */}
           <div style={s.group}>
@@ -248,9 +334,16 @@ export default function XuatBangCong() {
 
           <div style={s.commitRow}>
             <button onClick={reset} style={s.btnGhost}>Huỷ, chọn file khác</button>
-            <button onClick={doDownload} disabled={downloading} style={s.btnPrimary}>
-              {downloading ? 'Đang xuất...' : '⬇ Tải file bảng công'}
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              {themChon.size > 0 && (
+                <span style={{ fontSize: 12, color: 'var(--accent)' }}>
+                  + Chèn thêm {themChon.size} người vào sheet <b>{themSheet}</b>
+                </span>
+              )}
+              <button onClick={doDownload} disabled={downloading} style={s.btnPrimary}>
+                {downloading ? 'Đang xuất...' : '⬇ Tải file bảng công'}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -327,5 +420,7 @@ const s = {
   td: { padding: '7px 12px', borderBottom: '1px solid var(--border)', color: 'var(--text1)' },
   tdMono: { padding: '7px 12px', borderBottom: '1px solid var(--border)', color: 'var(--text1)', fontFamily: "'JetBrains Mono', monospace", fontSize: 11 },
   rowSel: { background: 'rgba(255,95,114,0.06)' },
+  rowSelBlue: { background: 'rgba(79,124,255,0.08)' },
+  sheetSelect: { display: 'inline-block', width: 'auto', minWidth: 120, padding: '4px 8px', fontSize: 12, verticalAlign: 'middle' },
   commitRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 16 },
 };
