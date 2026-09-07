@@ -14,7 +14,7 @@ function toPositiveInt(value, fieldName) {
 }
 
 const getDanhSach = asyncWrapper(async (req, res) => {
-  const { data, meta } = await congTyService.danhSach(req.query);
+  const { data, meta } = await congTyService.danhSach(req.query, req.user);
   sendSuccess(res, data, 'Thành công', 200, meta);
 });
 
