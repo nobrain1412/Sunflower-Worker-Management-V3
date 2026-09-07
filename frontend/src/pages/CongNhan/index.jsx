@@ -107,7 +107,7 @@ function MobileCongNhanCard({ cn, canDelete, onOpen, onDelete }) {
         <div style={m.item}><span style={m.label}>SĐT</span><span style={m.value}>{cn.so_dien_thoai ?? '—'}</span></div>
         <div style={m.item}><span style={m.label}>Ngày vào</span><span style={m.value}>{fmtDate(cn.ngay_vao_lam)}</span></div>
         <div style={m.item}><span style={m.label}>CCCD</span><span style={m.value}>{cn.cccd ?? '—'}</span></div>
-        <div style={m.item}><span style={m.label}>Nơi ở</span><span style={m.value}>{NOI_O_LABEL[cn.trang_thai_noi_o] ?? '—'}</span></div>
+        <div style={m.item}><span style={m.label}>Ngày sinh</span><span style={m.value}>{fmtDate(cn.ngay_sinh)}</span></div>
       </div>
 
       {canDelete && (

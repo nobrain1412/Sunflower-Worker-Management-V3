@@ -461,11 +461,11 @@ async function capNhat(id, data, actorUserId = null, scope = null) {
     if (!('ma_van_tay' in data))   data.ma_van_tay = null;
     if (!('bo_phan' in data))      data.bo_phan = null;
     if (!('ngay_vao_lam' in data)) data.ngay_vao_lam = today;
-    // Vào lại / kích hoạt lại → coi như mới vào, đồng thời xoá dấu nghỉ việc nếu có.
-    if (vaoLaiCongTy || kichHoatTuNghi) {
-      if (!('trang_thai' in data))     data.trang_thai = 'moi_vao';
-      if (!('ngay_nghi_viec' in data)) data.ngay_nghi_viec = null;
-    }
+    // Đổi công ty / vào lại / kích hoạt lại → bắt đầu ở công ty mới từ hôm nay nên
+    // coi như "mới vào" (ngày vào đã đặt về hôm nay), đồng thời xoá dấu nghỉ việc nếu có.
+    // autoUpdateTrangThai sẽ tự chuyển sang "đang làm" sau 3 ngày.
+    if (!('trang_thai' in data))     data.trang_thai = 'moi_vao';
+    if (!('ngay_nghi_viec' in data)) data.ngay_nghi_viec = null;
   }
 
   const updated = await congNhanModel.update(id, data);

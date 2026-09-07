@@ -129,7 +129,7 @@ async function findAll({ page = 1, limit = 20, sort = 'ho_ten', order = 'asc', t
 
   params.push(limit, offset);
   const rows = await db.query(
-    `SELECT cn.id, cn.ho_ten, cn.ngay_sinh, cn.gioi_tinh,
+    `SELECT cn.id, cn.ho_ten, cn.cccd, cn.ngay_sinh, cn.gioi_tinh,
             cn.so_dien_thoai, cn.trang_thai, cn.ngay_vao_lam, cn.created_at,
             cn.trang_thai_noi_o, cn.bo_phan,
             cn.anh_chan_dung,
