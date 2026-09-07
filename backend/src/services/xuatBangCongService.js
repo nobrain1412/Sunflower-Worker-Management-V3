@@ -86,7 +86,7 @@ function dateKey(d) {
   return `${y}-${m}-${day}`;
 }
 
-const MA_HEADERS = ['ma vt', 'ma nv', 'ma the', 'ma van tay', 'ma the cham cong'];
+const MA_HEADERS = ['ma vt', 'mvt', 'ma nv', 'manv', 'ma the', 'ma van tay', 'ma the cham cong'];
 const NAME_HEADERS = ['ho ten', 'ho va ten', 'ho ten nv', 'ho ten nhan vien'];
 
 // Nhãn nhận diện vai trò dòng trong khuôn 4 dòng.
@@ -129,7 +129,7 @@ function detectSheetLayout(ws) {
   if (!maCol) return null;
   if (!nameCol) nameCol = maCol + 1;
 
-  // 3) Hàng công nhân đầu tiên + số dòng/1 người (khoảng cách 2 anchor liên tiếp).
+  // 3) Hàng công nhân đầu tiên + số dòng/1 người.
   //    Bỏ qua các dòng header lặp lại (maCol/nameCol chứa đúng nhãn tiêu đề).
   const isWorkerRow = (r) => {
     const maTxt = cellText(ws.getCell(r, maCol)).trim();
@@ -138,13 +138,25 @@ function detectSheetLayout(ws) {
     if (!nameTxt || NAME_HEADERS.includes(norm(nameTxt))) return false;
     return true;
   };
-  const anchors = [];
-  for (let r = dateRow + 1; r <= ws.rowCount && anchors.length < 3; r++) {
-    if (isWorkerRow(r)) anchors.push(r);
+  let firstRow = null;
+  for (let r = dateRow + 1; r <= ws.rowCount; r++) {
+    if (isWorkerRow(r)) { firstRow = r; break; }
   }
-  if (anchors.length < 1) return null;
-  const firstRow = anchors[0];
-  const rowsPerWorker = anchors.length >= 2 ? anchors[1] - anchors[0] : 2;
+  if (firstRow == null) return null;
+
+  // Số dòng/1 người = số dòng liên tiếp thuộc cùng một người, tính từ firstRow tới
+  // ngay trước dòng có MÃ MỚI khác. Bao trùm cả hai kiểu khuôn:
+  //   (a) mã chỉ điền ở dòng đầu, các dòng con để trống;
+  //   (b) mã (và tên) lặp y hệt trên mọi dòng con (HCN/TCN/HCD/TCD).
+  const firstMa = cellText(ws.getCell(firstRow, maCol)).trim();
+  let rowsPerWorker = 1;
+  for (let r = firstRow + 1; r <= ws.rowCount; r++) {
+    const maTxt = cellText(ws.getCell(r, maCol)).trim();
+    if (!maTxt || MA_HEADERS.includes(norm(maTxt))) { rowsPerWorker += 1; continue; } // dòng con để trống
+    if (maTxt === firstMa) { rowsPerWorker += 1; continue; } // mã lặp lại trên dòng con
+    break; // gặp người mới
+  }
+  if (rowsPerWorker < 1) rowsPerWorker = 2;
 
   // 4) Khuôn 4 dòng: cố gắng map vai trò từng offset qua nhãn; nếu không có → thứ tự chuẩn.
   let roleByOffset = null;
@@ -153,7 +165,8 @@ function detectSheetLayout(ws) {
     for (let off = 0; off < rowsPerWorker; off++) {
       const r = firstRow + off;
       let labelTxt = '';
-      for (let c = 1; c <= Math.max(nameCol, maCol) + 2; c++) labelTxt += ' ' + norm(cellText(ws.getCell(r, c)));
+      const labelScanMax = Math.min(ws.columnCount, Math.max(nameCol, maCol) + 6);
+      for (let c = 1; c <= labelScanMax; c++) labelTxt += ' ' + norm(cellText(ws.getCell(r, c)));
       for (const [role, keys] of Object.entries(ROLE_LABELS)) {
         if (keys.some((k) => labelTxt.includes(k))) { roleByOffset[off] = role; break; }
       }
