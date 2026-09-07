@@ -307,7 +307,9 @@ export default function CongTy() {
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={s.ctName}>{ct.ten_cong_ty}</div>
                 <div style={s.ctAddr}>{ct.dia_chi ?? '—'}</div>
-                <div style={s.progressLabel}>{ct.so_luong_hien_tai ?? 0} công nhân</div>
+                {ct.so_luong_hien_tai != null && (
+                  <div style={s.progressLabel}>{ct.so_luong_hien_tai} công nhân</div>
+                )}
               </div>
             </div>
           ))}
@@ -361,14 +363,16 @@ export default function CongTy() {
                   )}
                 </div>
               </div>
-              <div style={s.occupancy}>
-                <div>
-                  <div style={s.occLabel}>Công nhân hiện tại</div>
-                  <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 22, fontWeight: 700, color: 'var(--accent)' }}>
-                    {selected.so_luong_hien_tai ?? 0} <span style={{ fontSize: 14, color: 'var(--text3)' }}>người</span>
+              {selected.so_luong_hien_tai != null && (
+                <div style={s.occupancy}>
+                  <div>
+                    <div style={s.occLabel}>Công nhân hiện tại</div>
+                    <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 22, fontWeight: 700, color: 'var(--accent)' }}>
+                      {selected.so_luong_hien_tai} <span style={{ fontSize: 14, color: 'var(--text3)' }}>người</span>
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
               {/* Quản lý phụ trách công ty này */}
               <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
                 <div style={s.occLabel}>Quản lý phụ trách</div>

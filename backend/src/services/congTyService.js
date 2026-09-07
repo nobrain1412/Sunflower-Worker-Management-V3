@@ -1,7 +1,7 @@
 const congTyModel = require('../models/congTyModel');
 const userModel   = require('../models/userModel');
 
-async function danhSach(query) {
+async function danhSach(query, user) {
   const page  = Math.max(1, parseInt(query.page  || '1',  10));
   const limit = Math.min(100, Math.max(1, parseInt(query.limit || '20', 10)));
 
@@ -13,9 +13,26 @@ async function danhSach(query) {
   });
 
   return {
-    data: rows,
+    data: rows.map((ct) => anSoLuongTheoQuyen(ct, user)),
     meta: { page, limit, total, total_pages: Math.ceil(total / limit) },
   };
+}
+
+// Ẩn số lượng công nhân đang làm theo vai trò:
+// - admin / kế toán  → thấy toàn bộ
+// - quản lý          → chỉ thấy số công nhân của công ty mình quản lý
+// - vender / CTV     → ẩn hoàn toàn
+// Khi bị ẩn → trả so_luong_hien_tai = null để FE hiển thị dấu "—".
+function anSoLuongTheoQuyen(congTy, user) {
+  const vaiTro = user?.vai_tro;
+  if (vaiTro === 'admin' || vaiTro === 'ke_toan') return congTy;
+
+  if (vaiTro === 'quan_ly') {
+    const congTyIds = Array.isArray(user?.cong_ty_ids) ? user.cong_ty_ids : [];
+    if (congTyIds.includes(congTy.id)) return congTy;
+  }
+
+  return { ...congTy, so_luong_hien_tai: null };
 }
 
 // Danh sách công ty cho trang tuyển dụng công khai (không auth).
