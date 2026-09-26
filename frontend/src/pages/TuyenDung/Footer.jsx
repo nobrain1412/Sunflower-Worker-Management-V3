@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { FOOTER_COLS } from './tuyenDungData';
 import Logo from './Logo';
 
@@ -27,7 +28,11 @@ export default function Footer() {
       <div style={{ borderTop: '1px solid var(--sf-brd)' }}>
         <div style={s.bottom}>
           <span>© 2026 Sunflower JSC. Bảo lưu mọi quyền.</span>
-          <span>Điều khoản · Chính sách bảo mật</span>
+          <span>
+            <Link to="/chinh-sach#dieu-khoan" className="sf-footlink" style={s.bottomLink}>Điều khoản</Link>
+            {' · '}
+            <Link to="/chinh-sach#bao-mat" className="sf-footlink" style={s.bottomLink}>Chính sách bảo mật</Link>
+          </span>
         </div>
       </div>
     </footer>
@@ -44,6 +49,7 @@ const s = {
   hotline: { margin: '12px 0 0', fontSize: 13, color: 'var(--sf-muted)' },
   colTitle: { fontSize: 13.5, fontWeight: 800, marginBottom: 12, textTransform: 'uppercase', letterSpacing: '.4px', color: 'var(--sf-text)' },
   link: { fontSize: 13.5, color: 'var(--sf-muted)', textDecoration: 'none' },
+  bottomLink: { color: 'var(--sf-muted)', textDecoration: 'none' },
   bottom: {
     maxWidth: 1180, margin: '0 auto', padding: '16px 20px', fontSize: 12.5, color: 'var(--sf-muted)',
     display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8,

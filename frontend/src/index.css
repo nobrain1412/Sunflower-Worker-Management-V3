@@ -656,3 +656,10 @@ body.sheet-open .bottom-nav-wrap nav {
 .sf-btn-flame:hover { opacity: .9; }
 .sf-btn-outline:hover { background: var(--sf-navy-soft); }
 .sf-footlink:hover { color: var(--sf-navy) !important; }
+
+/* Trang Chính sách (/chinh-sach): mục lục cố định bên trái trên desktop, ẩn trên mobile. */
+.sf-policy-grid { grid-template-columns: 220px minmax(0, 1fr); }
+@media (max-width: 860px) {
+  .sf-policy-grid { grid-template-columns: minmax(0, 1fr); }
+  .sf-policy-toc { display: none !important; }
+}

@@ -11,6 +11,7 @@ const Login          = lazy(() => import('./pages/Login'));
 const DangKy         = lazy(() => import('./pages/DangKy'));
 const TuyenDung      = lazy(() => import('./pages/TuyenDung'));
 const TraCuuCong     = lazy(() => import('./pages/TraCuuCong'));
+const ChinhSach      = lazy(() => import('./pages/ChinhSach'));
 const Dashboard      = lazy(() => import('./pages/Dashboard'));
 const CongNhan       = lazy(() => import('./pages/CongNhan/index'));
 const CongNhanDetail = lazy(() => import('./pages/CongNhan/Detail'));
@@ -94,6 +95,10 @@ export default function App() {
             <Route path="/"              element={<TuyenDung />} />
             {/* Tra cứu ngày công công khai — công nhân tự kiểm tra, không cần đăng nhập */}
             <Route path="/tra-cuu-cong"  element={<TraCuuCong />} />
+            {/* Chính sách bảo mật & điều khoản công khai (dùng cho Facebook/TikTok app review) */}
+            <Route path="/chinh-sach"         element={<ChinhSach />} />
+            <Route path="/chinh-sach-bao-mat" element={<Navigate to={{ pathname: '/chinh-sach', hash: '#bao-mat' }} replace />} />
+            <Route path="/dieu-khoan-su-dung" element={<Navigate to={{ pathname: '/chinh-sach', hash: '#dieu-khoan' }} replace />} />
 
             {/* Trang quản lý (dashboard) — cần đăng nhập */}
             <Route path="/quan-ly"       element={<PrivateRoute><Dashboard /></PrivateRoute>} />
