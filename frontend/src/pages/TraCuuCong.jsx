@@ -3,7 +3,7 @@
  * Không cần đăng nhập. UI theo nhận diện Sunflower (token --sf-*), tái dùng Header/Footer
  * của trang tuyển dụng để đồng bộ giao diện homepage.
  */
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import api from '../hooks/useApi';
@@ -45,6 +45,14 @@ function toNum(v) {
 
 const fmtGio = (n) => (n ? String(Math.round(n * 100) / 100) : '');
 
+// Kỳ chấm công của dòng — BE gắn cột 'Tháng' dạng "M/YYYY" theo bảng vân tay tháng.
+const thangCua = (row) => String(row['Tháng'] ?? '');
+// "M/YYYY" -> số so sánh được (YYYY*100 + M) để sắp xếp tháng mới nhất lên đầu.
+function thangKey(t) {
+  const [m, y] = t.split('/').map((x) => parseInt(x, 10));
+  return (y || 0) * 100 + (m || 0);
+}
+
 /** Tách headers của 1 nhóm thành: cột danh tính, cột ngày/trạng thái/lịch sử, 2 bucket giờ. */
 function classify(headers) {
   const map = {}; // vai trò -> header gốc
@@ -69,6 +77,7 @@ export default function TraCuuCong() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [input, setInput] = useState('');
   const [ma, setMa] = useState('');
+  const [thangChon, setThangChon] = useState('');
 
   const { data: res, isFetching, isError, error } = useQuery({
     queryKey: ['tra-cuu-cong', ma],
@@ -77,12 +86,28 @@ export default function TraCuuCong() {
     staleTime: 15_000,
   });
 
-  const groups = res?.data?.groups ?? [];
-  const total = res?.meta?.total ?? 0;
+  const allGroups = res?.data?.groups ?? [];
+
+  // Danh sách các tháng có dữ liệu, mới nhất trước.
+  const months = useMemo(() => {
+    const set = new Set();
+    for (const g of allGroups) for (const r of g.rows) { const t = thangCua(r); if (t) set.add(t); }
+    return [...set].sort((a, b) => thangKey(b) - thangKey(a));
+  }, [allGroups]);
+
+  // Mặc định hiện tháng gần nhất; giữ lựa chọn nếu tháng đó vẫn còn trong kết quả.
+  const thang = months.includes(thangChon) ? thangChon : (months[0] ?? '');
+
+  // Chỉ giữ dòng của tháng đang chọn; bỏ công ty không có dữ liệu tháng đó.
+  const groups = useMemo(() => allGroups
+    .map((g) => ({ ...g, rows: thang ? g.rows.filter((r) => thangCua(r) === thang) : g.rows }))
+    .filter((g) => g.rows.length > 0), [allGroups, thang]);
+  const total = groups.reduce((sum, g) => sum + g.rows.length, 0);
 
   function handleSubmit(e) {
     e.preventDefault();
     setMa(input.trim());
+    setThangChon('');
   }
 
   return (
@@ -125,9 +150,22 @@ export default function TraCuuCong() {
           </div></div>
         ) : (
           <>
-            <div style={s.resultMeta}>
-              Tìm thấy <b style={{ color: 'var(--sf-text)' }}>{total}</b> ngày công cho mã “{ma}”
-              {groups.length > 1 && ` · ${groups.length} công ty`}
+            <div style={s.metaRow}>
+              <div style={s.resultMeta}>
+                Tìm thấy <b style={{ color: 'var(--sf-text)' }}>{total}</b> ngày công cho mã “{ma}”
+                {thang && ` · tháng ${thang}`}
+                {groups.length > 1 && ` · ${groups.length} công ty`}
+              </div>
+              {months.length > 1 && (
+                <label style={s.monthLabel}>
+                  Xem tháng
+                  <select style={s.monthSelect} value={thang} onChange={(e) => setThangChon(e.target.value)}>
+                    {months.map((t, i) => (
+                      <option key={t} value={t}>Tháng {t}{i === 0 ? ' (gần nhất)' : ''}</option>
+                    ))}
+                  </select>
+                </label>
+              )}
             </div>
             {groups.map((g) => {
               const { map, hc, tc } = classify(g.headers);
@@ -208,6 +246,13 @@ const s = {
   card: { background: 'var(--sf-surface)', border: '1px solid var(--sf-brd)', borderRadius: 16, padding: 16, boxShadow: 'var(--sf-shadow)' },
   empty: { padding: 40, textAlign: 'center', color: 'var(--sf-muted)', fontSize: 14 },
   resultMeta: { fontSize: 13, color: 'var(--sf-muted)' },
+  metaRow: { display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
+  monthLabel: { display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--sf-muted)', fontWeight: 600 },
+  monthSelect: {
+    padding: '8px 12px', fontSize: 14, borderRadius: 10, cursor: 'pointer',
+    background: 'var(--sf-surface)', border: '1.5px solid var(--sf-brd)',
+    color: 'var(--sf-text)', fontFamily: 'inherit', outline: 'none',
+  },
   groupTitle: { fontSize: 15, fontWeight: 800, color: 'var(--sf-navy)', marginBottom: 10 },
   info: {
     display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: '6px 18px',
